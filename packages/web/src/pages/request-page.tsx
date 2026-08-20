@@ -1,74 +1,129 @@
 import { useState } from "react";
-
-import { usePreviewOperation } from "../preview-hooks";
-import type { PreviewFieldType, PreviewRequestField } from "../preview-adapter";
-import { reconcileCreation } from "../preview-transitions";
-import { NavigationGuard, OperationNotice, PageIntro, PassphraseFields, PreviewMark, ProtectionOptions, ShareSlip, StatusMessage, VerificationStep, type OperationState, type Protection } from "../ui";
-import type { ShareArtifact } from "../ui";
-import { requiredArtifactsWording, requiredReceiptSaved, validatePassphrase } from "../validation";
+import type { RequestFieldType, RequestSchemaField, RequestSchemaPayload } from "@kryptex/contracts/payloads";
+import type { TtlSeconds } from "@kryptex/contracts/protocol";
+import type { RequestCreateRequest } from "@kryptex/contracts/api";
+import { deriveHpkeKeyPair, deriveRequestOwnerKeys, deriveRequestWriteKeys, encodeBase64Url, encryptRequestSchemaEnvelope, randomBytes } from "@kryptex/crypto";
+import { ApiFailure } from "../api-client";
+import { useClient } from "../client-context";
+import { artifactUrl, createFactor, reconcileRequestCreation, requestFieldId, type FactorMaterial } from "../crypto-flow";
 import { openIsolatedVerification } from "../verification";
+import { NavigationGuard, OperationNotice, PageIntro, PassphraseFields, ProtectionOptions, ShareSlip, StatusMessage, type OperationState, type Protection, type ShareArtifact } from "../ui";
+import { validatePassphrase, validateRequestDraft } from "../validation";
 
-export function RequestPage({ initialGateOpened = false, initialPermit = false }: { readonly initialGateOpened?: boolean; readonly initialPermit?: boolean } = {}) {
-  const operation = usePreviewOperation();
-  const initial = operation.adapter.readRequestSchema();
-  const [title, setTitle] = useState(initial.title);
-  const [instructions, setInstructions] = useState(initial.instructions);
-  const [fields, setFields] = useState<readonly PreviewRequestField[]>(initial.fields);
-  const [nextId, setNextId] = useState(Math.max(...initial.fields.map((field) => field.id)) + 1);
-  const [expiry, setExpiry] = useState("1 day");
+interface DraftField { readonly help: string; readonly label: string; readonly required: boolean; readonly type: RequestFieldType; }
+interface PendingRequest { readonly factor: FactorMaterial; readonly locator: Uint8Array<ArrayBuffer>; readonly ownerSeed: Uint8Array<ArrayBuffer>; readonly publicKey: Uint8Array<ArrayBuffer>; readonly request: RequestCreateRequest; readonly writeSeed: Uint8Array<ArrayBuffer>; }
+
+export function RequestPage() {
+  const client = useClient();
+  const [title, setTitle] = useState("");
+  const [instructions, setInstructions] = useState("");
+  const [fields, setFields] = useState<readonly DraftField[]>([{ help: "", label: "API key", required: true, type: "secret" }]);
   const [protection, setProtection] = useState<Protection>("second-key");
   const [passphrase, setPassphrase] = useState("");
   const [confirmation, setConfirmation] = useState("");
-  const [gateOpened, setGateOpened] = useState(initialGateOpened);
-  const [verified, setVerified] = useState(initialPermit);
-  const [created, setCreated] = useState(false);
-  const [creationAbsent, setCreationAbsent] = useState(false);
+  const [ttl, setTtl] = useState<TtlSeconds>(3600);
   const [state, setState] = useState<OperationState>("idle");
+  const [gateOpened, setGateOpened] = useState(false);
+  const [artifacts, setArtifacts] = useState<readonly ShareArtifact[] | null>(null);
+  const [pending, setPending] = useState<PendingRequest | null>(null);
+  const [reconciling, setReconciling] = useState(false);
   const [saved, setSaved] = useState<Readonly<Record<string, boolean>>>({});
-  const passphraseValidation = validatePassphrase(passphrase, confirmation);
-  const protectionReady = protection !== "passphrase" || passphraseValidation.valid;
-  const fieldsReady = fields.length > 0 && fields.every((field) => field.label.length > 0);
-  const receiptSafe = requiredReceiptSaved(saved["link"] ?? false, protection, saved["factor"] ?? false, saved["pickup"] ?? false);
+  const phrase = validatePassphrase(passphrase, confirmation);
 
-  function updateField(id: number, patch: Partial<Omit<PreviewRequestField, "id">>): void { setFields((current) => current.map((field) => field.id === id ? { ...field, ...patch } : field)); }
-  function addField(): void { setFields((current) => [...current, { help: "", id: nextId, label: "Another secret", required: true, type: "secret" }]); setNextId((current) => current + 1); }
-  function openGate(): void {
-    openIsolatedVerification((url, target, features) => { window.open(url, target, features); });
-    setGateOpened(true);
+  function updateField(index: number, key: "help" | "label" | "required", value: string | boolean): void {
+    setFields(fields.map((field, fieldIndex) => fieldIndex === index ? { ...field, [key]: value } : field));
   }
-  async function check(): Promise<void> {
-    setState("working");
-    try {
-      const result = await operation.run("gate-status");
-      if (result.outcome === "ready") { setVerified(true); setState("idle"); }
-      else { setState("waiting"); }
-    }
-    catch { setState("unavailable"); }
+  function selectFieldType(index: number, type: RequestFieldType): void {
+    setFields(fields.map((field, fieldIndex) => fieldIndex !== index ? field : type === "instruction" ? { ...field, help: "", required: false, type } : { ...field, type }));
   }
+  function selectTtl(value: number): void { if (value === 900 || value === 3600 || value === 28800 || value === 86400 || value === 259200 || value === 604800) setTtl(value); }
+
+  function schema(publicKey: Uint8Array): RequestSchemaPayload {
+    const schemaFields: RequestSchemaField[] = [];
+    if (instructions.length > 0) schemaFields.push({ help: instructions, id: "instruction000", label: "Instructions", required: false, type: "instruction" });
+    fields.forEach((field, index) => { schemaFields.push(field.type === "instruction" ? { help: "", id: requestFieldId(index), label: field.label, required: false, type: "instruction" } : { ...field, id: requestFieldId(index) }); });
+    return { fields: schemaFields, kind: "request-schema", recipientPublicKey: encodeBase64Url(publicKey), title };
+  }
+
+  function finishCreate(value: PendingRequest, serverExpiresAt: number): void {
+    const next: ShareArtifact[] = [{ channel: "Send this to the person who should answer.", id: "write", required: true, title: "Write link", value: artifactUrl("/r", { factorMode: value.factor.mode, kind: 3, recipientPublicKey: value.publicKey, requestLocator: value.locator, salt: value.factor.salt, serverExpiresAt, writeSeed: value.writeSeed }) }];
+    if (value.factor.secondKey !== null) next.push({ channel: "Send separately from the write link.", id: "factor", required: true, title: "Second key", value: value.factor.secondKey });
+    next.push({ channel: "Keep this private. It opens the response once.", id: "pickup", required: true, title: "Pickup link", value: artifactUrl("/i", { kind: 4, ownerSeed: value.ownerSeed, requestLocator: value.locator, serverExpiresAt }) });
+    setReconciling(false); setPending(null); setArtifacts(next); setState("done");
+  }
+
   async function create(): Promise<void> {
-    operation.adapter.rememberRequestSchema({ fields, instructions, title });
     setState("working");
-    try { await operation.run("create-request"); setCreated(true); setState("done"); }
-    catch { setState("unknown"); }
+    if (pending !== null) {
+      setReconciling(true);
+      const reconciled = await reconcileRequestCreation(client, pending.request.locator, pending.request.ownerToken, pending.request.settleNotAfter);
+      if (reconciled.kind === "created") finishCreate(pending, reconciled.serverExpiresAt);
+      else { setReconciling(false); setPending(null); setState("unavailable"); }
+      return;
+    }
+    let permit;
+    try { permit = await client.permitStatus(); }
+    catch (error) {
+      if (error instanceof ApiFailure && error.code === "creation_permit_required") {
+        openIsolatedVerification((url, target, features) => window.open(url, target, features)); setGateOpened(true); setState("waiting"); return;
+      }
+      setState(error instanceof ApiFailure && error.ambiguous ? "unknown" : "unavailable"); return;
+    }
+    try {
+      const factor = await createFactor(protection, passphrase, confirmation);
+      const locator = randomBytes(16);
+      const writeSeed = randomBytes(32);
+      const ownerSeed = randomBytes(32);
+      const [writeKeys, ownerKeys] = await Promise.all([
+        deriveRequestWriteKeys(writeSeed, factor.mode, factor.factor), deriveRequestOwnerKeys(ownerSeed)
+      ]);
+      const pair = await deriveHpkeKeyPair(ownerKeys.hpkeIkm);
+      const requestSchema = schema(pair.publicKey);
+      const clientNotAfter = permit.serverTime + ttl;
+      const settleNotAfter = permit.serverTime + 60;
+      const envelope = await encryptRequestSchemaEnvelope({ clientNotAfter, factorMode: factor.mode, payload: requestSchema, schemaKey: writeKeys.schemaKey });
+      const request = {
+        attemptId: encodeBase64Url(randomBytes(16)), clientNotAfter, envelope: encodeBase64Url(envelope), locator: encodeBase64Url(locator),
+        ownerToken: encodeBase64Url(ownerKeys.ownerToken), settleNotAfter, ttlSeconds: ttl, writeToken: encodeBase64Url(writeKeys.writeToken)
+      };
+      const attempt: PendingRequest = { factor, locator, ownerSeed, publicKey: pair.publicKey, request, writeSeed };
+      setPending(attempt);
+      let serverExpiresAt: number;
+      try { serverExpiresAt = (await client.createRequest(request)).serverExpiresAt; }
+      catch (error) {
+        if (!(error instanceof ApiFailure) || !error.ambiguous) {
+          setReconciling(false);
+          setPending(null);
+          if (error instanceof ApiFailure && error.code === "creation_permit_required") {
+            openIsolatedVerification((url, target, features) => window.open(url, target, features));
+            setGateOpened(true);
+            setState("waiting");
+            return;
+          }
+          throw error;
+        }
+        setReconciling(true);
+        const reconciled = await reconcileRequestCreation(client, request.locator, request.ownerToken, settleNotAfter);
+        if (reconciled.kind !== "created") { setReconciling(false); setPending(null); setState("unavailable"); return; }
+        serverExpiresAt = reconciled.serverExpiresAt;
+      }
+      finishCreate(attempt, serverExpiresAt);
+    } catch { setReconciling(false); setState("unavailable"); }
   }
-  async function reconcile(): Promise<void> {
-    setState("working");
-    const result = await reconcileCreation(operation.adapter);
-    if (result === "created") { setCreated(true); setState("done"); }
-    else if (result === "absent") { setCreationAbsent(true); setState("idle"); }
-    else { setState("unavailable"); }
+
+  const draft = validateRequestDraft(title, instructions, fields);
+  if (artifacts !== null) {
+    const complete = artifacts.every((artifact) => saved[artifact.id] === true);
+    return <div className="task-page task-page--narrow"><PageIntro title="Request secret"><p>Your encrypted request is ready.</p></PageIntro><ShareSlip artifacts={artifacts} onSaved={(id, value) => { setSaved({ ...saved, [id]: value }); }} saved={saved} title="Request sealed" /><NavigationGuard when={!complete} /></div>;
   }
-
-  const artifacts: readonly ShareArtifact[] = [
-    { channel: "Send this to the person responding.", id: "link", required: true, route: "/r", title: "Request link" },
-    ...(protection === "second-key" ? [{ channel: "Send through a different secure channel.", id: "factor", required: true, title: "Second key" }] : []),
-    { channel: "Keep this private to open the response.", id: "pickup", required: true, route: "/i", title: "Pickup link" }
-  ];
-
-  const requiredWording = requiredArtifactsWording(protection === "second-key" ? 3 : 2);
-  if (created) return <div className="task-page"><NavigationGuard requiredWording={requiredWording} when={!receiptSafe} /><PageIntro title="Request created"><p>Send the request parts separately. Keep the pickup link private.</p></PageIntro><PreviewMark /><ShareSlip artifacts={artifacts} onSaved={(id, value) => { setSaved((current) => ({ ...current, [id]: value })); }} saved={saved} title={title} /><StatusMessage tone={receiptSafe ? "success" : "warning"}>{receiptSafe ? `${requiredWording} saved.` : `Save ${requiredWording} before leaving.`}</StatusMessage></div>;
-
-  if (!verified) return <div className="task-page"><PageIntro title="Request secret"><p>They can send one encrypted response. The request link cannot read it back.</p></PageIntro><PreviewMark /><VerificationStep onAction={gateOpened ? () => { void check(); } : openGate} opened={gateOpened} state={state} /></div>;
-
-  return <div className="task-page"><PageIntro title="Request secret"><p>They can send one encrypted response. The request link cannot read it back.</p></PageIntro><PreviewMark /><form className="simple-form" onSubmit={(event) => { event.preventDefault(); void create(); }}><label className="field-block"><span>Request title</span><input autoFocus onChange={(event) => { setTitle(event.currentTarget.value); }} placeholder="Production access handoff" value={title} /></label><label className="field-block"><span>Instructions <small>optional</small></span><textarea onChange={(event) => { setInstructions(event.currentTarget.value); }} placeholder="Anything they should know before responding" value={instructions} /></label><div className="request-items"><h2>What should they send?</h2>{fields.map((field, index) => <div className="request-item" key={field.id}><label><span>{index === 0 ? "Item" : `Item ${index + 1}`}</span><input onChange={(event) => { updateField(field.id, { label: event.currentTarget.value }); }} placeholder="API key" value={field.label} /></label><details><summary>More options</summary><div><fieldset className="compact-options"><legend>Answer format</legend>{(["secret", "short", "long"] satisfies readonly PreviewFieldType[]).map((type) => <label key={type}><input checked={field.type === type} name={`type-${field.id}`} onChange={() => { updateField(field.id, { type }); }} type="radio" /><span>{type === "secret" ? "Secret" : type === "short" ? "Plain" : "Multiline"}</span></label>)}</fieldset><label><span>Help text <small>optional</small></span><input onChange={(event) => { updateField(field.id, { help: event.currentTarget.value }); }} value={field.help} /></label><label className="check-label"><input checked={field.required} onChange={(event) => { updateField(field.id, { required: event.currentTarget.checked }); }} type="checkbox" /><span>Required</span></label>{fields.length > 1 ? <button className="text-button danger-text" onClick={() => { setFields((current) => current.filter((item) => item.id !== field.id)); }} type="button">Remove item</button> : null}</div></details></div>)}<button className="text-button" onClick={addField} type="button">Add another item</button></div><fieldset className="compact-options"><legend>Expires after</legend>{["1 hour", "8 hours", "1 day", "7 days"].map((value) => <label key={value}><input checked={expiry === value} name="expiry" onChange={() => { setExpiry(value); }} type="radio" /><span>{value}</span></label>)}</fieldset><details className="advanced"><summary>Advanced</summary><div><ProtectionOptions onChange={setProtection} value={protection} />{protection === "passphrase" ? <PassphraseFields confirmation={confirmation} message={passphraseValidation.message} onConfirmation={setConfirmation} onPassphrase={setPassphrase} passphrase={passphrase} valid={passphraseValidation.valid} /> : null}</div></details><p className="protection-summary"><span>Extra protection</span><strong>{protection === "second-key" ? "Separate second key" : protection === "passphrase" ? "Passphrase" : "Link only"}</strong></p><button className="primary-button full-button" disabled={title.length === 0 || !fieldsReady || !protectionReady || state === "working"} type="submit">{state === "working" ? "Creating…" : "Create request"}</button>{creationAbsent ? <StatusMessage tone="warning">No request was created. You can try again.</StatusMessage> : null}<OperationNotice retry={() => { void reconcile(); }} state={state} /></form></div>;
+  return <div className="task-page task-page--narrow"><PageIntro title="Request secret"><p>Describe what you need. Verification happens only when you create the request.</p></PageIntro>
+    <label><span>Request title</span><input onChange={(event) => { setTitle(event.currentTarget.value); }} value={title} /></label><label><span>Instructions</span><textarea onChange={(event) => { setInstructions(event.currentTarget.value); }} rows={3} value={instructions} /></label>
+    <fieldset><legend>What should they send?</legend><div className="inline-fields">{fields.map((field, index) => <div key={index}><label><span>Label</span><input onChange={(event) => { updateField(index, "label", event.currentTarget.value); }} value={field.label} /></label><details><summary>More options</summary><label><span>Type</span><select onChange={(event) => { const value = event.currentTarget.value; selectFieldType(index, value === "short" || value === "long" || value === "instruction" ? value : "secret"); }} value={field.type}><option value="secret">Secret</option><option value="short">Short text</option><option value="long">Long text</option><option value="instruction">Instruction — label only</option></select></label>{field.type === "instruction" ? <StatusMessage>This item displays its label and does not collect an answer.</StatusMessage> : <><label><span>Help</span><input onChange={(event) => { updateField(index, "help", event.currentTarget.value); }} value={field.help} /></label><label><input checked={field.required} onChange={(event) => { updateField(index, "required", event.currentTarget.checked); }} type="checkbox" /> Required</label></>}{fields.length > 1 ? <button className="quiet-button" onClick={() => { setFields(fields.filter((_item, fieldIndex) => fieldIndex !== index)); }} type="button">Remove item</button> : null}</details></div>)}</div><button className="secondary-button" disabled={fields.length >= (instructions.length > 0 ? 31 : 32)} onClick={() => { setFields([...fields, { help: "", label: "", required: false, type: "secret" }]); }} type="button">Add another item</button></fieldset>
+    <StatusMessage tone={draft.valid ? "success" : "warning"}>{draft.message}</StatusMessage>
+    <ProtectionOptions onChange={setProtection} value={protection} />{protection === "passphrase" ? <PassphraseFields confirmation={confirmation} message={phrase.message} onConfirmation={setConfirmation} onPassphrase={setPassphrase} passphrase={passphrase} valid={phrase.valid} /> : null}
+    <details className="advanced"><summary>More options</summary><label><span>Expires after</span><select onChange={(event) => { selectTtl(Number(event.currentTarget.value)); }} value={ttl}><option value={900}>15 minutes</option><option value={3600}>1 hour</option><option value={28800}>8 hours</option><option value={86400}>1 day</option><option value={259200}>3 days</option><option value={604800}>7 days</option></select></label></details>
+    <button className="primary-button full-button" disabled={!draft.valid || (protection === "passphrase" && !phrase.valid) || state === "working"} onClick={() => { void create(); }} type="button">{reconciling ? "Reconciling…" : state === "working" ? "Creating…" : gateOpened ? "Check verification and create" : "Create request"}</button>
+    {reconciling ? <StatusMessage tone="warning"><strong>Reconciling creation.</strong> Keep this tab open. The exact in-memory capability and encrypted attempt cannot be recovered if you leave.</StatusMessage> : state === "waiting" ? <StatusMessage tone="warning">Complete verification in the isolated tab, then press the button again. Your draft remains only here.</StatusMessage> : <OperationNotice state={state} />}
+    <NavigationGuard description="Leaving now permanently loses the in-memory capability needed to confirm this creation attempt." title="Keep confirming creation?" when={pending !== null} />
+  </div>;
 }

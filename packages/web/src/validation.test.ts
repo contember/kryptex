@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
+import type { RequestSchemaField } from "@kryptex/contracts/payloads";
 
-import { isValidCrockfordFactor, normalizeCrockfordFactor, requiredArtifactsWording, requiredReceiptSaved, utf8ByteLength, validatePassphrase } from "./validation";
+import { isValidCrockfordFactor, normalizeCrockfordFactor, requiredArtifactsWording, requiredReceiptSaved, utf8ByteLength, validatePassphrase, validateRequestAnswers, validateRequestDraft, validateSendDraft } from "./validation";
 
 describe("passphrase validation", () => {
   it("counts UTF-8 bytes rather than JavaScript characters", () => {
@@ -56,5 +57,28 @@ describe("Crockford second-key validation", () => {
     expect(isValidCrockfordFactor(`${"0".repeat(51)} `)).toBe(false);
     expect(isValidCrockfordFactor(`${"0".repeat(51)}U`)).toBe(false);
     expect(isValidCrockfordFactor(`${"0".repeat(51)}1`)).toBe(false);
+  });
+});
+
+describe("local payload limits", () => {
+  it("validates send text and structured fields in UTF-8 bytes", () => {
+    expect(validateSendDraft("text", "x".repeat(262_144), []).valid).toBe(true);
+    expect(validateSendDraft("text", `${"x".repeat(262_143)}€`, []).message).toContain("262144");
+    expect(validateSendDraft("fields", "", [{ concealed: true, label: "x".repeat(120), value: "secret" }]).valid).toBe(true);
+    expect(validateSendDraft("fields", "", [{ concealed: true, label: `${"x".repeat(119)}€`, value: "secret" }]).message).toContain("labels");
+  });
+
+  it("counts optional instructions inside the 32-item request schema", () => {
+    const fields = Array.from({ length: 31 }, (_, index) => ({ help: "", label: `Field ${index + 1}` }));
+    expect(validateRequestDraft("Title", "Instructions", fields).valid).toBe(true);
+    expect(validateRequestDraft("Title", "Instructions", [...fields, { help: "", label: "Overflow" }]).message).toContain("including instructions");
+    expect(validateRequestDraft(`${"x".repeat(119)}€`, "", fields).message).toContain("title");
+  });
+
+  it("blocks missing and oversized request answers before sealing", () => {
+    const fields: readonly RequestSchemaField[] = [{ help: "", id: "field001", label: "API key", required: true, type: "secret" }];
+    expect(validateRequestAnswers(fields, {}).message).toContain("API key");
+    expect(validateRequestAnswers(fields, { field001: "x".repeat(262_144) }).valid).toBe(true);
+    expect(validateRequestAnswers(fields, { field001: `${"x".repeat(262_143)}€` }).message).toContain("262144");
   });
 });

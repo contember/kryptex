@@ -1,83 +1,29 @@
-import { useRef, useState } from "react";
-
+import { useState } from "react";
+import type { RequestResponsePayload, RequestSchemaPayload } from "@kryptex/contracts/payloads";
+import { decodeBase64Url, decryptRequestSchemaEnvelope, deriveRequestWriteKeys, encodeBase64Url, receiptBase64Url, receiptDisplay, sealRequestResponse } from "@kryptex/crypto";
+import { useClient } from "../client-context";
+import { checkedResponseExpiry, classifySubmitFailure, consumeBundle, exactEnvelopeForRetry, factorFromInput } from "../crypto-flow";
 import type { FragmentCapture } from "../fragment";
-import type { PreviewEnvelope, PreviewRequestField } from "../preview-adapter";
-import { usePreviewOperation } from "../preview-hooks";
-import { createPreviewEnvelope, submitIdenticalEnvelope } from "../preview-transitions";
-import { AmbiguousNotice, FragmentNotice, OperationNotice, PageIntro, PreviewMark, StatusMessage, type OperationState } from "../ui";
-import { isValidCrockfordFactor } from "../validation";
+import { FragmentNotice, OperationNotice, PageIntro, StatusMessage, type OperationState } from "../ui";
+import { validateRequestAnswers } from "../validation";
 
-function AnswerField({ field, value, onChange }: { readonly field: PreviewRequestField; readonly value: string; readonly onChange: (value: string) => void }) {
-  return <label className="field-block">
-    <span>{field.label} <small>{field.required ? "required" : "optional"}</small></span>
-    {field.type === "long"
-      ? <textarea onChange={(event) => { onChange(event.currentTarget.value); }} value={value} />
-      : <input autoComplete="off" onChange={(event) => { onChange(event.currentTarget.value); }} spellCheck={false} type={field.type === "secret" ? "password" : "text"} value={value} />}
-    {field.help.length > 0 ? <small>{field.help}</small> : null}
-  </label>;
-}
+interface OpenedSchema { readonly clientNotAfter: number; readonly digest: Uint8Array<ArrayBuffer>; readonly schema: RequestSchemaPayload; readonly serverExpiresAt: number; readonly writeToken: string; }
 
 export function WriterPage({ capture }: { readonly capture: FragmentCapture }) {
-  const operation = usePreviewOperation();
-  const schema = operation.adapter.readRequestSchema();
-  const [factor, setFactor] = useState("");
-  const [loaded, setLoaded] = useState(false);
-  const [answers, setAnswers] = useState<Readonly<Record<number, string>>>({});
-  const [submitted, setSubmitted] = useState(false);
-  const [state, setState] = useState<OperationState>("idle");
-  const envelopeRef = useRef<PreviewEnvelope | null>(null);
-  const factorValid = isValidCrockfordFactor(factor);
-  const complete = schema.fields.every((field) => !field.required || (answers[field.id] ?? "").length > 0);
+  const client = useClient(); const [bundle] = useState(() => consumeBundle(capture, 3));
+  const [factor, setFactor] = useState(""); const [opened, setOpened] = useState<OpenedSchema | null>(null);
+  const [answers, setAnswers] = useState<Readonly<Record<string, string>>>({}); const [envelope, setEnvelope] = useState<string | null>(null);
+  const [receipt, setReceipt] = useState<string | null>(null); const [receiptMatch, setReceiptMatch] = useState<boolean | null>(null); const [confirmed, setConfirmed] = useState(false); const [state, setState] = useState<OperationState>("idle");
 
-  async function load(): Promise<void> {
-    setState("working");
-    try {
-      const result = await operation.run("inspect");
-      if (result.outcome === "waiting" || result.outcome === "pending") setState("waiting");
-      else if (result.outcome === "unavailable") setState("unavailable");
-      else { setLoaded(true); setState("done"); }
-    } catch {
-      setState("unavailable");
-    }
+  async function inspect(): Promise<void> {
+    if (bundle?.kind !== 3) return; setState("working");
+    try { const factorBytes = await factorFromInput(bundle.factorMode, bundle.salt, factor); const keys = await deriveRequestWriteKeys(bundle.writeSeed, bundle.factorMode, factorBytes); const response = await client.requestSchema({ locator: encodeBase64Url(bundle.requestLocator), writeToken: encodeBase64Url(keys.writeToken) }); const serverExpiresAt = checkedResponseExpiry(bundle.serverExpiresAt, response.metadata.serverExpiresAt); const result = await decryptRequestSchemaEnvelope(response.bytes, keys.schemaKey, bundle.factorMode, bundle.recipientPublicKey, serverExpiresAt, Math.floor(Date.now() / 1_000)); setOpened({ clientNotAfter: result.header.clientNotAfter, digest: result.header.schemaDigest, schema: result.payload, serverExpiresAt, writeToken: encodeBase64Url(keys.writeToken) }); setState("done"); } catch { setState("unavailable"); }
   }
-
   async function submit(): Promise<void> {
-    setState("working");
-    const existingEnvelope = envelopeRef.current;
-    const envelope = existingEnvelope ?? createPreviewEnvelope();
-    envelopeRef.current = envelope;
-    try {
-      await submitIdenticalEnvelope(operation.adapter, envelope);
-      setSubmitted(true);
-      setState("done");
-    } catch {
-      setState("unknown");
-    }
+    if (bundle?.kind !== 3 || opened === null) return; setState("working");
+    try { const exact = await exactEnvelopeForRetry(envelope, async () => { const payload: RequestResponsePayload = { answers: opened.schema.fields.filter((field) => field.type !== "instruction").map((field) => ({ id: field.id, value: answers[field.id] ?? "" })), kind: "request-response", schema: opened.schema }; return encodeBase64Url(await sealRequestResponse({ expectedClientNotAfter: opened.clientNotAfter, payload, recipientPublicKey: bundle.recipientPublicKey, requestLocator: bundle.requestLocator, schemaDigest: opened.digest })); }); if (envelope === null) setEnvelope(exact); const bytes = decodeBase64Url(exact); const localBase64 = await receiptBase64Url(bytes); setReceipt(await receiptDisplay(bytes)); const response = await client.submitRequest({ envelope: exact, locator: encodeBase64Url(bundle.requestLocator), writeToken: opened.writeToken }); setReceiptMatch(response.receipt === localBase64); setState(response.receipt === localBase64 ? "done" : "unknown"); } catch (error) { setState(classifySubmitFailure(error)); }
   }
-
-  if (submitted) return <div className="task-page task-page--narrow">
-    <PageIntro title="Sent"><p>Your encrypted response was accepted.</p></PageIntro>
-    <PreviewMark />
-    <StatusMessage tone="success">This request cannot be used again.</StatusMessage>
-    <div className="fingerprint"><span>Receipt</span><strong>DEMO FINGERPRINT — NOT COMPUTED</strong></div>
-  </div>;
-
-  return <div className="task-page task-page--narrow">
-    <PageIntro title={loaded ? schema.title : "Open request"}><p>{loaded ? "Complete the requested items, then send once." : "Reviewing the request does not use its one response."}</p></PageIntro>
-    <PreviewMark />
-    <FragmentNotice capture={capture} />
-    {loaded
-      ? <form className="simple-form" onSubmit={(event) => { event.preventDefault(); void submit(); }}>
-          {schema.instructions.length > 0 ? <div className="request-instructions"><small>From requester</small><p>{schema.instructions}</p></div> : null}
-          {schema.fields.map((field) => <AnswerField field={field} key={field.id} onChange={(value) => { setAnswers((current) => ({ ...current, [field.id]: value })); }} value={answers[field.id] ?? ""} />)}
-          {state === "unknown"
-            ? <><AmbiguousNotice>The encrypted response may already have been accepted.</AmbiguousNotice><StatusMessage tone="warning">Retry sends the exact same encrypted response. Do not edit the fields first.</StatusMessage><button className="primary-button full-button" onClick={() => { void submit(); }} type="button">Retry identical encrypted response</button></>
-            : <><button className="primary-button full-button" disabled={!complete || state === "working"} type="submit">{state === "working" ? "Sending…" : "Send once"}</button><OperationNotice state={state} /></>}
-        </form>
-      : <div className="simple-form">
-          <label className="field-block"><span>Second key</span><input autoComplete="off" onChange={(event) => { setFactor(event.currentTarget.value); }} placeholder="52-character key" spellCheck={false} value={factor} /></label>
-          <button className="primary-button full-button" disabled={!factorValid || state === "working"} onClick={() => { void load(); }} type="button">Review request</button>
-          {state === "waiting" ? <OperationNotice retry={() => { void load(); }} state={state} /> : <OperationNotice state={state} />}
-        </div>}
-  </div>;
+  const answerValidation = opened === null ? { message: "", valid: false } : validateRequestAnswers(opened.schema.fields, answers);
+  const sealed = envelope !== null;
+  return <div className="task-page task-page--narrow"><PageIntro title="Answer request"><p>Inspecting the request does not submit anything.</p></PageIntro><FragmentNotice capture={capture} />{opened === null ? <>{bundle?.kind === 3 && bundle.factorMode !== 0 ? <label><span>{bundle.factorMode === 1 ? "Passphrase" : "Second key"}</span><input autoComplete="off" onChange={(event) => { setFactor(event.currentTarget.value); }} spellCheck={false} type="password" value={factor} /></label> : null}<button className="primary-button full-button" onClick={() => { void inspect(); }} type="button">Inspect request</button></> : <><p className="eyebrow">Provided by requester</p><h2>{opened.schema.title}</h2>{sealed ? <StatusMessage tone="warning">Answers are sealed into one exact encrypted response. Editing is disabled, and every retry reuses those same bytes.</StatusMessage> : null}{opened.schema.fields.map((field) => field.type === "instruction" ? <div key={field.id}><p className="eyebrow">Provided by requester</p><strong>{field.label}</strong>{field.help.length === 0 ? null : <p>{field.help}</p>}</div> : <label key={field.id}><span>{field.label}</span><small>Provided by requester</small>{field.help.length === 0 ? null : <small>{field.help}</small>}{field.type === "long" ? <textarea disabled={sealed} onChange={(event) => { setAnswers({ ...answers, [field.id]: event.currentTarget.value }); }} value={answers[field.id] ?? ""} /> : <input autoComplete="off" disabled={sealed} onChange={(event) => { setAnswers({ ...answers, [field.id]: event.currentTarget.value }); }} spellCheck={field.type !== "secret"} type={field.type === "secret" ? "password" : "text"} value={answers[field.id] ?? ""} />}</label>)}{sealed ? null : <StatusMessage tone={answerValidation.valid ? "success" : "warning"}>{answerValidation.message}</StatusMessage>}{receipt === null ? <><label><input checked={confirmed} disabled={sealed} onChange={(event) => { setConfirmed(event.currentTarget.checked); }} type="checkbox" /> I reviewed the answers. I understand that only one competing response can win and this link cannot be reused after acceptance.</label><button className="primary-button full-button" disabled={!answerValidation.valid || !confirmed || state === "working"} onClick={() => { void submit(); }} type="button">{envelope === null ? "Submit once" : "Retry identical submission"}</button></> : <><div className="fingerprint"><span>Local receipt — compare all 64 hexadecimal digits through an independent channel</span><strong>{receipt}</strong><p>{receiptMatch === true ? "The server returned the same base64 receipt." : receiptMatch === false ? "The server receipt did not match. Treat submission as unconfirmed." : "Submission is unconfirmed; retain this local receipt."} A match only means both browsers hold the same ciphertext bytes. It does not authenticate the writer, plaintext, or service behavior.</p></div>{state === "unknown" ? <button onClick={() => { void submit(); }} type="button">Retry identical submission</button> : null}</>}</>}<OperationNotice state={state} /></div>;
 }

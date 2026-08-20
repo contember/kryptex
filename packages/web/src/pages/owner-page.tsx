@@ -1,100 +1,158 @@
-import { useRef, useState } from "react";
-
+import { useEffect, useState } from "react";
+import type { RequestStatusResponse } from "@kryptex/contracts/api";
+import type { RequestResponsePayload } from "@kryptex/contracts/payloads";
+import { deriveRequestOwnerKeys, encodeBase64Url, equalBytes, openRequestResponse, parseKxr1Header, receiptDisplay } from "@kryptex/crypto";
+import { useClient } from "../client-context";
+import { artifactUrl, checkedResponseExpiry, consumeBundle, pickupRecoveryForStatus, shortenedExpiryRequest } from "../crypto-flow";
 import type { FragmentCapture } from "../fragment";
-import { usePreviewOperation } from "../preview-hooks";
-import { reconcilePickup } from "../preview-transitions";
-import { ConfirmDialog, FragmentNotice, OperationNotice, PageIntro, PreviewMark, SecretField, ShareSlip, StatusMessage, type OperationState } from "../ui";
+import { AmbiguousNotice, FragmentNotice, OperationNotice, PageIntro, SecretField, ShareSlip, StatusMessage, type OperationState } from "../ui";
 
-type OwnerStatus = "submitted" | "opened" | "revoked" | "consumed";
+type PickupRecovery = "none" | "checking" | "retry" | "lost";
 
 export function OwnerPage({ capture }: { readonly capture: FragmentCapture }) {
-  const operation = usePreviewOperation();
-  const schema = operation.adapter.readRequestSchema();
-  const [status, setStatus] = useState<OwnerStatus>("submitted");
-  const [state, setState] = useState<OperationState>("idle");
-  const [unknownPickup, setUnknownPickup] = useState(false);
-  const [openDialog, setOpenDialog] = useState(false);
-  const [revokeDialog, setRevokeDialog] = useState(false);
-  const [retryPickup, setRetryPickup] = useState(false);
-  const [replacement, setReplacement] = useState(false);
-  const [saved, setSaved] = useState<Readonly<Record<string, boolean>>>({});
-  const openTriggerRef = useRef<HTMLButtonElement>(null);
-  const revokeTriggerRef = useRef<HTMLButtonElement>(null);
+  const client = useClient();
+  const [bundle] = useState(() => consumeBundle(capture, 4));
+  const [status, setStatus] = useState<RequestStatusResponse | null>(null);
+  const [state, setState] = useState<OperationState>("working");
+  const [pickupRecovery, setPickupRecovery] = useState<PickupRecovery>("none");
+  const [payload, setPayload] = useState<RequestResponsePayload | null>(null);
+  const [fingerprint, setFingerprint] = useState<string | null>(null);
+  const [replacement, setReplacement] = useState<string | null>(null);
+  const [replacementSaved, setReplacementSaved] = useState(false);
+  const [shortenUnavailable, setShortenUnavailable] = useState(false);
 
-  async function open(): Promise<void> {
+  async function credentials() {
+    if (bundle?.kind !== 4) throw new Error("Invalid pickup bundle");
+    const keys = await deriveRequestOwnerKeys(bundle.ownerSeed);
+    return { keys, locator: encodeBase64Url(bundle.requestLocator), ownerToken: encodeBase64Url(keys.ownerToken) };
+  }
+
+  async function readStatus(): Promise<RequestStatusResponse> {
+    if (bundle?.kind !== 4) throw new Error("Invalid pickup bundle");
+    const input = await credentials();
+    const next = await client.requestStatus({ locator: input.locator, ownerToken: input.ownerToken });
+    checkedResponseExpiry(bundle.serverExpiresAt, next.serverExpiresAt);
+    return next;
+  }
+
+  async function refresh(): Promise<void> {
     setState("working");
-    setUnknownPickup(false);
-    setRetryPickup(false);
     try {
-      const result = await operation.run("pickup");
-      if (result.outcome === "unavailable") setState("unavailable");
-      else { setStatus("opened"); setOpenDialog(false); setState("done"); }
+      setStatus(await readStatus());
+      setState("done");
     } catch {
-      setOpenDialog(false);
-      setUnknownPickup(true);
+      setState("unavailable");
+    }
+  }
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => { void (async () => {
+      if (bundle?.kind !== 4) { setState("unavailable"); return; }
+      try {
+        const keys = await deriveRequestOwnerKeys(bundle.ownerSeed);
+        const next = await client.requestStatus({ locator: encodeBase64Url(bundle.requestLocator), ownerToken: encodeBase64Url(keys.ownerToken) });
+        checkedResponseExpiry(bundle.serverExpiresAt, next.serverExpiresAt);
+        setStatus(next);
+        setState("done");
+      } catch {
+        setState("unavailable");
+      }
+    })(); }, 0);
+    return () => { window.clearTimeout(timeout); };
+  }, [bundle, client]);
+
+  async function reconcilePickup(): Promise<void> {
+    setPickupRecovery("checking");
+    setState("working");
+    try {
+      const next = await readStatus();
+      setStatus(next);
+      const decision = pickupRecoveryForStatus(next.state);
+      if (decision === "retry") {
+        setPickupRecovery("retry");
+        setState("unknown");
+      } else if (decision === "lost") {
+        setPickupRecovery("lost");
+        setState("done");
+      } else {
+        setPickupRecovery("none");
+        setState("done");
+      }
+    } catch {
+      setPickupRecovery("checking");
       setState("unknown");
     }
   }
 
-  async function checkPickupStatus(): Promise<void> {
+  async function pickup(): Promise<void> {
+    if (bundle?.kind !== 4 || status?.state !== "submitted") return;
     setState("working");
-    setUnknownPickup(false);
-    const result = await reconcilePickup(operation.adapter);
-    if (result === "retry") { setRetryPickup(true); setState("idle"); }
-    else if (result === "opened") { setStatus("consumed"); setState("done"); }
-    else if (result === "waiting") setState("waiting");
-    else setState("unavailable");
-  }
-
-  async function revoke(): Promise<void> {
-    setState("working");
-    setUnknownPickup(false);
+    setPickupRecovery("none");
+    let dispatched = false;
     try {
-      await operation.run("revoke");
-      setStatus("revoked");
-      setRevokeDialog(false);
+      const input = await credentials();
+      dispatched = true;
+      const response = await client.pickupRequest({ locator: input.locator, ownerToken: input.ownerToken });
+      const serverExpiresAt = checkedResponseExpiry(bundle.serverExpiresAt, response.metadata.serverExpiresAt);
+      const header = parseKxr1Header(response.bytes);
+      const opened = await openRequestResponse({ envelope: response.bytes, expectedClientNotAfter: header.clientNotAfter, hpkeIkm: input.keys.hpkeIkm, nowSeconds: Math.floor(Date.now() / 1_000), requestLocator: bundle.requestLocator, serverExpiresAt });
+      if (encodeBase64Url(opened.receipt) !== response.metadata.receipt || !equalBytes(header.schemaDigest, opened.header.schemaDigest)) throw new Error("Receipt mismatch");
+      setPayload(opened.payload);
+      setFingerprint(await receiptDisplay(response.bytes));
+      setStatus({ serverExpiresAt, state: "picked_up" });
       setState("done");
     } catch {
-      setState("unknown");
+      if (dispatched) await reconcilePickup();
+      else setState("unavailable");
     }
   }
 
   async function shorten(): Promise<void> {
+    if (bundle?.kind !== 4 || status === null) return;
     setState("working");
-    setUnknownPickup(false);
-    try { await operation.run("shorten"); setReplacement(true); setState("done"); }
-    catch { setState("unknown"); }
+    try {
+      const input = await credentials();
+      const requested = shortenedExpiryRequest(status.serverExpiresAt, Math.floor(Date.now() / 1_000));
+      if (requested === null) { setShortenUnavailable(true); setState("done"); return; }
+      setShortenUnavailable(false);
+      const result = await client.shortenRequest({ locator: input.locator, ownerToken: input.ownerToken, serverExpiresAt: requested });
+      const serverExpiresAt = checkedResponseExpiry(bundle.serverExpiresAt, result.serverExpiresAt);
+      setReplacement(artifactUrl("/i", { ...bundle, serverExpiresAt }));
+      await refresh();
+    } catch {
+      setState("unknown");
+    }
   }
 
-  return <div className="task-page task-page--narrow">
-    <PageIntro title="Response"><p>{status === "submitted" ? "A response is ready to open once." : status === "opened" ? "Response opened." : status === "consumed" ? "Response already opened." : "Request revoked."}</p></PageIntro>
-    <PreviewMark />
-    <FragmentNotice capture={capture} />
-    {status === "opened"
-      ? <div className="result-sheet">
-          <StatusMessage tone="success">Opened once</StatusMessage>
-          {schema.fields.map((field) => <SecretField codeLike={field.type === "secret"} key={field.id} label={field.label} value={field.type === "secret" ? "DEMO_ONLY_NOT_A_SECRET" : "demo response"} />)}
-          <div className="fingerprint"><span>Receipt</span><strong>DEMO FINGERPRINT — NOT COMPUTED</strong></div>
-        </div>
-      : status === "revoked"
-        ? <StatusMessage tone="danger">No response can be opened from this request.</StatusMessage>
-        : status === "consumed"
-          ? <StatusMessage tone="danger">The status check found that the response was already opened. It cannot be recovered here.</StatusMessage>
-          : <>
-              {retryPickup
-                ? <><StatusMessage tone="warning">The response is still available. Trying again sends another consuming pickup request.</StatusMessage><button className="primary-button full-button" onClick={() => { void open(); }} type="button">Try opening again</button></>
-                : <button className="primary-button full-button" onClick={() => { setOpenDialog(true); }} ref={openTriggerRef} type="button">Open once</button>}
-              <ConfirmDialog confirmLabel="OPEN" description="If the response is lost during opening, the service may not be able to return it again." onCancel={() => { setOpenDialog(false); }} onConfirm={() => { void open(); }} open={openDialog} restoreFocus={openTriggerRef} title="Open response?" />
-              <details className="advanced">
-                <summary>More</summary>
-                <div className="task-actions">
-                  <button onClick={() => { void shorten(); }} type="button">Shorten expiry</button>
-                  <button className="danger-button" onClick={() => { setRevokeDialog(true); }} ref={revokeTriggerRef} type="button">Revoke</button>
-                </div>
-              </details>
-              <ConfirmDialog confirmLabel="REVOKE" description="The response link will stop working. Already opened content cannot be taken back." onCancel={() => { setRevokeDialog(false); }} onConfirm={() => { void revoke(); }} open={revokeDialog} restoreFocus={revokeTriggerRef} title="Revoke this response?" />
-            </>}
-    {unknownPickup || state === "waiting" ? <OperationNotice retry={() => { void checkPickupStatus(); }} state={state} /> : <OperationNotice state={state} />}
-    {replacement ? <ShareSlip artifacts={[{ channel: "Replace your old local copy.", id: "replacement", required: false, route: "/i", title: "Updated pickup link" }]} onSaved={(id, value) => { setSaved({ [id]: value }); }} saved={saved} title="Expiry shortened" /> : null}
-  </div>;
+  async function revoke(): Promise<void> {
+    setState("working");
+    try {
+      const input = await credentials();
+      await client.revokeRequest({ locator: input.locator, ownerToken: input.ownerToken });
+      await refresh();
+    } catch {
+      setState("unknown");
+    }
+  }
+
+  if (payload !== null) {
+    return <div className="task-page task-page--narrow"><PageIntro title={payload.schema.title}><p>Response opened once.</p></PageIntro>{payload.answers.map((answer) => { const field = payload.schema.fields.find((candidate) => candidate.id === answer.id); return <SecretField codeLike={field?.type === "secret"} key={answer.id} label={field?.label ?? answer.id} value={answer.value} />; })}<div className="fingerprint"><span>Local receipt — compare all 64 hexadecimal digits through an independent channel</span><strong>{fingerprint}</strong><p>A match only means both browsers hold the same ciphertext bytes. It does not authenticate the writer, plaintext, or service behavior.</p></div></div>;
+  }
+
+  const statusNotice = status?.state === "waiting"
+    ? <StatusMessage>Waiting for a response.</StatusMessage>
+    : status?.state === "picked_up" && pickupRecovery === "lost"
+      ? <StatusMessage tone="danger">The response was released, but this browser could not recover it. The service cannot release it again.</StatusMessage>
+      : status !== null && status.state !== "submitted"
+        ? <StatusMessage tone="warning">This request is {status.state}.</StatusMessage>
+        : null;
+  const pickupAction = status?.state !== "submitted"
+    ? null
+    : pickupRecovery === "retry"
+      ? <AmbiguousNotice>Status still says submitted. Only an explicit retry may consume the response.<button onClick={() => { void pickup(); }} type="button">Retry consuming pickup</button></AmbiguousNotice>
+      : pickupRecovery === "checking"
+        ? <AmbiguousNotice>Pickup may have completed. Check status before any retry.<button onClick={() => { void reconcilePickup(); }} type="button">Check pickup status</button></AmbiguousNotice>
+        : <button className="primary-button full-button" onClick={() => { void pickup(); }} type="button">Open response once</button>;
+
+  return <div className="task-page task-page--narrow"><PageIntro title="Response"><p>Status checks do not consume the response.</p></PageIntro><FragmentNotice capture={capture} />{status === null ? null : <div className="status-sheet"><div><span>Status</span><strong>{status.state}</strong></div><div><span>Expires</span><strong>{new Date(status.serverExpiresAt * 1_000).toLocaleString()}</strong></div></div>}{pickupAction}{statusNotice}{status?.state === "waiting" || status?.state === "submitted" ? <details className="advanced"><summary>More</summary><div className="task-actions"><button disabled={shortenUnavailable} onClick={() => { void shorten(); }} type="button">Shorten to 15 minutes</button><button className="danger-button" onClick={() => { void revoke(); }} type="button">Revoke</button>{shortenUnavailable ? <StatusMessage tone="warning">This request is too close to expiry to shorten again.</StatusMessage> : null}</div></details> : null}<OperationNotice retry={() => { void refresh(); }} state={pickupRecovery === "none" ? state : "idle"} />{replacement === null ? null : <ShareSlip artifacts={[{ channel: "Replace the old local copy.", id: "replacement", required: true, title: "Updated pickup link", value: replacement }]} onSaved={(_id, value) => { setReplacementSaved(value); }} saved={{ replacement: replacementSaved }} title="Expiry shortened" />}</div>;
 }
