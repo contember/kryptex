@@ -28,10 +28,13 @@ export interface CheckedWorkerEnvironment {
   readonly expectedOrigin: string;
   readonly permitIssuanceKey: Uint8Array;
   readonly rateLimitKey: Uint8Array;
+  readonly localTurnstileDummy: boolean;
   readonly turnstileAction: "create_permit";
   readonly turnstileHostname: string;
   readonly turnstileSecretKey: string;
 }
+
+export const LOCAL_TURNSTILE_DUMMY_SECRET = "1x0000000000000000000000000000000AA";
 
 function decodeSecret(value: unknown, name: string): Uint8Array {
   if (typeof value !== "string" || !/^[A-Za-z0-9_-]{43}$/.test(value)) {
@@ -81,12 +84,14 @@ function parseCapabilityKeyring(text: string): ReadonlyMap<string, Uint8Array> {
 
 export function checkWorkerEnvironment(env: WorkerSecurityEnvironment): CheckedWorkerEnvironment {
   let expectedOrigin: string;
+  let expectedOriginHostname: string;
   try {
     const url = new URL(env.EXPECTED_ORIGIN);
     if ((url.protocol !== "https:" && url.protocol !== "http:") || url.origin !== env.EXPECTED_ORIGIN) {
       throw new Error("invalid origin");
     }
     expectedOrigin = url.origin;
+    expectedOriginHostname = url.hostname;
   } catch {
     throw new Error("EXPECTED_ORIGIN must be an exact HTTP origin");
   }
@@ -98,6 +103,10 @@ export function checkWorkerEnvironment(env: WorkerSecurityEnvironment): CheckedW
   }
   if (env.TURNSTILE_SECRET_KEY.length < 1 || env.TURNSTILE_SECRET_KEY.length > 2048) {
     throw new Error("TURNSTILE_SECRET_KEY has an invalid length");
+  }
+  const localTurnstileDummy = env.TURNSTILE_SECRET_KEY === LOCAL_TURNSTILE_DUMMY_SECRET;
+  if (localTurnstileDummy && (expectedOriginHostname !== "localhost" || env.TURNSTILE_EXPECTED_HOSTNAME !== "localhost")) {
+    throw new Error("The Turnstile dummy secret is restricted to localhost");
   }
   if (!/^[A-Za-z0-9._-]{1,64}$/.test(env.CAPABILITY_ACTIVE_KEY_ID)) {
     throw new Error("CAPABILITY_ACTIVE_KEY_ID is invalid");
@@ -113,6 +122,7 @@ export function checkWorkerEnvironment(env: WorkerSecurityEnvironment): CheckedW
     activeCapabilityKeyId: env.CAPABILITY_ACTIVE_KEY_ID,
     capabilityKeys,
     expectedOrigin,
+    localTurnstileDummy,
     permitIssuanceKey: decodeSecret(env.PERMIT_ISSUANCE_KEY, "PERMIT_ISSUANCE_KEY"),
     rateLimitKey: decodeSecret(env.RATE_LIMIT_KEY, "RATE_LIMIT_KEY"),
     turnstileAction: "create_permit",

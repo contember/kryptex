@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, test } from "vitest";
 import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
-import { checkWorkerEnvironment, type WorkerEnv, type WorkerSecurityEnvironment } from "./env.js";
-import { handleApiRequest, verifyTurnstile } from "./index.js";
+import { checkWorkerEnvironment, LOCAL_TURNSTILE_DUMMY_SECRET, type WorkerEnv, type WorkerSecurityEnvironment } from "./env.js";
+import { handleApiRequest, LOCAL_TURNSTILE_DUMMY_TOKEN, verifyTurnstile } from "./index.js";
 
 const key = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 const ORIGIN = "http://localhost:5173";
@@ -25,6 +25,19 @@ function checkedEnvironment() {
   return checkWorkerEnvironment(environment);
 }
 
+function localCheckedEnvironment() {
+  return checkWorkerEnvironment({
+    CAPABILITY_ACTIVE_KEY_ID: "dev-v1",
+    CAPABILITY_HMAC_KEYRING: `{"dev-v1":"${key}"}`,
+    EXPECTED_ORIGIN: ORIGIN,
+    PERMIT_ISSUANCE_KEY: key,
+    RATE_LIMIT_KEY: key,
+    TURNSTILE_EXPECTED_ACTION: "create_permit",
+    TURNSTILE_EXPECTED_HOSTNAME: "localhost",
+    TURNSTILE_SECRET_KEY: LOCAL_TURNSTILE_DUMMY_SECRET
+  });
+}
+
 function workerEnvironment(): WorkerEnv {
   return {
     ASSETS: env.ASSETS,
@@ -45,7 +58,99 @@ function workerEnvironment(): WorkerEnv {
   };
 }
 
+function localWorkerEnvironment(): WorkerEnv {
+  return {
+    ...workerEnvironment(),
+    TURNSTILE_SECRET_KEY: LOCAL_TURNSTILE_DUMMY_SECRET
+  };
+}
+
 describe("Turnstile Siteverify", () => {
+  test("accepts only the exact local dummy token without outbound Siteverify", async () => {
+    let fetchCalled = false;
+    const siteverifyFetch: typeof fetch = () => {
+      fetchCalled = true;
+      return Promise.reject(new Error("must not call Siteverify"));
+    };
+    const accepted = await verifyTurnstile(
+      localCheckedEnvironment(),
+      "00000000-0000-4000-8000-000000000010",
+      LOCAL_TURNSTILE_DUMMY_TOKEN,
+      siteverifyFetch
+    );
+    const rejected = await verifyTurnstile(
+      localCheckedEnvironment(),
+      "00000000-0000-4000-8000-000000000011",
+      "wrong-token",
+      siteverifyFetch
+    );
+    expect(accepted.kind).toBe("accepted");
+    expect(accepted.kind === "accepted" ? accepted.permitExpiresAt : 0).toBeGreaterThan(Math.floor(Date.now() / 1_000));
+    expect(rejected).toEqual({ kind: "failed" });
+    expect(fetchCalled).toBe(false);
+  });
+
+  test("creates a public permit for the exact local dummy token and rejects another token", async () => {
+    let fetchCalled = false;
+    const siteverifyFetch: typeof fetch = () => {
+      fetchCalled = true;
+      return Promise.reject(new Error("must not call Siteverify"));
+    };
+    const request = (requestId: string, turnstileResponse: string) => new Request(`${ORIGIN}/api/v1/create-permits`, {
+      body: JSON.stringify({ requestId, turnstileResponse }),
+      headers: { "Content-Type": "application/json", Origin: ORIGIN, "Sec-Fetch-Site": "same-origin" },
+      method: "POST"
+    });
+    const accepted = await handleApiRequest(
+      request("00000000-0000-4000-8000-000000000012", LOCAL_TURNSTILE_DUMMY_TOKEN),
+      localWorkerEnvironment(),
+      siteverifyFetch
+    );
+    const rejected = await handleApiRequest(
+      request("00000000-0000-4000-8000-000000000013", "wrong-token"),
+      localWorkerEnvironment(),
+      siteverifyFetch
+    );
+    expect(accepted.status).toBe(200);
+    expect(accepted.headers.get("Set-Cookie")).toContain("kx_create=v1.");
+    expect(rejected.status).toBe(403);
+    expect(await rejected.json()).toEqual({ error: "gate_failed" });
+    expect(fetchCalled).toBe(false);
+  });
+
+  test("rejects the dummy secret outside an exact localhost environment", () => {
+    const base: WorkerSecurityEnvironment = {
+      CAPABILITY_ACTIVE_KEY_ID: "dev-v1",
+      CAPABILITY_HMAC_KEYRING: `{"dev-v1":"${key}"}`,
+      EXPECTED_ORIGIN: "https://secrets.example",
+      PERMIT_ISSUANCE_KEY: key,
+      RATE_LIMIT_KEY: key,
+      TURNSTILE_EXPECTED_ACTION: "create_permit",
+      TURNSTILE_EXPECTED_HOSTNAME: "secrets.example",
+      TURNSTILE_SECRET_KEY: LOCAL_TURNSTILE_DUMMY_SECRET
+    };
+    expect(() => checkWorkerEnvironment(base)).toThrow("restricted to localhost");
+    expect(() => checkWorkerEnvironment({ ...base, EXPECTED_ORIGIN: ORIGIN, TURNSTILE_EXPECTED_HOSTNAME: "secrets.example" })).toThrow("restricted to localhost");
+  });
+
+  test("rejects a deployed request URL even when localhost headers are spoofed", async () => {
+    const response = await handleApiRequest(new Request("https://deployed.example/api/v1/create-permits", {
+      body: JSON.stringify({
+        requestId: "00000000-0000-4000-8000-000000000012",
+        turnstileResponse: LOCAL_TURNSTILE_DUMMY_TOKEN
+      }),
+      headers: { "Content-Type": "application/json", Origin: ORIGIN, "Sec-Fetch-Site": "same-origin" },
+      method: "POST"
+    }), {
+      ...workerEnvironment(),
+      TURNSTILE_EXPECTED_HOSTNAME: "localhost",
+      TURNSTILE_SECRET_KEY: LOCAL_TURNSTILE_DUMMY_SECRET
+    }, () => Promise.reject(new Error("must not call Siteverify")));
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({ error: "forbidden" });
+    expect(response.headers.get("Set-Cookie")).toBeNull();
+  });
+
   test("drives the public create-permit route idempotently with the request ID in Siteverify", async () => {
     const requestId = "00000000-0000-4000-8000-000000000004";
     const challengeTimestamp = new Date().toISOString();

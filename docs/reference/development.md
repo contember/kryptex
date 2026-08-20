@@ -72,6 +72,8 @@ Open exactly `http://localhost:5173`. The checked-in local Worker configuration 
 
 These are Cloudflare's official always-pass dummy credentials. They are only for localhost. Never put either dummy value in production configuration. See [Cloudflare's Turnstile testing documentation](https://developers.cloudflare.com/turnstile/troubleshooting/testing/).
 
+The local Worker treats this exact dummy credential pair as a deterministic development control. Only an exact `XXXX.DUMMY.TOKEN.XXXX` widget token is accepted, and only when both the configured browser-origin hostname and expected Turnstile hostname are `localhost`. That narrow mode does not call Siteverify because the local workerd outbound request is not reliable and the dummy response does not carry the production action. Any other secret or hostname uses normal Siteverify with the required hostname, action, and challenge timestamp checks. This local control is not production Turnstile validation.
+
 ## Browser flows
 
 1. Open `/send` to create a recipient link and an optional independently delivered second key. Save the management link if later status, shorten, or revoke actions are required.

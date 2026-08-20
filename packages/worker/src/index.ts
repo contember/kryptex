@@ -40,6 +40,7 @@ export { CreatePermitDurableObject, RequestDurableObject, SendDurableObject };
 
 const MAX_SMALL_BODY_BYTES = 8_192;
 const MAX_ENVELOPE_BODY_BYTES = 1_500_000;
+export const LOCAL_TURNSTILE_DUMMY_TOKEN = "XXXX.DUMMY.TOKEN.XXXX";
 const MUTATING_ROUTES: ReadonlySet<string> = new Set([
   API_ROUTES.createPermit,
   API_ROUTES.sendCreate,
@@ -165,6 +166,11 @@ export async function verifyTurnstile(
   responseToken: string,
   siteverifyFetch: typeof fetch
 ): Promise<TurnstileResult> {
+  if (environment.localTurnstileDummy) {
+    return responseToken === LOCAL_TURNSTILE_DUMMY_TOKEN
+      ? { kind: "accepted", permitExpiresAt: unixSeconds() + 300 }
+      : { kind: "failed" };
+  }
   const body = new FormData();
   body.set("secret", environment.turnstileSecretKey);
   body.set("response", responseToken);
@@ -588,6 +594,10 @@ export async function handleApiRequest(
   } catch {
     return finalizeApiResponse(apiError("internal_error", 500), environment.EXPECTED_ORIGIN);
   }
+  const requestUrl = new URL(request.url);
+  if (checked.localTurnstileDummy && requestUrl.origin !== checked.expectedOrigin) {
+    return finalizeApiResponse(apiError("forbidden", 403), checked.expectedOrigin);
+  }
   const origin = request.headers.get("Origin");
   if (origin !== checked.expectedOrigin) {
     return finalizeApiResponse(apiError("forbidden", 403), checked.expectedOrigin);
@@ -604,7 +614,7 @@ export async function handleApiRequest(
   if (request.method !== "POST") {
     return finalizeApiResponse(apiError("invalid_request", 400), checked.expectedOrigin);
   }
-  const route = new URL(request.url).pathname;
+  const route = requestUrl.pathname;
   if (MUTATING_ROUTES.has(route)) {
     const fetchSite = request.headers.get("Sec-Fetch-Site");
     if (fetchSite !== null && fetchSite !== "same-origin") {
