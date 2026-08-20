@@ -149,9 +149,9 @@ describe("canonical payload boundary", () => {
 
   test("rejects invalid canonical JSON and payload fixtures", () => {
     for (const fixture of jcsVectors.invalidJcsAndPayloads) {
-      if ("rawJson" in fixture) {
+      if ("rawJson" in fixture && typeof fixture.rawJson === "string") {
         expect(() => decodeSendPayload(utf8(fixture.rawJson)), fixture.id).toThrow();
-      } else if ("utf8Hex" in fixture) {
+      } else if ("utf8Hex" in fixture && typeof fixture.utf8Hex === "string") {
         expect(() => decodeSendPayload(fromHex(fixture.utf8Hex)), fixture.id).toThrow();
       } else {
         const bytes = utf8(JSON.stringify(fixture.object));

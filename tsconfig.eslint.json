@@ -13,6 +13,7 @@
     "packages/*/*.config.ts",
     "packages/*/src/**/*.test.ts",
     "packages/*/src/**/*.test.tsx",
+    "packages/crypto/src/wasm.d.ts",
     "packages/worker/worker-configuration.d.ts"
   ]
 }
