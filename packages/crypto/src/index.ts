@@ -18,12 +18,16 @@ export {
   deriveRequestOwnerKeys,
   deriveRequestWriteKeys,
   deriveSendKeys,
+  deriveSendManagementKeys,
+  deriveSendRecipientKeys,
   hkdfExpand,
   hkdfExtract,
   type CreatePermitKeys,
   type RequestOwnerKeys,
   type RequestWriteKeys,
-  type SendKeys
+  type SendKeys,
+  type SendManagementKeys,
+  type SendRecipientKeys
 } from "./kdf.js";
 export {
   decodeBundle,

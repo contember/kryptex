@@ -32,11 +32,40 @@ function factorName(mode: FactorMode): string {
   return "random-factor";
 }
 
-export interface SendKeys {
+export interface SendRecipientKeys {
   readonly contentKey: Uint8Array<ArrayBuffer>;
   readonly locator: Uint8Array<ArrayBuffer>;
-  readonly manageToken: Uint8Array<ArrayBuffer>;
   readonly retrieveToken: Uint8Array<ArrayBuffer>;
+}
+
+export async function deriveSendRecipientKeys(
+  sendSeed: Uint8Array,
+  factorMode: FactorMode,
+  factor?: Uint8Array
+): Promise<SendRecipientKeys> {
+  requireLength(sendSeed, 32, "invalid_send_seed");
+  const locatorPrk = await hkdfExtract("kryptex/v1/send/locator", sendSeed);
+  const masterLabel = `kryptex/v1/send/master/${factorName(factorMode)}`;
+  const masterPrk = await hkdfExtract(masterLabel, concat(sendSeed, factorForMode(factorMode, factor)));
+  return {
+    contentKey: await hkdfExpand(masterPrk, "kryptex/v1/send/content-key", 32),
+    locator: await hkdfExpand(locatorPrk, "kryptex/v1/send/locator", 16),
+    retrieveToken: await hkdfExpand(masterPrk, "kryptex/v1/send/retrieve-token", 32)
+  };
+}
+
+export interface SendManagementKeys {
+  readonly manageToken: Uint8Array<ArrayBuffer>;
+}
+
+export type SendKeys = SendRecipientKeys & SendManagementKeys;
+
+export async function deriveSendManagementKeys(manageSeed: Uint8Array): Promise<SendManagementKeys> {
+  requireLength(manageSeed, 32, "invalid_manage_seed");
+  const managePrk = await hkdfExtract("kryptex/v1/send/manage-token", manageSeed);
+  return {
+    manageToken: await hkdfExpand(managePrk, "kryptex/v1/send/manage-token", 32)
+  };
 }
 
 export async function deriveSendKeys(
@@ -47,15 +76,11 @@ export async function deriveSendKeys(
 ): Promise<SendKeys> {
   requireLength(sendSeed, 32, "invalid_send_seed");
   requireLength(manageSeed, 32, "invalid_manage_seed");
-  const locatorPrk = await hkdfExtract("kryptex/v1/send/locator", sendSeed);
-  const masterLabel = `kryptex/v1/send/master/${factorName(factorMode)}`;
-  const masterPrk = await hkdfExtract(masterLabel, concat(sendSeed, factorForMode(factorMode, factor)));
-  const managePrk = await hkdfExtract("kryptex/v1/send/manage-token", manageSeed);
+  const recipient = await deriveSendRecipientKeys(sendSeed, factorMode, factor);
+  const management = await deriveSendManagementKeys(manageSeed);
   return {
-    contentKey: await hkdfExpand(masterPrk, "kryptex/v1/send/content-key", 32),
-    locator: await hkdfExpand(locatorPrk, "kryptex/v1/send/locator", 16),
-    manageToken: await hkdfExpand(managePrk, "kryptex/v1/send/manage-token", 32),
-    retrieveToken: await hkdfExpand(masterPrk, "kryptex/v1/send/retrieve-token", 32)
+    ...recipient,
+    ...management
   };
 }
 
