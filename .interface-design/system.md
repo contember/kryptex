@@ -10,21 +10,13 @@ Sealed envelope, split seal, retrieval ticket, custody receipt, burn mark, expir
 
 ## Signature
 
-The split seal is the product-specific visual and interaction pattern. Two offset semicircular marks represent independent capability parts. They align when both factors are present and separate when instructions require different channels.
+The transfer slip is the product-specific interaction pattern. It appears only after creation and groups the recipient link, optional second factor, channel instructions, and optional management link into one focused handoff artifact.
 
-The signature appears in:
-
-1. protection mode selection;
-2. the recipient-link and second-key receipt;
-3. retrieval factor completion;
-4. request writer authorization;
-5. lifecycle status and final consumption.
-
-It is drawn with CSS, not an image asset or decorative icon.
+A small split-seal mark may connect the recipient link and second factor inside this slip. Do not repeat it throughout the application. It is drawn with CSS, not an image asset.
 
 ## Rejected defaults
 
-- No dashboard sidebar. Use a focused linear transfer document with a compact lifecycle rail.
+- No dashboard sidebar or persistent lifecycle rail. Use one focused task per route.
 - No neon-on-black security aesthetic. Use archival paper and graphite in light mode, muted ledger surfaces in dark mode.
 - No grid of generic cards. Use sections that read as one custody document and detach only for capability receipts.
 - No decorative shields or lock icons. Use the split seal, explicit labels, and state text.
@@ -101,26 +93,28 @@ No remote fonts are permitted.
 
 ## Navigation
 
-The persistent top line contains the wordmark, current flow name, and the full marker **Experimental — not production-ready**. There is no account area. A thin route-specific lifecycle rail uses:
+The compact top line contains the wordmark, current task, and an **Experimental** marker. There is no account area, persistent route list, or lifecycle rail. The home page exposes only two primary actions: send a secret and request a secret. Security documentation is a quiet secondary link.
 
-- send creation: compose → protect → authorize → transfer;
-- request creation: define → protect → authorize → transfer;
-- send retrieval: authorize → retrieve → decrypt;
-- request writing: authorize → review → complete → submit;
-- owner pickup: check → retrieve → decrypt;
-- management: inspect → adjust or revoke.
+Each task route shows one form or one current state. Do not expose protocol stages, state simulators, or terminal-state menus in the primary interface.
 
 ## Components
 
-- `SplitSeal`: decorative factor completion and channel separation; `aria-hidden` with adjacent status text.
-- `LifecycleRail`: an ordered list of stages with `aria-current="step"` on the active stage.
-- `CapabilityReceipt`: a bordered transfer artifact with value, purpose, channel instruction, and copy action.
+- `TransferSlip`: the only prominent detached artifact; contains share values, short channel instructions, copy actions, and safe acknowledgement.
+- `AdvancedDisclosure`: a native disclosure for protection mode, retrieval count, structured send fields, or uncommon field options. It starts closed.
+- `RequestItem`: a label-first requested value. It defaults to required and secret; type, help, and optional state live under `More options`.
 - `SecretField`: concealed/revealed text with explicit copy action.
 - `PolicySummary`: plain-language TTL and retrieval contract.
 - `BurnAction`: destructive control with typed confirmation for active resources.
 - `StatusLine`: icon-free state marker using text, rule, and semantic color.
 
 Every interactive component implements default, hover, active, focus-visible, disabled, loading, success, and error states where applicable.
+
+Creation routes use progressive disclosure:
+
+- send: secret, expiry, create; extra protection and retrieval count are advanced;
+- request: title, plain instructions, one requested item, expiry, create; additional items and field options are secondary;
+- request instructions are prose, never a visible field type;
+- management and consumption routes show only the current status and one or two relevant actions.
 
 Concealed values are absent from the accessibility tree until reveal. Dialogs move and contain focus, close on Escape when safe, and restore focus to their trigger. Requester-authored text is visually labeled **Provided by requester**.
 
