@@ -1,0 +1,37 @@
+{
+  "base64url": [
+    {
+      "id": "empty",
+      "bytesHex": "",
+      "canonical": ""
+    },
+    {
+      "id": "one-byte",
+      "bytesHex": "ff",
+      "canonical": "_w"
+    },
+    {
+      "id": "locator",
+      "bytesHex": "707172737475767778797a7b7c7d7e7f",
+      "canonical": "cHFyc3R1dnd4eXp7fH1-fw"
+    },
+    {
+      "id": "factor",
+      "bytesHex": "404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f",
+      "canonical": "QEFCQ0RFRkdISUpLTE1OT1BRUlNUVVZXWFlaW1xdXl8"
+    }
+  ],
+  "crockfordBase32": {
+    "bytesHex": "404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f",
+    "canonicalDisplay": "810M4GT48N34E-J29995MRKAE9X-852MJKAHANCNT-RB5D5PQ2XBSFG",
+    "acceptedAliasDisplay": "8lom4gt48n34e-j29995mrkae9x-852mjkahancnt-rb5d5pq2xbsfg",
+    "acceptedHyphenVariants": [
+      "810M4GT48N34EJ29995MRKAE9X852MJKAHANCNTRB5D5PQ2XBSFG",
+      "810M4GT48N34E-J29995MRKAE9X852MJKAHANCNTRB5D5PQ2XBSFG",
+      "810M4GT48N34EJ29995MRKAE9X-852MJKAHANCNTRB5D5PQ2XBSFG",
+      "810M4GT48N34EJ29995MRKAE9X852MJKAHANCNT-RB5D5PQ2XBSFG"
+    ],
+    "decodedLength": 32,
+    "bitOrder": "most-significant-bit first; final four pad bits are zero"
+  }
+}

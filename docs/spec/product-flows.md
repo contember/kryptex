@@ -1,6 +1,6 @@
 # Product flows
 
-Status: draft under independent review for the version 1 MVP.
+Status: frozen for the version 1 MVP.
 
 ## Shared language and claims
 

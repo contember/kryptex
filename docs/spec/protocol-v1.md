@@ -1,6 +1,6 @@
 # Kryptex protocol version 1
 
-Status: draft under independent review. Do not implement incompatible assumptions.
+Status: frozen implementation specification for protocol version 1.
 
 This document defines the byte-level client protocol and the server state transitions for version 1. An incompatible change requires a new protocol version after this document is frozen.
 
@@ -370,4 +370,4 @@ Clients should use server time returned by the create-permit status response. Se
 
 ## Required vectors
 
-Before this specification can be frozen, checked-in vectors must cover every factor mode, all four bundle kinds, both `KXE1` modes, `KXR1`, JCS payloads, key schedules, capability tags, malformed encodings, and wrong-factor failures. Crypto and web implementations must consume the same vector files.
+The checked-in contract at `vectors/v1/` covers every factor mode, all four bundle kinds, both `KXE1` modes, `KXR1`, JCS payloads, key schedules, capability tags, bucket boundaries, malformed encodings, cross-container mismatches, and wrong-factor failures. Crypto and web implementations must consume the same vector files.

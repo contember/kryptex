@@ -1,0 +1,186 @@
+{
+  "allowedBucketLengths": [
+    4096,
+    16384,
+    65536,
+    262144,
+    1048576
+  ],
+  "cases": [
+    {
+      "id": "empty-payload",
+      "payloadLength": 0,
+      "expectedBucketLength": 4096,
+      "payload": {
+        "construction": "byte[i] = (offset + i) mod 256",
+        "offset": 33
+      },
+      "padding": {
+        "construction": "byte[i] = (offset + i) mod 256",
+        "offset": 145
+      },
+      "plaintextLength": 4096,
+      "plaintextSha256Hex": "14e851365128e15475787ba954c134ed66d7bea085e93b59c36c211c0abb2b26",
+      "kxeEnvelopeLength": 4174,
+      "kxrEnvelopeLength": 4198
+    },
+    {
+      "id": "bucket-4096-max",
+      "payloadLength": 4092,
+      "expectedBucketLength": 4096,
+      "payload": {
+        "construction": "byte[i] = (offset + i) mod 256",
+        "offset": 34
+      },
+      "padding": {
+        "construction": "byte[i] = (offset + i) mod 256",
+        "offset": 146
+      },
+      "plaintextLength": 4096,
+      "plaintextSha256Hex": "32063d76048189d65c8af2e5fede8910ee4b1e012c8b40e7bbc3f7e5b9d2c7f6",
+      "kxeEnvelopeLength": 4174,
+      "kxrEnvelopeLength": 4198
+    },
+    {
+      "id": "bucket-4096-transition",
+      "payloadLength": 4093,
+      "expectedBucketLength": 16384,
+      "payload": {
+        "construction": "byte[i] = (offset + i) mod 256",
+        "offset": 35
+      },
+      "padding": {
+        "construction": "byte[i] = (offset + i) mod 256",
+        "offset": 147
+      },
+      "plaintextLength": 16384,
+      "plaintextSha256Hex": "2eb2245dce50643941747e3ca2e8e2e2528e6ae341d1105f3c349aabf872c435",
+      "kxeEnvelopeLength": 16462,
+      "kxrEnvelopeLength": 16486
+    },
+    {
+      "id": "bucket-16384-max",
+      "payloadLength": 16380,
+      "expectedBucketLength": 16384,
+      "payload": {
+        "construction": "byte[i] = (offset + i) mod 256",
+        "offset": 36
+      },
+      "padding": {
+        "construction": "byte[i] = (offset + i) mod 256",
+        "offset": 148
+      },
+      "plaintextLength": 16384,
+      "plaintextSha256Hex": "b23af2e78fbeb075256632be1bc8eb709f5d25c993e6f0962723946d55e4dd17",
+      "kxeEnvelopeLength": 16462,
+      "kxrEnvelopeLength": 16486
+    },
+    {
+      "id": "bucket-16384-transition",
+      "payloadLength": 16381,
+      "expectedBucketLength": 65536,
+      "payload": {
+        "construction": "byte[i] = (offset + i) mod 256",
+        "offset": 37
+      },
+      "padding": {
+        "construction": "byte[i] = (offset + i) mod 256",
+        "offset": 149
+      },
+      "plaintextLength": 65536,
+      "plaintextSha256Hex": "6e3096974fbc0b744e98fa2d465db29ffc751e293bd2079a43c0265023be6fd0",
+      "kxeEnvelopeLength": 65614,
+      "kxrEnvelopeLength": 65638
+    },
+    {
+      "id": "bucket-65536-max",
+      "payloadLength": 65532,
+      "expectedBucketLength": 65536,
+      "payload": {
+        "construction": "byte[i] = (offset + i) mod 256",
+        "offset": 38
+      },
+      "padding": {
+        "construction": "byte[i] = (offset + i) mod 256",
+        "offset": 150
+      },
+      "plaintextLength": 65536,
+      "plaintextSha256Hex": "cf40d557a5331b0569ae73228295069fcefba47dadf6774f321634f842a4c5f8",
+      "kxeEnvelopeLength": 65614,
+      "kxrEnvelopeLength": 65638
+    },
+    {
+      "id": "bucket-65536-transition",
+      "payloadLength": 65533,
+      "expectedBucketLength": 262144,
+      "payload": {
+        "construction": "byte[i] = (offset + i) mod 256",
+        "offset": 39
+      },
+      "padding": {
+        "construction": "byte[i] = (offset + i) mod 256",
+        "offset": 151
+      },
+      "plaintextLength": 262144,
+      "plaintextSha256Hex": "3ab342f107f502b7ad631f490051e5f04234bbc3d1ecd725c98d7d74330d32e5",
+      "kxeEnvelopeLength": 262222,
+      "kxrEnvelopeLength": 262246
+    },
+    {
+      "id": "bucket-262144-max",
+      "payloadLength": 262140,
+      "expectedBucketLength": 262144,
+      "payload": {
+        "construction": "byte[i] = (offset + i) mod 256",
+        "offset": 40
+      },
+      "padding": {
+        "construction": "byte[i] = (offset + i) mod 256",
+        "offset": 152
+      },
+      "plaintextLength": 262144,
+      "plaintextSha256Hex": "1ea9d1d5425578175664108baa405431186f8115e37e5dc9bc4af915d61d7130",
+      "kxeEnvelopeLength": 262222,
+      "kxrEnvelopeLength": 262246
+    },
+    {
+      "id": "bucket-262144-transition",
+      "payloadLength": 262141,
+      "expectedBucketLength": 1048576,
+      "payload": {
+        "construction": "byte[i] = (offset + i) mod 256",
+        "offset": 41
+      },
+      "padding": {
+        "construction": "byte[i] = (offset + i) mod 256",
+        "offset": 153
+      },
+      "plaintextLength": 1048576,
+      "plaintextSha256Hex": "df6cd740f0ee8d45883ee21f48fe095d2fa2cd2edde630f4af581498db605ea2",
+      "kxeEnvelopeLength": 1048654,
+      "kxrEnvelopeLength": 1048678
+    },
+    {
+      "id": "bucket-1048576-max",
+      "payloadLength": 1048572,
+      "expectedBucketLength": 1048576,
+      "payload": {
+        "construction": "byte[i] = (offset + i) mod 256",
+        "offset": 42
+      },
+      "padding": {
+        "construction": "byte[i] = (offset + i) mod 256",
+        "offset": 154
+      },
+      "plaintextLength": 1048576,
+      "plaintextSha256Hex": "5e02fc5b741ae784e95caed64beff827fa2a23bd76e82ced2d3c0baf085cbcc9",
+      "kxeEnvelopeLength": 1048654,
+      "kxrEnvelopeLength": 1048678
+    },
+    {
+      "id": "maximum-overflow",
+      "payloadLength": 1048573,
+      "error": "payload_too_large"
+    }
+  ]
+}

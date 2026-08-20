@@ -1,0 +1,74 @@
+{
+  "serverKeyHex": "c0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedf",
+  "rateLimitKeyHex": "e0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff",
+  "capabilityTags": [
+    {
+      "id": "send-retrieve-random-factor",
+      "resourceKind": 1,
+      "capabilityKind": 1,
+      "locatorBase64url": "_nuJFiFz7Dyg3t7I9EPe0w",
+      "tokenBase64url": "XjRiA1HoeeUaoQOPidcGWU_2lcqoMPhmtt3-exx8hPo",
+      "tagHex": "0152ef1554bcb071f0c9010920c2dbb749b965a5fb3a92ac67c58cd0b413a0d9"
+    },
+    {
+      "id": "send-manage",
+      "resourceKind": 1,
+      "capabilityKind": 2,
+      "locatorBase64url": "_nuJFiFz7Dyg3t7I9EPe0w",
+      "tokenBase64url": "Sy-OtAKOTvqTUY3nPdF54QCJXzI97jASpZ-9TkpyWYo",
+      "tagHex": "0e6ff46c3e6311b38899cccdb0aad933c98d8865005b3cdf2134926984b35a7a"
+    },
+    {
+      "id": "request-write-passphrase",
+      "resourceKind": 2,
+      "capabilityKind": 1,
+      "locatorBase64url": "cHFyc3R1dnd4eXp7fH1-fw",
+      "tokenBase64url": "HY7BJYrR7yYgjZT4LQ55WknJHVLfTo_6EhlFddV7efE",
+      "tagHex": "145c890cc38cd2cd42de1d9a5f66cf61f1864c204a8c62f5c11ea9ea49692a56"
+    },
+    {
+      "id": "request-owner",
+      "resourceKind": 2,
+      "capabilityKind": 2,
+      "locatorBase64url": "cHFyc3R1dnd4eXp7fH1-fw",
+      "tokenBase64url": "wFziiFkFA5nxb3nE5l0ssESBdlRG1Aa_PyVGe4uJMes",
+      "tagHex": "94aae72ef26da6eb8b530cf990db3542c84bf91cae63777d882c68282cf36c47"
+    },
+    {
+      "id": "create-permit",
+      "resourceKind": 3,
+      "capabilityKind": 3,
+      "locatorBase64url": "DaEYDPDpvuBxQo6XeUNvew",
+      "tokenBase64url": "ppSjSM3LOJhPU0N7XWGrptDmcMXMfbUGwYa2VxOMRbI",
+      "tagHex": "dcfbbd4ba135d80b8af7ec7e7db35318ce150e2fc5de9b36e67d5402ae6c9df3"
+    }
+  ],
+  "rateLimitTags": [
+    {
+      "id": "send",
+      "resourceKind": 1,
+      "locatorBase64url": "_nuJFiFz7Dyg3t7I9EPe0w",
+      "tagBase64url": "ZBfQj-TtDGyrfeOQtzUHbyj5Q7Ay39a_7wCcMGEw70U"
+    },
+    {
+      "id": "request",
+      "resourceKind": 2,
+      "locatorBase64url": "cHFyc3R1dnd4eXp7fH1-fw",
+      "tagBase64url": "MuMCzRXKHJ08WHLbdM8JM45joiLSbQxgaScCbW21pcI"
+    },
+    {
+      "id": "create-permit",
+      "resourceKind": 3,
+      "locatorBase64url": "DaEYDPDpvuBxQo6XeUNvew",
+      "tagBase64url": "jgM3RSXpp6GEwZu5gurmgxAs-0zD1tRtaqplFgelw54"
+    }
+  ],
+  "createPermit": {
+    "requestIdHex": "550e8400e29b41d4a716446655440000",
+    "issuanceKeyHex": "3132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f50",
+    "permitSeedHex": "399c720e4f537fe647dcf8e69d61656ae12622110d0e57146c30f2e8a97faf1a",
+    "permitPrkHex": "ec3ceedb9a1288ded37fa8f3f78795247094d2e912e970d94ac96ce29f3ffa32",
+    "permitLocatorBase64url": "DaEYDPDpvuBxQo6XeUNvew",
+    "permitTokenBase64url": "ppSjSM3LOJhPU0N7XWGrptDmcMXMfbUGwYa2VxOMRbI"
+  }
+}

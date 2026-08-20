@@ -1,0 +1,15 @@
+{
+  "name": "@kryptex/protocol-vectors",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "generate": "node generate.mjs",
+    "check": "node check.mjs && bun check.mjs"
+  },
+  "dependencies": {
+    "@hpke/core": "1.9.0",
+    "@noble/hashes": "2.3.0",
+    "canonicalize": "4.0.0",
+    "hash-wasm": "4.12.0"
+  }
+}

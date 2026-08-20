@@ -1,6 +1,6 @@
 # Kryptex HTTP API version 1
 
-Status: draft under independent review. This document fixes the public Worker boundary for version 1.
+Status: frozen public Worker boundary for version 1.
 
 ## Encoding and common responses
 

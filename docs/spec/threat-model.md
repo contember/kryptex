@@ -1,6 +1,6 @@
 # Threat model
 
-Status: draft under independent review for protocol version 1.
+Status: frozen for protocol version 1.
 
 ## Security objective
 

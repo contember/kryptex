@@ -1,0 +1,559 @@
+{
+  "payloads": [
+    {
+      "id": "send-text",
+      "object": {
+        "kind": "text",
+        "text": "db_password=Tr0ub4dor&3"
+      },
+      "jcs": "{\"kind\":\"text\",\"text\":\"db_password=Tr0ub4dor&3\"}",
+      "utf8Hex": "7b226b696e64223a2274657874222c2274657874223a2264625f70617373776f72643d547230756234646f722633227d",
+      "sha256Hex": "9259533a4394ccc1b6ea9c0c85ddc3a4152b94ed63b21eef6f8ca8f58add32c2"
+    },
+    {
+      "id": "send-fields",
+      "object": {
+        "fields": [
+          {
+            "concealed": false,
+            "label": "Username",
+            "value": "deploy-bot"
+          },
+          {
+            "concealed": true,
+            "label": "API key",
+            "value": "kx_test_7f4b0f"
+          }
+        ],
+        "kind": "fields"
+      },
+      "jcs": "{\"fields\":[{\"concealed\":false,\"label\":\"Username\",\"value\":\"deploy-bot\"},{\"concealed\":true,\"label\":\"API key\",\"value\":\"kx_test_7f4b0f\"}],\"kind\":\"fields\"}",
+      "utf8Hex": "7b226669656c6473223a5b7b22636f6e6365616c6564223a66616c73652c226c6162656c223a22557365726e616d65222c2276616c7565223a226465706c6f792d626f74227d2c7b22636f6e6365616c6564223a747275652c226c6162656c223a22415049206b6579222c2276616c7565223a226b785f746573745f376634623066227d5d2c226b696e64223a226669656c6473227d",
+      "sha256Hex": "c1d9b66b153c8f8bf28808f0120856ef6d05880f6186e3ad8cc77daa9e5e46c8"
+    },
+    {
+      "id": "request-schema",
+      "object": {
+        "fields": [
+          {
+            "help": "Paste the token without surrounding spaces.",
+            "id": "apitoken",
+            "label": "API token",
+            "required": true,
+            "type": "secret"
+          },
+          {
+            "help": "",
+            "id": "context1",
+            "label": "Optional context",
+            "required": false,
+            "type": "long"
+          },
+          {
+            "help": "Do not include an account password.",
+            "id": "warning1",
+            "label": "Security note",
+            "required": false,
+            "type": "instruction"
+          }
+        ],
+        "kind": "request-schema",
+        "recipientPublicKey": "jwp2f1_qwgefetCrLPDupxPHHk-nBnS2K1nuNMmYgSY",
+        "title": "Deployment credential"
+      },
+      "jcs": "{\"fields\":[{\"help\":\"Paste the token without surrounding spaces.\",\"id\":\"apitoken\",\"label\":\"API token\",\"required\":true,\"type\":\"secret\"},{\"help\":\"\",\"id\":\"context1\",\"label\":\"Optional context\",\"required\":false,\"type\":\"long\"},{\"help\":\"Do not include an account password.\",\"id\":\"warning1\",\"label\":\"Security note\",\"required\":false,\"type\":\"instruction\"}],\"kind\":\"request-schema\",\"recipientPublicKey\":\"jwp2f1_qwgefetCrLPDupxPHHk-nBnS2K1nuNMmYgSY\",\"title\":\"Deployment credential\"}",
+      "utf8Hex": "7b226669656c6473223a5b7b2268656c70223a2250617374652074686520746f6b656e20776974686f757420737572726f756e64696e67207370616365732e222c226964223a22617069746f6b656e222c226c6162656c223a2241504920746f6b656e222c227265717569726564223a747275652c2274797065223a22736563726574227d2c7b2268656c70223a22222c226964223a22636f6e7465787431222c226c6162656c223a224f7074696f6e616c20636f6e74657874222c227265717569726564223a66616c73652c2274797065223a226c6f6e67227d2c7b2268656c70223a22446f206e6f7420696e636c75646520616e206163636f756e742070617373776f72642e222c226964223a227761726e696e6731222c226c6162656c223a225365637572697479206e6f7465222c227265717569726564223a66616c73652c2274797065223a22696e737472756374696f6e227d5d2c226b696e64223a22726571756573742d736368656d61222c22726563697069656e745075626c69634b6579223a226a77703266315f7177676566657443724c50447570785048486b2d6e426e53324b316e754e4d6d59675359222c227469746c65223a224465706c6f796d656e742063726564656e7469616c227d",
+      "sha256Hex": "e432affb00a1a99a49c6997557d23cd5c8a5cb7065565fcd4d482fa0fa6e4194"
+    },
+    {
+      "id": "request-response",
+      "object": {
+        "answers": [
+          {
+            "id": "apitoken",
+            "value": "kx_live_a9c5e1"
+          },
+          {
+            "id": "context1",
+            "value": "Rotate after the deployment."
+          }
+        ],
+        "kind": "request-response",
+        "schema": {
+          "fields": [
+            {
+              "help": "Paste the token without surrounding spaces.",
+              "id": "apitoken",
+              "label": "API token",
+              "required": true,
+              "type": "secret"
+            },
+            {
+              "help": "",
+              "id": "context1",
+              "label": "Optional context",
+              "required": false,
+              "type": "long"
+            },
+            {
+              "help": "Do not include an account password.",
+              "id": "warning1",
+              "label": "Security note",
+              "required": false,
+              "type": "instruction"
+            }
+          ],
+          "kind": "request-schema",
+          "recipientPublicKey": "jwp2f1_qwgefetCrLPDupxPHHk-nBnS2K1nuNMmYgSY",
+          "title": "Deployment credential"
+        }
+      },
+      "jcs": "{\"answers\":[{\"id\":\"apitoken\",\"value\":\"kx_live_a9c5e1\"},{\"id\":\"context1\",\"value\":\"Rotate after the deployment.\"}],\"kind\":\"request-response\",\"schema\":{\"fields\":[{\"help\":\"Paste the token without surrounding spaces.\",\"id\":\"apitoken\",\"label\":\"API token\",\"required\":true,\"type\":\"secret\"},{\"help\":\"\",\"id\":\"context1\",\"label\":\"Optional context\",\"required\":false,\"type\":\"long\"},{\"help\":\"Do not include an account password.\",\"id\":\"warning1\",\"label\":\"Security note\",\"required\":false,\"type\":\"instruction\"}],\"kind\":\"request-schema\",\"recipientPublicKey\":\"jwp2f1_qwgefetCrLPDupxPHHk-nBnS2K1nuNMmYgSY\",\"title\":\"Deployment credential\"}}",
+      "utf8Hex": "7b22616e7377657273223a5b7b226964223a22617069746f6b656e222c2276616c7565223a226b785f6c6976655f613963356531227d2c7b226964223a22636f6e7465787431222c2276616c7565223a22526f7461746520616674657220746865206465706c6f796d656e742e227d5d2c226b696e64223a22726571756573742d726573706f6e7365222c22736368656d61223a7b226669656c6473223a5b7b2268656c70223a2250617374652074686520746f6b656e20776974686f757420737572726f756e64696e67207370616365732e222c226964223a22617069746f6b656e222c226c6162656c223a2241504920746f6b656e222c227265717569726564223a747275652c2274797065223a22736563726574227d2c7b2268656c70223a22222c226964223a22636f6e7465787431222c226c6162656c223a224f7074696f6e616c20636f6e74657874222c227265717569726564223a66616c73652c2274797065223a226c6f6e67227d2c7b2268656c70223a22446f206e6f7420696e636c75646520616e206163636f756e742070617373776f72642e222c226964223a227761726e696e6731222c226c6162656c223a225365637572697479206e6f7465222c227265717569726564223a66616c73652c2274797065223a22696e737472756374696f6e227d5d2c226b696e64223a22726571756573742d736368656d61222c22726563697069656e745075626c69634b6579223a226a77703266315f7177676566657443724c50447570785048486b2d6e426e53324b316e754e4d6d59675359222c227469746c65223a224465706c6f796d656e742063726564656e7469616c227d7d",
+      "sha256Hex": "8f8d2f58276d44a6e23e83ec0d87ec0496f5251c818cf0e080f3283d3ac8f75d"
+    }
+  ],
+  "canonicalizationCases": [
+    {
+      "id": "unicode-and-utf16-key-order",
+      "object": {
+        "1": "One",
+        "€": "Euro",
+        "\r": "Carriage Return",
+        "דּ": "Hebrew letter",
+        "😀": "Emoji",
+        "": "Control range boundary",
+        "ö": "Latin small letter"
+      },
+      "jcs": "{\"\\r\":\"Carriage Return\",\"1\":\"One\",\"\":\"Control range boundary\",\"ö\":\"Latin small letter\",\"€\":\"Euro\",\"😀\":\"Emoji\",\"דּ\":\"Hebrew letter\"}",
+      "utf8Hex": "7b225c72223a2243617272696167652052657475726e222c2231223a224f6e65222c22c280223a22436f6e74726f6c2072616e676520626f756e64617279222c22c3b6223a224c6174696e20736d616c6c206c6574746572222c22e282ac223a224575726f222c22f09f9880223a22456d6f6a69222c22efacb3223a22486562726577206c6574746572227d",
+      "sha256Hex": "6c2ee0f0cad6f4451f0f789afcb742030c9efba74b1b60e78429571f5d8a873f"
+    },
+    {
+      "id": "escaping-and-combining-text",
+      "object": {
+        "controls": "\b\t\n\f\r",
+        "path": "C:\\vault\\\"quoted\"/entry",
+        "text": "Český klíč 🔐 é"
+      },
+      "jcs": "{\"controls\":\"\\b\\t\\n\\f\\r\",\"path\":\"C:\\\\vault\\\\\\\"quoted\\\"/entry\",\"text\":\"Český klíč 🔐 é\"}",
+      "utf8Hex": "7b22636f6e74726f6c73223a225c625c745c6e5c665c72222c2270617468223a22433a5c5c7661756c745c5c5c2271756f7465645c222f656e747279222c2274657874223a22c48c65736bc3bd206b6cc3adc48d20f09f94902065cc81227d",
+      "sha256Hex": "fa9468f522ec4dc0a58d8b16a3e459945ee3ea19e81b881206c0d8ac51ff1d35"
+    }
+  ],
+  "invalidJcsAndPayloads": [
+    {
+      "id": "duplicate-raw-json-key",
+      "rawJson": "{\"kind\":\"text\",\"kind\":\"text\",\"text\":\"x\"}",
+      "error": "duplicate_json_key"
+    },
+    {
+      "id": "lone-high-surrogate",
+      "rawJson": "{\"kind\":\"text\",\"text\":\"\\ud800\"}",
+      "error": "invalid_unicode"
+    },
+    {
+      "id": "lone-low-surrogate",
+      "rawJson": "{\"kind\":\"text\",\"text\":\"\\udc00\"}",
+      "error": "invalid_unicode"
+    },
+    {
+      "id": "noncanonical-key-order",
+      "rawJson": "{\"text\":\"x\",\"kind\":\"text\"}",
+      "error": "non_canonical_json"
+    },
+    {
+      "id": "forbidden-number",
+      "object": {
+        "kind": "text",
+        "text": 1
+      },
+      "error": "forbidden_json_type"
+    },
+    {
+      "id": "forbidden-null",
+      "object": {
+        "kind": "text",
+        "text": null
+      },
+      "error": "forbidden_json_type"
+    },
+    {
+      "id": "send-text-empty",
+      "object": {
+        "kind": "text",
+        "text": ""
+      },
+      "error": "invalid_text"
+    },
+    {
+      "id": "send-extra-key",
+      "object": {
+        "extra": "x",
+        "kind": "text",
+        "text": "x"
+      },
+      "error": "unexpected_key"
+    },
+    {
+      "id": "send-field-missing-concealed",
+      "object": {
+        "fields": [
+          {
+            "label": "Name",
+            "value": "x"
+          }
+        ],
+        "kind": "fields"
+      },
+      "error": "missing_key"
+    },
+    {
+      "id": "schema-duplicate-id",
+      "object": {
+        "fields": [
+          {
+            "help": "Paste the token without surrounding spaces.",
+            "id": "apitoken",
+            "label": "API token",
+            "required": true,
+            "type": "secret"
+          },
+          {
+            "help": "",
+            "id": "apitoken",
+            "label": "Optional context",
+            "required": false,
+            "type": "long"
+          }
+        ],
+        "kind": "request-schema",
+        "recipientPublicKey": "jwp2f1_qwgefetCrLPDupxPHHk-nBnS2K1nuNMmYgSY",
+        "title": "Deployment credential"
+      },
+      "error": "duplicate_field_id"
+    },
+    {
+      "id": "schema-invalid-id",
+      "object": {
+        "fields": [
+          {
+            "help": "Paste the token without surrounding spaces.",
+            "id": "UPPER",
+            "label": "API token",
+            "required": true,
+            "type": "secret"
+          },
+          {
+            "help": "",
+            "id": "context1",
+            "label": "Optional context",
+            "required": false,
+            "type": "long"
+          },
+          {
+            "help": "Do not include an account password.",
+            "id": "warning1",
+            "label": "Security note",
+            "required": false,
+            "type": "instruction"
+          }
+        ],
+        "kind": "request-schema",
+        "recipientPublicKey": "jwp2f1_qwgefetCrLPDupxPHHk-nBnS2K1nuNMmYgSY",
+        "title": "Deployment credential"
+      },
+      "error": "invalid_field_id"
+    },
+    {
+      "id": "instruction-required",
+      "object": {
+        "fields": [
+          {
+            "help": "Paste the token without surrounding spaces.",
+            "id": "apitoken",
+            "label": "API token",
+            "required": true,
+            "type": "secret"
+          },
+          {
+            "help": "",
+            "id": "context1",
+            "label": "Optional context",
+            "required": false,
+            "type": "long"
+          },
+          {
+            "help": "Do not include an account password.",
+            "id": "warning1",
+            "label": "Security note",
+            "required": true,
+            "type": "instruction"
+          }
+        ],
+        "kind": "request-schema",
+        "recipientPublicKey": "jwp2f1_qwgefetCrLPDupxPHHk-nBnS2K1nuNMmYgSY",
+        "title": "Deployment credential"
+      },
+      "error": "invalid_instruction"
+    },
+    {
+      "id": "response-answer-order",
+      "object": {
+        "answers": [
+          {
+            "id": "context1",
+            "value": "Rotate after the deployment."
+          },
+          {
+            "id": "apitoken",
+            "value": "kx_live_a9c5e1"
+          }
+        ],
+        "kind": "request-response",
+        "schema": {
+          "fields": [
+            {
+              "help": "Paste the token without surrounding spaces.",
+              "id": "apitoken",
+              "label": "API token",
+              "required": true,
+              "type": "secret"
+            },
+            {
+              "help": "",
+              "id": "context1",
+              "label": "Optional context",
+              "required": false,
+              "type": "long"
+            },
+            {
+              "help": "Do not include an account password.",
+              "id": "warning1",
+              "label": "Security note",
+              "required": false,
+              "type": "instruction"
+            }
+          ],
+          "kind": "request-schema",
+          "recipientPublicKey": "jwp2f1_qwgefetCrLPDupxPHHk-nBnS2K1nuNMmYgSY",
+          "title": "Deployment credential"
+        }
+      },
+      "error": "answer_order_mismatch"
+    },
+    {
+      "id": "response-missing-answer",
+      "object": {
+        "answers": [
+          {
+            "id": "apitoken",
+            "value": "kx_live_a9c5e1"
+          }
+        ],
+        "kind": "request-response",
+        "schema": {
+          "fields": [
+            {
+              "help": "Paste the token without surrounding spaces.",
+              "id": "apitoken",
+              "label": "API token",
+              "required": true,
+              "type": "secret"
+            },
+            {
+              "help": "",
+              "id": "context1",
+              "label": "Optional context",
+              "required": false,
+              "type": "long"
+            },
+            {
+              "help": "Do not include an account password.",
+              "id": "warning1",
+              "label": "Security note",
+              "required": false,
+              "type": "instruction"
+            }
+          ],
+          "kind": "request-schema",
+          "recipientPublicKey": "jwp2f1_qwgefetCrLPDupxPHHk-nBnS2K1nuNMmYgSY",
+          "title": "Deployment credential"
+        }
+      },
+      "error": "answer_count_mismatch"
+    },
+    {
+      "id": "response-instruction-answer",
+      "object": {
+        "answers": [
+          {
+            "id": "apitoken",
+            "value": "kx_live_a9c5e1"
+          },
+          {
+            "id": "context1",
+            "value": "Rotate after the deployment."
+          },
+          {
+            "id": "warning1",
+            "value": "ignored"
+          }
+        ],
+        "kind": "request-response",
+        "schema": {
+          "fields": [
+            {
+              "help": "Paste the token without surrounding spaces.",
+              "id": "apitoken",
+              "label": "API token",
+              "required": true,
+              "type": "secret"
+            },
+            {
+              "help": "",
+              "id": "context1",
+              "label": "Optional context",
+              "required": false,
+              "type": "long"
+            },
+            {
+              "help": "Do not include an account password.",
+              "id": "warning1",
+              "label": "Security note",
+              "required": false,
+              "type": "instruction"
+            }
+          ],
+          "kind": "request-schema",
+          "recipientPublicKey": "jwp2f1_qwgefetCrLPDupxPHHk-nBnS2K1nuNMmYgSY",
+          "title": "Deployment credential"
+        }
+      },
+      "error": "answer_count_mismatch"
+    },
+    {
+      "id": "response-required-empty",
+      "object": {
+        "answers": [
+          {
+            "id": "apitoken",
+            "value": ""
+          },
+          {
+            "id": "context1",
+            "value": "Rotate after the deployment."
+          }
+        ],
+        "kind": "request-response",
+        "schema": {
+          "fields": [
+            {
+              "help": "Paste the token without surrounding spaces.",
+              "id": "apitoken",
+              "label": "API token",
+              "required": true,
+              "type": "secret"
+            },
+            {
+              "help": "",
+              "id": "context1",
+              "label": "Optional context",
+              "required": false,
+              "type": "long"
+            },
+            {
+              "help": "Do not include an account password.",
+              "id": "warning1",
+              "label": "Security note",
+              "required": false,
+              "type": "instruction"
+            }
+          ],
+          "kind": "request-schema",
+          "recipientPublicKey": "jwp2f1_qwgefetCrLPDupxPHHk-nBnS2K1nuNMmYgSY",
+          "title": "Deployment credential"
+        }
+      },
+      "error": "required_answer_empty"
+    },
+    {
+      "id": "response-schema-mismatch",
+      "object": {
+        "answers": [
+          {
+            "id": "apitoken",
+            "value": "kx_live_a9c5e1"
+          },
+          {
+            "id": "context1",
+            "value": "Rotate after the deployment."
+          }
+        ],
+        "kind": "request-response",
+        "schema": {
+          "fields": [
+            {
+              "help": "Paste the token without surrounding spaces.",
+              "id": "apitoken",
+              "label": "API token",
+              "required": true,
+              "type": "secret"
+            },
+            {
+              "help": "",
+              "id": "context1",
+              "label": "Optional context",
+              "required": false,
+              "type": "long"
+            },
+            {
+              "help": "Do not include an account password.",
+              "id": "warning1",
+              "label": "Security note",
+              "required": false,
+              "type": "instruction"
+            }
+          ],
+          "kind": "request-schema",
+          "recipientPublicKey": "jwp2f1_qwgefetCrLPDupxPHHk-nBnS2K1nuNMmYgSY",
+          "title": "Changed"
+        }
+      },
+      "expectedSchema": {
+        "fields": [
+          {
+            "help": "Paste the token without surrounding spaces.",
+            "id": "apitoken",
+            "label": "API token",
+            "required": true,
+            "type": "secret"
+          },
+          {
+            "help": "",
+            "id": "context1",
+            "label": "Optional context",
+            "required": false,
+            "type": "long"
+          },
+          {
+            "help": "Do not include an account password.",
+            "id": "warning1",
+            "label": "Security note",
+            "required": false,
+            "type": "instruction"
+          }
+        ],
+        "kind": "request-schema",
+        "recipientPublicKey": "jwp2f1_qwgefetCrLPDupxPHHk-nBnS2K1nuNMmYgSY",
+        "title": "Deployment credential"
+      },
+      "error": "schema_mismatch"
+    },
+    {
+      "id": "malformed-utf8",
+      "utf8Hex": "7b226b696e64223a2274657874222c2274657874223a22c328227d",
+      "error": "malformed_utf8"
+    }
+  ]
+}

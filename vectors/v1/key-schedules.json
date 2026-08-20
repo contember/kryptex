@@ -1,0 +1,99 @@
+{
+  "argon2id": {
+    "passwordUtf8Hex": "636f727265637420686f727365206261747465727920737461706c65",
+    "saltHex": "606162636465666768696a6b6c6d6e6f",
+    "version": 19,
+    "memoryKiB": 65536,
+    "iterations": 3,
+    "parallelism": 1,
+    "outputLength": 32,
+    "outputHex": "a29c4ea38608d37dbcb5ed97b7daec605420f0b632e57403e9411353577dca20"
+  },
+  "sendSeedHex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+  "manageSeedHex": "202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f",
+  "send": [
+    {
+      "factorMode": 0,
+      "factorModeName": "none",
+      "factorHex": "0000000000000000000000000000000000000000000000000000000000000000",
+      "locatorPrkHex": "becad5eeeadd9e5875bd8a1670311097d9ec2d0848cd35e922c45181d0128e80",
+      "locatorBase64url": "_nuJFiFz7Dyg3t7I9EPe0w",
+      "masterPrkHex": "ef56f2ffb19019f0af9dee565536e043b67f00e773ffde5e6a11d2f4b4b2d1c1",
+      "contentKeyHex": "a572785b224cdd3664af5de4d55125a67d58da67cb9853a77dd72e5974c56264",
+      "retrieveTokenBase64url": "RvwrVSqxC5nzDi3005gw_6TaR6T5Q_UUDTRKFW5cK1g",
+      "managePrkHex": "a9fc20b7326daf5241b61738a96ef751ab9de53f13ccbff2dc9cd67db5eaf71c",
+      "manageTokenBase64url": "Sy-OtAKOTvqTUY3nPdF54QCJXzI97jASpZ-9TkpyWYo"
+    },
+    {
+      "factorMode": 1,
+      "factorModeName": "passphrase",
+      "factorHex": "a29c4ea38608d37dbcb5ed97b7daec605420f0b632e57403e9411353577dca20",
+      "locatorPrkHex": "becad5eeeadd9e5875bd8a1670311097d9ec2d0848cd35e922c45181d0128e80",
+      "locatorBase64url": "_nuJFiFz7Dyg3t7I9EPe0w",
+      "masterPrkHex": "ad4f17555f52b540c6fc63ae16d2bea9a2d3af59063552e4258c37a38524a705",
+      "contentKeyHex": "76477c902128a3888651c041861f3025d17a4c12b3f6283a4da51af9b1960d2e",
+      "retrieveTokenBase64url": "j33JXIisU6YB2eCSeI32Dnyr65x0zItJqmmIEuCl6FY",
+      "managePrkHex": "a9fc20b7326daf5241b61738a96ef751ab9de53f13ccbff2dc9cd67db5eaf71c",
+      "manageTokenBase64url": "Sy-OtAKOTvqTUY3nPdF54QCJXzI97jASpZ-9TkpyWYo"
+    },
+    {
+      "factorMode": 2,
+      "factorModeName": "random-factor",
+      "factorHex": "404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f",
+      "locatorPrkHex": "becad5eeeadd9e5875bd8a1670311097d9ec2d0848cd35e922c45181d0128e80",
+      "locatorBase64url": "_nuJFiFz7Dyg3t7I9EPe0w",
+      "masterPrkHex": "e004e8489f667a2329e80b4b9fd4453716b65a0f68d7019034c019c743b04b36",
+      "contentKeyHex": "387c8af95e6b8ecac8c16d65542162f3f24ac60dd1cb7aa3a4c392780651f7f1",
+      "retrieveTokenBase64url": "XjRiA1HoeeUaoQOPidcGWU_2lcqoMPhmtt3-exx8hPo",
+      "managePrkHex": "a9fc20b7326daf5241b61738a96ef751ab9de53f13ccbff2dc9cd67db5eaf71c",
+      "manageTokenBase64url": "Sy-OtAKOTvqTUY3nPdF54QCJXzI97jASpZ-9TkpyWYo"
+    }
+  ],
+  "requestLocatorHex": "707172737475767778797a7b7c7d7e7f",
+  "writeSeedHex": "808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9f",
+  "ownerSeedHex": "a0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebf",
+  "request": [
+    {
+      "factorMode": 0,
+      "factorModeName": "none",
+      "factorHex": "0000000000000000000000000000000000000000000000000000000000000000",
+      "requestLocatorBase64url": "cHFyc3R1dnd4eXp7fH1-fw",
+      "writePrkHex": "03b14e8dbec4aef2b8ccfd0754df497c0e011f71b782b7cb6e9cd3c99cdc8d12",
+      "schemaKeyHex": "333290dffd491f9ef50a92c7502e36cf2a24e523bf5ce3d143c8cb7d5f4ba2f6",
+      "writeTokenBase64url": "HkNNhx1bGD2eKEIg9Z1IIOShgqrNX4IhKEXbBt8_Z5w",
+      "ownerPrkHex": "4982ac5b9058fb1f0402f81476f89f9b63f50cb2b06b67ca6e925fa01983633d",
+      "ownerTokenBase64url": "wFziiFkFA5nxb3nE5l0ssESBdlRG1Aa_PyVGe4uJMes",
+      "hpkeIkmHex": "9636580771229ef7f32ff61173ef5b3c6a979b396de25697cea1186fa7e4ffae",
+      "recipientPrivateKeyHex": "031e7428f35855ccb55fbdfc5d7d393f8e1a3bac214485a547257ceb12ed7cbc",
+      "recipientPublicKeyBase64url": "jwp2f1_qwgefetCrLPDupxPHHk-nBnS2K1nuNMmYgSY"
+    },
+    {
+      "factorMode": 1,
+      "factorModeName": "passphrase",
+      "factorHex": "a29c4ea38608d37dbcb5ed97b7daec605420f0b632e57403e9411353577dca20",
+      "requestLocatorBase64url": "cHFyc3R1dnd4eXp7fH1-fw",
+      "writePrkHex": "8aac8dfe204dd0d76634273b2df276809bbccb4c4921634be966d83448dba57d",
+      "schemaKeyHex": "bf7e5757829eff70e37c80fffb53c78bfdd23fbc28737b60daa6fa1cd6166b80",
+      "writeTokenBase64url": "HY7BJYrR7yYgjZT4LQ55WknJHVLfTo_6EhlFddV7efE",
+      "ownerPrkHex": "4982ac5b9058fb1f0402f81476f89f9b63f50cb2b06b67ca6e925fa01983633d",
+      "ownerTokenBase64url": "wFziiFkFA5nxb3nE5l0ssESBdlRG1Aa_PyVGe4uJMes",
+      "hpkeIkmHex": "9636580771229ef7f32ff61173ef5b3c6a979b396de25697cea1186fa7e4ffae",
+      "recipientPrivateKeyHex": "031e7428f35855ccb55fbdfc5d7d393f8e1a3bac214485a547257ceb12ed7cbc",
+      "recipientPublicKeyBase64url": "jwp2f1_qwgefetCrLPDupxPHHk-nBnS2K1nuNMmYgSY"
+    },
+    {
+      "factorMode": 2,
+      "factorModeName": "random-factor",
+      "factorHex": "404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f",
+      "requestLocatorBase64url": "cHFyc3R1dnd4eXp7fH1-fw",
+      "writePrkHex": "66b47e190393f3d66e828c03482845bb344469f489cead7a4561359ca5348e51",
+      "schemaKeyHex": "f457a93a7f80ec7e7dd7811e7474ca5969f3ae04fe166665766cf3675de6369c",
+      "writeTokenBase64url": "OJdHoI0ZT6VF_GgMyxCnQejde3GLd9ZJ2nIhxSYa1JM",
+      "ownerPrkHex": "4982ac5b9058fb1f0402f81476f89f9b63f50cb2b06b67ca6e925fa01983633d",
+      "ownerTokenBase64url": "wFziiFkFA5nxb3nE5l0ssESBdlRG1Aa_PyVGe4uJMes",
+      "hpkeIkmHex": "9636580771229ef7f32ff61173ef5b3c6a979b396de25697cea1186fa7e4ffae",
+      "recipientPrivateKeyHex": "031e7428f35855ccb55fbdfc5d7d393f8e1a3bac214485a547257ceb12ed7cbc",
+      "recipientPublicKeyBase64url": "jwp2f1_qwgefetCrLPDupxPHHk-nBnS2K1nuNMmYgSY"
+    }
+  ]
+}
