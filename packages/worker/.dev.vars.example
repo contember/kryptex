@@ -1,0 +1,5 @@
+# Copy to .dev.vars and replace every placeholder before local API testing.
+TURNSTILE_SECRET_KEY="replace-with-turnstile-secret"
+CAPABILITY_HMAC_KEYRING='{"dev-v1":"replace-with-32-byte-base64url-key"}'
+PERMIT_ISSUANCE_KEY="replace-with-32-byte-base64url-key"
+RATE_LIMIT_KEY="replace-with-32-byte-base64url-key"

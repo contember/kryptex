@@ -1,0 +1,29 @@
+{
+  "name": "@kryptex/contracts",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./api": {
+      "types": "./src/api.ts",
+      "import": "./src/api.ts"
+    },
+    "./envelopes": {
+      "types": "./src/envelopes.ts",
+      "import": "./src/envelopes.ts"
+    },
+    "./payloads": {
+      "types": "./src/payloads.ts",
+      "import": "./src/payloads.ts"
+    },
+    "./protocol": {
+      "types": "./src/protocol.ts",
+      "import": "./src/protocol.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run --config vitest.config.ts",
+    "typecheck": "tsc -b"
+  }
+}

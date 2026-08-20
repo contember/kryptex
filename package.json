@@ -1,0 +1,39 @@
+{
+  "name": "kryptex",
+  "private": true,
+  "type": "module",
+  "packageManager": "bun@1.3.14",
+  "workspaces": [
+    "packages/*",
+    "tools/*"
+  ],
+  "scripts": {
+    "build": "bun run build:contracts && bun run build:crypto && bun run build:web && bun run build:worker",
+    "build:contracts": "bun run --cwd packages/contracts build",
+    "build:crypto": "bun run --cwd packages/crypto build",
+    "build:web": "bun run --cwd packages/web build",
+    "build:worker": "bun run --cwd packages/worker build",
+    "check:vectors": "bun run install:vectors && bun run --cwd tools/vectors check",
+    "dev": "bun run --cwd packages/web dev",
+    "install:vectors": "bun install --cwd tools/vectors --frozen-lockfile",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "typecheck": "tsc -b && tsc -p tsconfig.eslint.json && tsc -p packages/worker/tsconfig.test.json",
+    "types:worker": "bun run --cwd packages/worker types"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "1.53.0",
+    "@cloudflare/vitest-pool-workers": "0.22.0",
+    "@types/node": "26.2.0",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.4",
+    "@vitejs/plugin-react": "6.1.0",
+    "eslint": "10.8.1",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.67.0",
+    "vite": "8.2.2",
+    "vitest": "4.1.11",
+    "wrangler": "4.124.0"
+  }
+}
