@@ -19,12 +19,13 @@ function validEnvironment(): WorkerSecurityEnvironment {
 }
 
 describe("Worker environment validation", () => {
-  test("exposes the typed integration Worker", async () => {
+  test("exposes the typed integration Worker and enforces the origin gate", async () => {
     const context = createExecutionContext();
     context.waitUntil(Promise.resolve());
     const response = await exports.default.fetch(new Request("https://kryptex.invalid/api/v1/probe", { method: "POST" }));
-    expect(response.status).toBe(501);
+    expect(response.status).toBe(403);
     expect(response.headers.get("Cache-Control")).toBe("no-store");
+    expect(await response.json()).toEqual({ error: "forbidden" });
   });
 
   test("accepts the complete security environment", () => {

@@ -271,10 +271,13 @@ Initialization and expiry shortening atomically commit state and `setAlarm(serve
 
 ## Authentication backoff
 
-Two independent controls apply:
+Three controls apply:
 
 1. An approximate edge limiter keys on client network identity and route before Siteverify, Argon2-triggering flows, or R2 work. It is an abuse and cost control, not a security invariant.
-2. Every resource Durable Object persists an exact authorization lease and failure backoff. A synchronous reservation rejects with generic `429` when `authBusyUntil > nowMs` or `nextAuthAt > nowMs`; otherwise it records a random attempt ID and `authBusyUntil = nowMs + 5000`. Only that attempt may finish verification. Failure increments a counter saturated at 8 and sets `nextAuthAt = nowMs + min(250 * 2^(count - 1), 30000)` milliseconds. Success clears the count, attempt ID, and both timestamps. An abandoned reservation becomes available after five seconds.
+2. Bearer-resource routes also apply an approximate limiter keyed by the blinded locator tag defined below. This prevents one known locator from bypassing the coarse network limiter without exposing the locator to the limiting service.
+3. Every resource Durable Object persists an exact authorization lease and failure backoff. A synchronous reservation rejects with generic `429` when `authBusyUntil > nowMs` or `nextAuthAt > nowMs`; otherwise it records a random attempt ID and `authBusyUntil = nowMs + 5000`. Only that attempt may finish verification. Failure increments a counter saturated at 8 and sets `nextAuthAt = nowMs + min(250 * 2^(count - 1), 30000)` milliseconds. Success clears the count, attempt ID, and both timestamps. An abandoned reservation becomes available after five seconds.
+
+Both external limiters are approximate abuse and cost controls. A limiting-binding failure fails open and does not replace authorization. The persisted per-resource authorization lease and backoff remain fail closed and are the security control for online capability guesses.
 
 This serializes capability guesses per resource even when `crypto.subtle.verify` yields the input gate. A failed verification itself returns the generic unavailable response; calls during the resulting delay return generic `429`.
 

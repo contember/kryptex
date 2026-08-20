@@ -33,5 +33,23 @@
       "binding": "CIPHERTEXT",
       "bucket_name": "kryptex-ciphertext"
     }
+  ],
+  "ratelimits": [
+    {
+      "name": "EDGE_RATE_LIMITER",
+      "namespace_id": "1454624106",
+      "simple": {
+        "limit": 120,
+        "period": 60
+      }
+    },
+    {
+      "name": "LOCATOR_RATE_LIMITER",
+      "namespace_id": "1454624107",
+      "simple": {
+        "limit": 30,
+        "period": 60
+      }
+    }
   ]
 }

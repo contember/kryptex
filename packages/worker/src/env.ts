@@ -15,6 +15,8 @@ export interface WorkerEnv extends WorkerSecurityEnvironment {
   readonly ASSETS: Fetcher;
   readonly CIPHERTEXT: R2Bucket;
   readonly CREATE_PERMIT_OBJECTS: DurableObjectNamespace;
+  readonly EDGE_RATE_LIMITER: RateLimit;
+  readonly LOCATOR_RATE_LIMITER: RateLimit;
   readonly REQUEST_OBJECTS: DurableObjectNamespace;
   readonly SEND_OBJECTS: DurableObjectNamespace;
 }
