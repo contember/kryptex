@@ -21,7 +21,36 @@ declare global {
 }
 
 export function HomePage() {
-  return <div className="home-page"><div className="home-wordmark">Kryptex</div><h1>Send sensitive information without giving the service the readable secret.</h1><p>Encrypted in the browser. Shared by link. No account needed.</p><div className="home-actions"><Link className="primary-button" reloadDocument to={gatePath("send")}>Send secret</Link><Link className="secondary-button" reloadDocument to={gatePath("request")}>Request secret</Link></div><Link className="quiet-link" to="/security">Security</Link><p className="home-experimental">Experimental — not production-ready</p></div>;
+  return <div className="home-page">
+    <div className="home-wordmark">Kryptex</div>
+    <h1>Hand over a password without leaving it in someone&apos;s inbox.</h1>
+    <p>Kryptex encrypts in your browser, gives you a link that expires, and never receives the readable secret. No account, nothing to install.</p>
+    <div className="home-actions">
+      <Link className="primary-button" reloadDocument to={gatePath("send")}>Send a secret</Link>
+      <Link className="secondary-button" reloadDocument to={gatePath("request")}>Ask someone for a secret</Link>
+    </div>
+    <ol className="home-steps">
+      <li>
+        <strong>Write it here</strong>
+        <p>Your browser encrypts the text. The service stores a sealed envelope and no key that opens it.</p>
+      </li>
+      <li>
+        <strong>Share the link</strong>
+        <p>Send the second key through a different channel, so one leaked message is not enough to open the secret.</p>
+      </li>
+      <li>
+        <strong>It disappears</strong>
+        <p>Once the allowed opens are used or the clock runs out, the stored copy is deleted.</p>
+      </li>
+    </ol>
+    <div className="home-footer">
+      <Link className="quiet-link" to="/security">What Kryptex protects — and where it stops</Link>
+      <p className="notice notice--experimental">
+        <strong>Experimental — not production-ready.</strong>
+        <span>The protocol has had no independent cryptographic review and no tested production deployment. Use synthetic test data only.</span>
+      </p>
+    </div>
+  </div>;
 }
 
 export function GatePage() {
@@ -82,9 +111,49 @@ export function GatePage() {
     return () => { cancelled = true; script.removeEventListener("load", render); script.remove(); };
   }, [siteKey, state]);
 
-  return <div className="task-page task-page--narrow"><PageIntro title="Confirm you are human"><p>This isolated page receives no secret or key material. The secret form opens only after verification.</p></PageIntro><div ref={container} />{state === "checking" ? <StatusMessage>Checking for an existing verification…</StatusMessage> : null}{state === "loading" || state === "working" ? <StatusMessage>Waiting for verification…</StatusMessage> : null}{state === "retry" && token !== null ? <><StatusMessage tone="warning">The result could not be confirmed.</StatusMessage><button className="primary-button full-button" onClick={() => { setState("working"); setVerificationAttempt((attempt) => attempt + 1); }} type="button">Retry the same verification</button></> : null}{state === "failed" ? <><StatusMessage tone="danger">Verification is unavailable. No permit was created.</StatusMessage><Link className="quiet-link" reloadDocument to="/">Return home</Link></> : null}</div>;
+  return <div className="task-page task-page--narrow">
+    <PageIntro title="One quick check">
+      <p>This page only confirms that a person, not a script, is creating the transfer. It is deliberately kept apart: no secret, key, or draft ever reaches it.</p>
+    </PageIntro>
+    <div ref={container} />
+    {state === "checking" ? <StatusMessage>Looking for a check you already passed…</StatusMessage> : null}
+    {state === "loading" || state === "working" ? <StatusMessage>Waiting for the check…</StatusMessage> : null}
+    {state === "retry" && token !== null
+      ? <>
+        <StatusMessage tone="warning">The result could not be confirmed.</StatusMessage>
+        <button className="primary-button full-button" onClick={() => { setState("working"); setVerificationAttempt((attempt) => attempt + 1); }} type="button">Try the same check again</button>
+      </>
+      : null}
+    {state === "failed"
+      ? <>
+        <StatusMessage tone="danger">The check is unavailable right now, so no form was opened. Nothing was created.</StatusMessage>
+        <Link className="quiet-link" reloadDocument to="/">Back to the start</Link>
+      </>
+      : null}
+  </div>;
 }
 
 export function SecurityPage() {
-  return <div className="task-page"><PageIntro title="Security"><p>Kryptex is experimental and not production-ready.</p></PageIntro><InfoSection title="What stays in your browser"><p>Readable secrets, passphrases, second keys, and encryption keys. The server receives encrypted envelopes and derived capabilities.</p></InfoSection><InfoSection title="Channel separation"><p>A separate second key reduces damage if one channel is compromised. Never send it together with its link.</p></InfoSection><InfoSection title="Limits"><p>Compromised first-party browser code can read content while you use it. A recipient can retain anything they open.</p></InfoSection><Link className="quiet-link" to="/">Back</Link></div>;
+  return <div className="task-page">
+    <PageIntro title="What Kryptex protects">
+      <p>Plain answers to the questions worth asking before you trust a tool with a credential.</p>
+    </PageIntro>
+    <p className="notice notice--experimental">
+      <strong>Experimental — not production-ready.</strong>
+      <span>The protocol has had no independent cryptographic review and no tested production deployment. Use synthetic test data only.</span>
+    </p>
+    <InfoSection title="What stays in your browser">
+      <p>The readable secret, your passphrase, the second key, and the encryption keys. The service receives an encrypted envelope and the derived permissions needed to store and release it.</p>
+    </InfoSection>
+    <InfoSection title="Why a second channel matters">
+      <p>A link on its own is a bearer credential: whoever holds it can try to open the content. Sending the second key another way — a call, a different device, in person — means one intercepted message is not enough.</p>
+    </InfoSection>
+    <InfoSection title="What expiry can and cannot do">
+      <p>Expiry deletes the stored copy, and revoking stops further opens. Neither can take back a secret that was already opened. Once someone reads it, protecting it is up to them.</p>
+    </InfoSection>
+    <InfoSection title="Where it stops">
+      <p>Kryptex serves the code that does the encrypting. If that code were compromised, secrets used after that point could be exposed. The service can also see when transfers are created and released, just not what is in them.</p>
+    </InfoSection>
+    <Link className="quiet-link" to="/">Back to the start</Link>
+  </div>;
 }

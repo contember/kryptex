@@ -4,8 +4,9 @@ import type { RequestResponsePayload } from "@kryptex/contracts/payloads";
 import { deriveRequestOwnerKeys, encodeBase64Url, equalBytes, openRequestResponse, parseKxr1Header, receiptDisplay } from "@kryptex/crypto";
 import { useClient } from "../client-context";
 import { artifactUrl, checkedResponseExpiry, consumeBundle, pickupRecoveryForStatus, shortenedExpiryRequest } from "../crypto-flow";
+import { describeRequestState, formatExactTime, formatTimeLeft } from "../format";
 import type { FragmentCapture } from "../fragment";
-import { AmbiguousNotice, FragmentNotice, OperationNotice, PageIntro, SecretField, ShareSlip, StatusMessage, type OperationState } from "../ui";
+import { AmbiguousNotice, BurnAction, FieldHint, FragmentNotice, OperationNotice, PageIntro, SecretField, ShareSlip, StatusMessage, StatusSheet, useNowSeconds, type OperationState } from "../ui";
 
 type PickupRecovery = "none" | "checking" | "retry" | "lost";
 
@@ -20,6 +21,7 @@ export function OwnerPage({ capture }: { readonly capture: FragmentCapture }) {
   const [replacement, setReplacement] = useState<string | null>(null);
   const [replacementSaved, setReplacementSaved] = useState(false);
   const [shortenUnavailable, setShortenUnavailable] = useState(false);
+  const now = useNowSeconds();
 
   async function credentials() {
     if (bundle?.kind !== 4) throw new Error("Invalid pickup bundle");
@@ -136,23 +138,86 @@ export function OwnerPage({ capture }: { readonly capture: FragmentCapture }) {
   }
 
   if (payload !== null) {
-    return <div className="task-page task-page--narrow"><PageIntro title={payload.schema.title}><p>Response opened once.</p></PageIntro>{payload.answers.map((answer) => { const field = payload.schema.fields.find((candidate) => candidate.id === answer.id); return <SecretField codeLike={field?.type === "secret"} key={answer.id} label={field?.label ?? answer.id} value={answer.value} />; })}<div className="fingerprint"><span>Local receipt — compare all 64 hexadecimal digits through an independent channel</span><strong>{fingerprint}</strong><p>A match only means both browsers hold the same ciphertext bytes. It does not authenticate the writer, plaintext, or service behavior.</p></div></div>;
+    return <div className="task-page task-page--narrow">
+      <PageIntro title={payload.schema.title}>
+        <p>The answer was released once. Copy what you need now — reloading this page will not show it again.</p>
+      </PageIntro>
+      {payload.answers.map((answer) => {
+        const field = payload.schema.fields.find((candidate) => candidate.id === answer.id);
+        return <SecretField codeLike={field?.type === "secret"} key={answer.id} label={field?.label ?? answer.id} value={answer.value} />;
+      })}
+      <div className="fingerprint">
+        <span>Receipt for this answer</span>
+        <strong>{fingerprint}</strong>
+        <p>Compare all 64 characters with the sender through a separate channel if it matters. A match only proves both browsers hold the same ciphertext bytes — it does not authenticate the writer, the plaintext, or the service.</p>
+      </div>
+    </div>;
   }
 
-  const statusNotice = status?.state === "waiting"
-    ? <StatusMessage>Waiting for a response.</StatusMessage>
-    : status?.state === "picked_up" && pickupRecovery === "lost"
-      ? <StatusMessage tone="danger">The response was released, but this browser could not recover it. The service cannot release it again.</StatusMessage>
-      : status !== null && status.state !== "submitted"
-        ? <StatusMessage tone="warning">This request is {status.state}.</StatusMessage>
-        : null;
+  const description = status === null ? null : describeRequestState(status.state);
   const pickupAction = status?.state !== "submitted"
     ? null
     : pickupRecovery === "retry"
-      ? <AmbiguousNotice>Status still says submitted. Only an explicit retry may consume the response.<button onClick={() => { void pickup(); }} type="button">Retry consuming pickup</button></AmbiguousNotice>
+      ? <AmbiguousNotice>
+        <p>The status still says an answer is waiting. Only an explicit retry may release it.</p>
+        <button className="primary-button" onClick={() => { void pickup(); }} type="button">Try opening it again</button>
+      </AmbiguousNotice>
       : pickupRecovery === "checking"
-        ? <AmbiguousNotice>Pickup may have completed. Check status before any retry.<button onClick={() => { void reconcilePickup(); }} type="button">Check pickup status</button></AmbiguousNotice>
-        : <button className="primary-button full-button" onClick={() => { void pickup(); }} type="button">Open response once</button>;
+        ? <AmbiguousNotice>
+          <p>The answer may already have been released. Check the status before any retry.</p>
+          <button className="primary-button" onClick={() => { void reconcilePickup(); }} type="button">Check the status</button>
+        </AmbiguousNotice>
+        : <button className="primary-button full-button" disabled={state === "working"} onClick={() => { void pickup(); }} type="button">{state === "working" ? "Opening…" : "Open the answer"}</button>;
 
-  return <div className="task-page task-page--narrow"><PageIntro title="Response"><p>Status checks do not consume the response.</p></PageIntro><FragmentNotice capture={capture} />{status === null ? null : <div className="status-sheet"><div><span>Status</span><strong>{status.state}</strong></div><div><span>Expires</span><strong>{new Date(status.serverExpiresAt * 1_000).toLocaleString()}</strong></div></div>}{pickupAction}{statusNotice}{status?.state === "waiting" || status?.state === "submitted" ? <details className="advanced"><summary>More</summary><div className="task-actions"><button disabled={shortenUnavailable} onClick={() => { void shorten(); }} type="button">Shorten to 15 minutes</button><button className="danger-button" onClick={() => { void revoke(); }} type="button">Revoke</button>{shortenUnavailable ? <StatusMessage tone="warning">This request is too close to expiry to shorten again.</StatusMessage> : null}</div></details> : null}<OperationNotice retry={() => { void refresh(); }} state={pickupRecovery === "none" ? state : "idle"} />{replacement === null ? null : <ShareSlip artifacts={[{ channel: "Replace the old local copy.", id: "replacement", required: true, title: "Updated pickup link", value: replacement }]} onSaved={(_id, value) => { setReplacementSaved(value); }} saved={{ replacement: replacementSaved }} title="Expiry shortened" />}</div>;
+  return <div className="task-page task-page--narrow">
+    <PageIntro title="Your request">
+      <p>This is your pickup link. Checking the status never releases the answer — only the button does, and only once.</p>
+    </PageIntro>
+    <FragmentNotice capture={capture} />
+
+    {status === null || description === null
+      ? null
+      : <>
+        <StatusSheet rows={[
+          { label: "Status", value: description.label },
+          { label: "Expires", value: <><strong>{formatTimeLeft(status.serverExpiresAt, now)}</strong><span className="mono">{formatExactTime(status.serverExpiresAt)}</span></> }
+        ]} />
+        {status.state === "picked_up" && pickupRecovery === "lost"
+          ? <StatusMessage tone="danger">The answer was released, but this browser could not recover it. The service cannot release it a second time.</StatusMessage>
+          : <StatusMessage tone={description.tone}>{description.detail}</StatusMessage>}
+      </>}
+
+    {pickupAction}
+
+    {status?.state === "waiting" || status?.state === "submitted"
+      ? <section className="task-actions">
+        <h2>Actions</h2>
+        <div className="task-actions__row">
+          <button className="secondary-button" disabled={shortenUnavailable || state === "working"} onClick={() => { void shorten(); }} type="button">Shorten to 15 minutes</button>
+          <BurnAction
+            confirmLabel="REVOKE"
+            description="The write link stops working and any answer already submitted is destroyed unopened. This cannot be undone."
+            disabled={state === "working"}
+            label="Revoke now"
+            onConfirm={() => { void revoke(); }}
+            title="Revoke this request?"
+          />
+        </div>
+        {shortenUnavailable
+          ? <StatusMessage tone="warning">This request is already too close to deletion to shorten again.</StatusMessage>
+          : <FieldHint>Shortening gives you a replacement pickup link — the current one stops matching.</FieldHint>}
+      </section>
+      : null}
+
+    <OperationNotice retry={() => { void refresh(); }} state={pickupRecovery === "none" ? state : "idle"} />
+
+    {replacement === null
+      ? null
+      : <ShareSlip
+        artifacts={[{ channel: "Replace the copy you had saved. The previous pickup link no longer works.", id: "replacement", required: true, title: "Updated pickup link", value: replacement }]}
+        onSaved={(_id, value) => { setReplacementSaved(value); }}
+        saved={{ replacement: replacementSaved }}
+        title="Expiry shortened"
+      />}
+  </div>;
 }

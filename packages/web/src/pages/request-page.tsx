@@ -1,17 +1,32 @@
 import { useState } from "react";
+import { Link } from "react-router";
 import type { RequestFieldType, RequestSchemaField, RequestSchemaPayload } from "@kryptex/contracts/payloads";
-import type { TtlSeconds } from "@kryptex/contracts/protocol";
+import { isTtlSeconds, type TtlSeconds } from "@kryptex/contracts/protocol";
 import type { RequestCreateRequest } from "@kryptex/contracts/api";
 import { deriveHpkeKeyPair, deriveRequestOwnerKeys, deriveRequestWriteKeys, encodeBase64Url, encryptRequestSchemaEnvelope, randomBytes } from "@kryptex/crypto";
 import { ApiFailure } from "../api-client";
 import { useClient } from "../client-context";
 import { artifactUrl, createFactor, reconcileRequestCreation, requestFieldId, type FactorMaterial } from "../crypto-flow";
-import { NavigationGuard, OperationNotice, PageIntro, PassphraseFields, ProtectionOptions, ShareSlip, StatusMessage, type OperationState, type Protection, type ShareArtifact } from "../ui";
+import { DEFAULT_TTL, TTL_CHOICES, formatTtl } from "../format";
+import { AdvancedDisclosure, ExpiryNote, FieldHint, NavigationGuard, OperationNotice, PageIntro, PassphraseFields, PolicySummary, ProtectionOptions, ShareSlip, StatusMessage, type OperationState, type Protection, type ShareArtifact } from "../ui";
 import { validatePassphrase, validateRequestDraft } from "../validation";
 import { gatePath } from "../verification";
 
 interface DraftField { readonly help: string; readonly label: string; readonly required: boolean; readonly type: RequestFieldType; }
 interface PendingRequest { readonly factor: FactorMaterial; readonly locator: Uint8Array<ArrayBuffer>; readonly ownerSeed: Uint8Array<ArrayBuffer>; readonly publicKey: Uint8Array<ArrayBuffer>; readonly request: RequestCreateRequest; readonly writeSeed: Uint8Array<ArrayBuffer>; }
+
+const PROTECTION_SUMMARY: Readonly<Record<Protection, string>> = {
+  "link-only": "Anyone who has the write link can answer — nothing else is needed",
+  "passphrase": "The other person also needs the passphrase you chose",
+  "second-key": "The other person also needs the second key Kryptex generates"
+};
+
+const FIELD_TYPE_LABELS: Readonly<Record<RequestFieldType, string>> = {
+  "instruction": "Instruction — label only",
+  "long": "Long text",
+  "secret": "Secret",
+  "short": "Short text"
+};
 
 export function RequestPage() {
   const client = useClient();
@@ -21,10 +36,11 @@ export function RequestPage() {
   const [protection, setProtection] = useState<Protection>("second-key");
   const [passphrase, setPassphrase] = useState("");
   const [confirmation, setConfirmation] = useState("");
-  const [ttl, setTtl] = useState<TtlSeconds>(3600);
+  const [ttl, setTtl] = useState<TtlSeconds>(DEFAULT_TTL);
   const [state, setState] = useState<OperationState>("idle");
   const [verificationExpired, setVerificationExpired] = useState(false);
   const [artifacts, setArtifacts] = useState<readonly ShareArtifact[] | null>(null);
+  const [expiresAt, setExpiresAt] = useState<number | null>(null);
   const [pending, setPending] = useState<PendingRequest | null>(null);
   const [reconciling, setReconciling] = useState(false);
   const [saved, setSaved] = useState<Readonly<Record<string, boolean>>>({});
@@ -36,7 +52,7 @@ export function RequestPage() {
   function selectFieldType(index: number, type: RequestFieldType): void {
     setFields(fields.map((field, fieldIndex) => fieldIndex !== index ? field : type === "instruction" ? { ...field, help: "", required: false, type } : { ...field, type }));
   }
-  function selectTtl(value: number): void { if (value === 900 || value === 3600 || value === 28800 || value === 86400 || value === 259200 || value === 604800) setTtl(value); }
+  function selectTtl(value: number): void { if (isTtlSeconds(value)) setTtl(value); }
 
   function schema(publicKey: Uint8Array): RequestSchemaPayload {
     const schemaFields: RequestSchemaField[] = [];
@@ -46,10 +62,10 @@ export function RequestPage() {
   }
 
   function finishCreate(value: PendingRequest, serverExpiresAt: number): void {
-    const next: ShareArtifact[] = [{ channel: "Send this to the person who should answer.", id: "write", required: true, title: "Write link", value: artifactUrl("/r", { factorMode: value.factor.mode, kind: 3, recipientPublicKey: value.publicKey, requestLocator: value.locator, salt: value.factor.salt, serverExpiresAt, writeSeed: value.writeSeed }) }];
-    if (value.factor.secondKey !== null) next.push({ channel: "Send separately from the write link.", id: "factor", required: true, title: "Second key", value: value.factor.secondKey });
-    next.push({ channel: "Keep this private. It opens the response once.", id: "pickup", required: true, title: "Pickup link", value: artifactUrl("/i", { kind: 4, ownerSeed: value.ownerSeed, requestLocator: value.locator, serverExpiresAt }) });
-    setReconciling(false); setPending(null); setArtifacts(next); setState("done");
+    const next: ShareArtifact[] = [{ channel: "Send this to the person who should answer. They can fill it in once.", id: "write", required: true, title: "Write link", value: artifactUrl("/r", { factorMode: value.factor.mode, kind: 3, recipientPublicKey: value.publicKey, requestLocator: value.locator, salt: value.factor.salt, serverExpiresAt, writeSeed: value.writeSeed }) }];
+    if (value.factor.secondKey !== null) next.push({ channel: "Send through a different channel than the write link — a call, a chat on another device, in person.", id: "factor", required: true, title: "Second key", value: value.factor.secondKey });
+    next.push({ channel: "Keep this for yourself. It is the only way to open the answer, and it works once.", id: "pickup", required: true, title: "Pickup link", value: artifactUrl("/i", { kind: 4, ownerSeed: value.ownerSeed, requestLocator: value.locator, serverExpiresAt }) });
+    setReconciling(false); setPending(null); setArtifacts(next); setExpiresAt(serverExpiresAt); setState("done");
   }
 
   async function create(): Promise<void> {
@@ -111,18 +127,106 @@ export function RequestPage() {
   }
 
   const draft = validateRequestDraft(title, instructions, fields);
+  const started = title.length > 0 || instructions.length > 0;
+
   if (artifacts !== null) {
     const complete = artifacts.every((artifact) => saved[artifact.id] === true);
-    return <div className="task-page task-page--narrow"><PageIntro title="Request secret"><p>Your encrypted request is ready.</p></PageIntro><ShareSlip artifacts={artifacts} onSaved={(id, value) => { setSaved({ ...saved, [id]: value }); }} saved={saved} title="Request sealed" /><NavigationGuard when={!complete} /></div>;
+    return <div className="task-page task-page--wide">
+      <PageIntro step="Step 2 of 2 · hand over" title="The request is ready">
+        <p>The other person fills it in once. Their answer is encrypted for your pickup link alone — the service cannot read it either.</p>
+      </PageIntro>
+      <ShareSlip
+        artifacts={artifacts}
+        note={expiresAt === null ? null : <ExpiryNote expiresAt={expiresAt} />}
+        onSaved={(id, value) => { setSaved({ ...saved, [id]: value }); }}
+        saved={saved}
+        title="Request sealed"
+      >
+        <Link className="secondary-button" reloadDocument to={gatePath("request")}>Create another request</Link>
+      </ShareSlip>
+      <NavigationGuard when={!complete} />
+    </div>;
   }
-  return <div className="task-page task-page--narrow"><PageIntro title="Request secret"><p>Describe what you need. Verification happens only when you create the request.</p></PageIntro>
-    <label><span>Request title</span><input onChange={(event) => { setTitle(event.currentTarget.value); }} value={title} /></label><label><span>Instructions</span><textarea onChange={(event) => { setInstructions(event.currentTarget.value); }} rows={3} value={instructions} /></label>
-    <fieldset><legend>What should they send?</legend><div className="inline-fields">{fields.map((field, index) => <div key={index}><label><span>Label</span><input onChange={(event) => { updateField(index, "label", event.currentTarget.value); }} value={field.label} /></label><details><summary>More options</summary><label><span>Type</span><select onChange={(event) => { const value = event.currentTarget.value; selectFieldType(index, value === "short" || value === "long" || value === "instruction" ? value : "secret"); }} value={field.type}><option value="secret">Secret</option><option value="short">Short text</option><option value="long">Long text</option><option value="instruction">Instruction — label only</option></select></label>{field.type === "instruction" ? <StatusMessage>This item displays its label and does not collect an answer.</StatusMessage> : <><label><span>Help</span><input onChange={(event) => { updateField(index, "help", event.currentTarget.value); }} value={field.help} /></label><label><input checked={field.required} onChange={(event) => { updateField(index, "required", event.currentTarget.checked); }} type="checkbox" /> Required</label></>}{fields.length > 1 ? <button className="quiet-button" onClick={() => { setFields(fields.filter((_item, fieldIndex) => fieldIndex !== index)); }} type="button">Remove item</button> : null}</details></div>)}</div><button className="secondary-button" disabled={fields.length >= (instructions.length > 0 ? 31 : 32)} onClick={() => { setFields([...fields, { help: "", label: "", required: false, type: "secret" }]); }} type="button">Add another item</button></fieldset>
-    <StatusMessage tone={draft.valid ? "success" : "warning"}>{draft.message}</StatusMessage>
-    <ProtectionOptions onChange={setProtection} value={protection} />{protection === "passphrase" ? <PassphraseFields confirmation={confirmation} message={phrase.message} onConfirmation={setConfirmation} onPassphrase={setPassphrase} passphrase={passphrase} valid={phrase.valid} /> : null}
-    <details className="advanced"><summary>More options</summary><label><span>Expires after</span><select onChange={(event) => { selectTtl(Number(event.currentTarget.value)); }} value={ttl}><option value={900}>15 minutes</option><option value={3600}>1 hour</option><option value={28800}>8 hours</option><option value={86400}>1 day</option><option value={259200}>3 days</option><option value={604800}>7 days</option></select></label></details>
-    <button className="primary-button full-button" disabled={!draft.valid || (protection === "passphrase" && !phrase.valid) || state === "working" || verificationExpired} onClick={() => { void create(); }} type="button">{reconciling ? "Reconciling…" : state === "working" ? "Creating…" : "Create request"}</button>
-    {reconciling ? <StatusMessage tone="warning"><strong>Reconciling creation.</strong> Keep this tab open. The exact in-memory capability and encrypted attempt cannot be recovered if you leave.</StatusMessage> : verificationExpired ? <div className="operation-notice"><strong>Verification expired.</strong><p>Copy your draft before verifying again. Leaving this page clears it.</p><a className="primary-button" href={gatePath("request")}>Verify again</a></div> : <OperationNotice state={state} />}
-    <NavigationGuard description="Leaving now permanently loses the in-memory capability needed to confirm this creation attempt." title="Keep confirming creation?" when={pending !== null} />
+
+  return <div className="task-page task-page--narrow">
+    <PageIntro step="Step 1 of 2 · describe" title="Request a secret">
+      <p>Describe what you need. The other person answers through an encrypted form, so nothing sensitive travels by mail or chat.</p>
+    </PageIntro>
+
+    <div className="simple-form">
+      <div className="field-block">
+        <label><span>Request title</span><input onChange={(event) => { setTitle(event.currentTarget.value); }} placeholder="Production database credentials" value={title} /></label>
+        <FieldHint>The other person sees this first. Say what you need and who you are.</FieldHint>
+      </div>
+
+      <div className="field-block">
+        <label><span>Instructions</span><textarea onChange={(event) => { setInstructions(event.currentTarget.value); }} placeholder="Optional. Explain where to find the values, or how you will use them." rows={3} value={instructions} /></label>
+        <FieldHint>Shown above the form as plain text. Do not put secrets here — this text travels with the link.</FieldHint>
+      </div>
+
+      <section className="request-items">
+        <h2>What should they send?</h2>
+        <div className="request-item-list">
+          {fields.map((field, index) => <div className="request-item" key={index}>
+            <label><span>Label</span><input onChange={(event) => { updateField(index, "label", event.currentTarget.value); }} placeholder="API key" value={field.label} /></label>
+            <p className="request-item__summary">{FIELD_TYPE_LABELS[field.type]}{field.type === "instruction" ? "" : field.required ? " · required" : " · optional"}</p>
+            <details>
+              <summary>Field options</summary>
+              <div>
+                <label className="field-block"><span>Type</span>
+                  <select onChange={(event) => { const value = event.currentTarget.value; selectFieldType(index, value === "short" || value === "long" || value === "instruction" ? value : "secret"); }} value={field.type}>
+                    <option value="secret">Secret</option>
+                    <option value="short">Short text</option>
+                    <option value="long">Long text</option>
+                    <option value="instruction">Instruction — label only</option>
+                  </select>
+                </label>
+                {field.type === "instruction"
+                  ? <FieldHint>This item only shows its label. It does not collect an answer.</FieldHint>
+                  : <>
+                    <label className="field-block"><span>Help</span><input onChange={(event) => { updateField(index, "help", event.currentTarget.value); }} placeholder="Optional hint shown under the field" value={field.help} /></label>
+                    <label className="check-label"><input checked={field.required} onChange={(event) => { updateField(index, "required", event.currentTarget.checked); }} type="checkbox" /><span>Required</span></label>
+                  </>}
+                {fields.length > 1 ? <div className="field-block__actions"><button className="quiet-button danger-text" onClick={() => { setFields(fields.filter((_item, fieldIndex) => fieldIndex !== index)); }} type="button">Remove this item</button></div> : null}
+              </div>
+            </details>
+          </div>)}
+        </div>
+        <div className="field-block__actions">
+          <button className="secondary-button" disabled={fields.length >= (instructions.length > 0 ? 31 : 32)} onClick={() => { setFields([...fields, { help: "", label: "", required: false, type: "secret" }]); }} type="button">Add another item</button>
+        </div>
+        {started && !draft.valid ? <StatusMessage tone="warning">{draft.message}</StatusMessage> : <FieldHint>{started ? draft.message : "Every item needs a label. The other person answers each one in a form."}</FieldHint>}
+      </section>
+
+      <div className="field-block">
+        <label><span>Delete after</span>
+          <select onChange={(event) => { selectTtl(Number(event.currentTarget.value)); }} value={ttl}>
+            {TTL_CHOICES.map((choice) => <option key={choice} value={choice}>{formatTtl(choice)}</option>)}
+          </select>
+        </label>
+        <FieldHint>The request and any answer are deleted when the time is up, answered or not.</FieldHint>
+      </div>
+
+      <PolicySummary items={[`Deleted after ${formatTtl(ttl)}`, "One answer only — the write link stops working once it is used", PROTECTION_SUMMARY[protection]]} />
+
+      <AdvancedDisclosure summary="Protection">
+        <ProtectionOptions onChange={setProtection} value={protection} />
+        {protection === "passphrase" ? <PassphraseFields confirmation={confirmation} message={phrase.message} onConfirmation={setConfirmation} onPassphrase={setPassphrase} passphrase={passphrase} strength={phrase.strength} valid={phrase.valid} /> : null}
+      </AdvancedDisclosure>
+
+      <button className="primary-button full-button" disabled={!draft.valid || (protection === "passphrase" && !phrase.valid) || state === "working" || verificationExpired} onClick={() => { void create(); }} type="button">{reconciling ? "Confirming…" : state === "working" ? "Creating…" : "Create request"}</button>
+      <p className="fine-print">Creating checks that you are human once. The request itself never reaches that check.</p>
+    </div>
+
+    {reconciling
+      ? <StatusMessage tone="warning"><strong>Confirming the result.</strong> Keep this tab open. The encrypted attempt lives only in this page and cannot be rebuilt if you leave.</StatusMessage>
+      : verificationExpired
+        ? <div className="operation-notice">
+          <strong>The human check expired.</strong>
+          <p>Copy your draft somewhere safe first — leaving this page clears it.</p>
+          <a className="primary-button" href={gatePath("request")}>Check again</a>
+        </div>
+        : <OperationNotice state={state} />}
+    <NavigationGuard description="Leaving now permanently loses the key this page needs to confirm the attempt." title="Keep confirming this request?" when={pending !== null} />
   </div>;
 }

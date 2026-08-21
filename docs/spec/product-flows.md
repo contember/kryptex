@@ -4,7 +4,7 @@ Status: frozen for the version 1 MVP.
 
 ## Shared language and claims
 
-- Use **retrieval** or **release**, never **view**, for server counters.
+- Use **open** for the human action and **retrieval** or **release** for what the server counts. Never use **view**. Wherever a counter appears, adjacent copy states that it counts released copies, not people who read them.
 - Use **second key** for a generated random factor.
 - Use **passphrase** for a human-entered factor.
 - Use **management link** for sender status and revocation.

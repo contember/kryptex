@@ -3,8 +3,9 @@ import type { SendStatusResponse } from "@kryptex/contracts/api";
 import { deriveSendManagementKeys, encodeBase64Url } from "@kryptex/crypto";
 import { useClient } from "../client-context";
 import { artifactUrl, checkedResponseExpiry, consumeBundle, shortenedExpiryRequest } from "../crypto-flow";
+import { describeSendState, formatExactTime, formatTimeLeft } from "../format";
 import type { FragmentCapture } from "../fragment";
-import { FragmentNotice, OperationNotice, PageIntro, ShareSlip, StatusMessage, type OperationState } from "../ui";
+import { BurnAction, FieldHint, FragmentNotice, OperationNotice, PageIntro, ShareSlip, StatusMessage, StatusSheet, useNowSeconds, type OperationState } from "../ui";
 
 export function ManagementPage({ capture }: { readonly capture: FragmentCapture }) {
   const client = useClient();
@@ -15,6 +16,7 @@ export function ManagementPage({ capture }: { readonly capture: FragmentCapture 
   const [replacementSaved, setReplacementSaved] = useState(false);
   const [shortenUnavailable, setShortenUnavailable] = useState(false);
   const [localExpiryUnconfirmed, setLocalExpiryUnconfirmed] = useState(false);
+  const now = useNowSeconds();
 
   async function refresh(): Promise<void> {
     if (bundle?.kind !== 2) { setState("unavailable"); return; }
@@ -49,5 +51,63 @@ export function ManagementPage({ capture }: { readonly capture: FragmentCapture 
     try { const keys = await deriveSendManagementKeys(bundle.manageSeed); await client.revokeSend({ locator: encodeBase64Url(bundle.locator), manageToken: encodeBase64Url(keys.manageToken) }); await refresh(); }
     catch { setState("unknown"); }
   }
-  return <div className="task-page task-page--narrow"><PageIntro title="Manage link"><p>Status checks do not consume a release.</p></PageIntro><FragmentNotice capture={capture} />{status === null ? null : <div className="status-sheet"><div><span>Status</span><strong>{status.state}</strong></div><div><span>Retrievals left</span><strong>{status.remainingRetrievals}</strong></div><div><span>Expires</span><strong>{new Date(status.serverExpiresAt * 1_000).toLocaleString()}</strong></div></div>}{status?.state === "active" ? <details className="advanced"><summary>More</summary><div className="task-actions"><button disabled={shortenUnavailable} onClick={() => { void shorten(); }} type="button">Shorten to 15 minutes</button><button className="danger-button" onClick={() => { void revoke(); }} type="button">Revoke</button>{shortenUnavailable ? <StatusMessage tone="warning">This link is too close to expiry to shorten again.</StatusMessage> : null}</div></details> : status !== null ? <StatusMessage tone="warning">This link is {status.state}.</StatusMessage> : null}{localExpiryUnconfirmed ? <StatusMessage tone="warning">This link says it has expired. The server record is unavailable, so the service could not confirm that state.</StatusMessage> : <OperationNotice retry={() => { void refresh(); }} state={state} />}{replacement === null ? null : <ShareSlip artifacts={[{ channel: "Replace the old local copy.", id: "replacement", required: true, title: "Updated management link", value: replacement }]} onSaved={(_id, value) => { setReplacementSaved(value); }} saved={{ replacement: replacementSaved }} title="Expiry shortened" />}</div>;
+
+  const description = status === null ? null : describeSendState(status.state);
+
+  return <div className="task-page task-page--narrow">
+    <PageIntro title="Manage this secret">
+      <p>This is your own copy of the transfer. Checking the status never uses up an open.</p>
+    </PageIntro>
+    <FragmentNotice capture={capture} />
+
+    {status === null || description === null
+      ? null
+      : <>
+        <StatusSheet rows={status.state === "active"
+          ? [
+            { label: "Status", value: description.label },
+            { label: "Opens left", value: <span className="mono">{status.remainingRetrievals}</span> },
+            { label: "Expires", value: <><strong>{formatTimeLeft(status.serverExpiresAt, now)}</strong><span className="mono">{formatExactTime(status.serverExpiresAt)}</span></> }
+          ]
+          : [
+            { label: "Status", value: description.label },
+            { label: "Expires", value: <><strong>{formatTimeLeft(status.serverExpiresAt, now)}</strong><span className="mono">{formatExactTime(status.serverExpiresAt)}</span></> }
+          ]} />
+        <StatusMessage tone={description.tone}>{description.detail}</StatusMessage>
+        <FieldHint>An open is one released copy of the ciphertext. It does not tell you whether a person read it.</FieldHint>
+      </>}
+
+    {status?.state === "active"
+      ? <section className="task-actions">
+        <h2>Actions</h2>
+        <div className="task-actions__row">
+          <button className="secondary-button" disabled={shortenUnavailable || state === "working"} onClick={() => { void shorten(); }} type="button">Shorten to 15 minutes</button>
+          <BurnAction
+            confirmLabel="REVOKE"
+            description="The recipient will no longer be able to open this secret. Anything already released stays with whoever opened it. This cannot be undone."
+            disabled={state === "working"}
+            label="Revoke now"
+            onConfirm={() => { void revoke(); }}
+            title="Revoke this secret?"
+          />
+        </div>
+        {shortenUnavailable
+          ? <StatusMessage tone="warning">This secret is already too close to deletion to shorten again.</StatusMessage>
+          : <FieldHint>Shortening gives you a replacement management link — the current one stops matching.</FieldHint>}
+      </section>
+      : null}
+
+    {localExpiryUnconfirmed
+      ? <StatusMessage tone="warning">By this link&apos;s own clock the secret has expired, but the service did not answer, so that could not be confirmed.</StatusMessage>
+      : <OperationNotice retry={() => { void refresh(); }} state={state} />}
+
+    {replacement === null
+      ? null
+      : <ShareSlip
+        artifacts={[{ channel: "Replace the copy you had saved. The previous management link no longer works.", id: "replacement", required: true, title: "Updated management link", value: replacement }]}
+        onSaved={(_id, value) => { setReplacementSaved(value); }}
+        saved={{ replacement: replacementSaved }}
+        title="Expiry shortened"
+      />}
+  </div>;
 }
