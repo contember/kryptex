@@ -1,13 +1,13 @@
 import { useState } from "react";
 import { Link } from "react-router";
-import type { SendField, SendPayload } from "@kryptex/contracts/payloads";
+import type { SendField, SendPayload, ValueFieldType } from "@kryptex/contracts/payloads";
 import { isTtlSeconds, type TtlSeconds } from "@kryptex/contracts/protocol";
 import type { SendCreateRequest } from "@kryptex/contracts/api";
 import { deriveSendKeys, encodeBase64Url, encryptSendEnvelope, randomBytes } from "@kryptex/crypto";
 import { ApiFailure } from "../api-client";
 import { useClient } from "../client-context";
 import { artifactUrl, createFactor, reconcileSendCreation, type FactorMaterial } from "../crypto-flow";
-import { DEFAULT_TTL, TTL_CHOICES, formatOpenAllowance, formatTtl } from "../format";
+import { DEFAULT_TTL, TTL_CHOICES, VALUE_FIELD_TYPES, formatFieldType, formatOpenAllowance, formatTtl, isMultilineField, isSensitiveField, isValueFieldType } from "../format";
 import { AdvancedDisclosure, ExpiryNote, FieldHint, NavigationGuard, OperationNotice, PageIntro, PassphraseFields, PolicySummary, ProtectionOptions, ShareSlip, StatusMessage, type OperationState, type Protection, type ShareArtifact } from "../ui";
 import { validatePassphrase, validateSendDraft } from "../validation";
 import { gatePath } from "../verification";
@@ -30,7 +30,7 @@ export function SendPage() {
   const client = useClient();
   const [mode, setMode] = useState<"text" | "fields">("text");
   const [text, setText] = useState("");
-  const [fields, setFields] = useState<readonly SendField[]>([{ concealed: true, label: "API key", value: "" }]);
+  const [fields, setFields] = useState<readonly SendField[]>([{ label: "API key", type: "secret", value: "" }]);
   const [protection, setProtection] = useState<Protection>("second-key");
   const [passphrase, setPassphrase] = useState("");
   const [confirmation, setConfirmation] = useState("");
@@ -51,6 +51,9 @@ export function SendPage() {
 
   function updateField(index: number, key: "label" | "value", value: string): void {
     setFields(fields.map((field, fieldIndex) => fieldIndex === index ? { ...field, [key]: value } : field));
+  }
+  function selectFieldType(index: number, type: ValueFieldType): void {
+    setFields(fields.map((field, fieldIndex) => fieldIndex === index ? { ...field, type } : field));
   }
   function selectTtl(value: number): void { if (isTtlSeconds(value)) setTtl(value); }
 
@@ -166,12 +169,27 @@ export function SendPage() {
           <div className="inline-fields">
             {fields.map((field, index) => <div key={index}>
               <label><span>Label</span><input onChange={(event) => { updateField(index, "label", event.currentTarget.value); }} placeholder="Database password" value={field.label} /></label>
-              <label><span>Value</span><input autoComplete="off" onChange={(event) => { updateField(index, "value", event.currentTarget.value); }} spellCheck={false} type="password" value={field.value} /></label>
+              <label><span>Value</span>
+                {isMultilineField(field.type)
+                  ? <textarea autoComplete="off" onChange={(event) => { updateField(index, "value", event.currentTarget.value); }} rows={4} spellCheck={!isSensitiveField(field.type)} value={field.value} />
+                  : <input autoComplete="off" onChange={(event) => { updateField(index, "value", event.currentTarget.value); }} spellCheck={!isSensitiveField(field.type)} type={isSensitiveField(field.type) ? "password" : "text"} value={field.value} />}
+              </label>
               {fields.length > 1 ? <button className="quiet-button" onClick={() => { setFields(fields.filter((_field, fieldIndex) => fieldIndex !== index)); }} type="button">Remove</button> : null}
+              <details className="inline-fields__options">
+                <summary>Type: {formatFieldType(field.type)}</summary>
+                <div>
+                  <label className="field-block"><span>Value type</span>
+                    <select onChange={(event) => { const value = event.currentTarget.value; if (isValueFieldType(value)) selectFieldType(index, value); }} value={field.type}>
+                      {VALUE_FIELD_TYPES.map((type) => <option key={type} value={type}>{formatFieldType(type)}</option>)}
+                    </select>
+                  </label>
+                  <FieldHint>A secret is hidden while you type and reaches the recipient in monospace. A long type gives you a multi-line box for keys, certificates, or config blocks.</FieldHint>
+                </div>
+              </details>
             </div>)}
           </div>
           <div className="field-block__actions">
-            <button className="secondary-button" disabled={fields.length >= 32} onClick={() => { setFields([...fields, { concealed: true, label: "", value: "" }]); }} type="button">Add value</button>
+            <button className="secondary-button" disabled={fields.length >= 32} onClick={() => { setFields([...fields, { label: "", type: "secret", value: "" }]); }} type="button">Add value</button>
           </div>
           {started && !draft.valid ? <StatusMessage tone="warning">{draft.message}</StatusMessage> : <FieldHint>{started ? draft.message : "Each value gets its own label, so the recipient knows what is what."}</FieldHint>}
         </div>}

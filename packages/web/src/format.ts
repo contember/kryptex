@@ -1,7 +1,35 @@
 import type { RequestState, SendState } from "@kryptex/contracts/api";
+import type { RequestFieldType, ValueFieldType } from "@kryptex/contracts/payloads";
 import type { TtlSeconds } from "@kryptex/contracts/protocol";
 
 export type StateTone = "quiet" | "success" | "warning" | "danger";
+
+const FIELD_TYPE_LABELS: Readonly<Record<RequestFieldType, string>> = {
+  "instruction": "Instruction — label only",
+  "long-secret": "Long secret — multi-line",
+  "long-text": "Long text — multi-line",
+  "secret": "Secret",
+  "text": "Plain text"
+};
+
+export const VALUE_FIELD_TYPES: readonly ValueFieldType[] = ["secret", "text", "long-secret", "long-text"];
+
+export function formatFieldType(type: RequestFieldType): string {
+  return FIELD_TYPE_LABELS[type];
+}
+
+export function isValueFieldType(value: string): value is ValueFieldType {
+  return value === "secret" || value === "text" || value === "long-secret" || value === "long-text";
+}
+
+/** Sensitive values are entered masked where the control allows it and are shown in monospace. */
+export function isSensitiveField(type: RequestFieldType): boolean {
+  return type === "secret" || type === "long-secret";
+}
+
+export function isMultilineField(type: RequestFieldType): boolean {
+  return type === "long-secret" || type === "long-text";
+}
 
 export interface StateDescription {
   readonly detail: string;

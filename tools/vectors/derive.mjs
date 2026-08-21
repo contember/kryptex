@@ -347,8 +347,9 @@ export async function deriveVectors() {
   const sendText = { kind: "text", text: "db_password=Tr0ub4dor&3" };
   const sendFields = {
     fields: [
-      { concealed: false, label: "Username", value: "deploy-bot" },
-      { concealed: true, label: "API key", value: "kx_test_7f4b0f" },
+      { label: "Username", type: "text", value: "deploy-bot" },
+      { label: "API key", type: "secret", value: "kx_test_7f4b0f" },
+      { label: "Deploy key", type: "long-secret", value: "-----BEGIN KEY-----\nZGVwbG95\n-----END KEY-----" },
     ],
     kind: "fields",
   };
@@ -366,7 +367,7 @@ export async function deriveVectors() {
         id: "context1",
         label: "Optional context",
         required: false,
-        type: "long",
+        type: "long-text",
       },
       {
         help: "Do not include an account password.",
@@ -444,7 +445,8 @@ export async function deriveVectors() {
     { id: "forbidden-null", object: { kind: "text", text: null }, error: "forbidden_json_type" },
     { id: "send-text-empty", object: { kind: "text", text: "" }, error: "invalid_text" },
     { id: "send-extra-key", object: { extra: "x", kind: "text", text: "x" }, error: "unexpected_key" },
-    { id: "send-field-missing-concealed", object: { fields: [{ label: "Name", value: "x" }], kind: "fields" }, error: "missing_key" },
+    { id: "send-field-missing-type", object: { fields: [{ label: "Name", value: "x" }], kind: "fields" }, error: "missing_key" },
+    { id: "send-field-unknown-type", object: { fields: [{ label: "Name", type: "instruction", value: "x" }], kind: "fields" }, error: "invalid_field_type" },
     { id: "schema-duplicate-id", object: { ...schema, fields: [schema.fields[0], { ...schema.fields[1], id: schema.fields[0].id }] }, error: "duplicate_field_id" },
     { id: "schema-invalid-id", object: { ...schema, fields: [{ ...schema.fields[0], id: "UPPER" }, ...schema.fields.slice(1)] }, error: "invalid_field_id" },
     { id: "instruction-required", object: { ...schema, fields: [...schema.fields.slice(0, 2), { ...schema.fields[2], required: true }] }, error: "invalid_instruction" },

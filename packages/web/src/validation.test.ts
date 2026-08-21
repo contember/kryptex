@@ -73,8 +73,8 @@ describe("local payload limits", () => {
   it("validates send text and structured fields in UTF-8 bytes", () => {
     expect(validateSendDraft("text", "x".repeat(262_144), []).valid).toBe(true);
     expect(validateSendDraft("text", `${"x".repeat(262_143)}€`, []).message).toContain("262144");
-    expect(validateSendDraft("fields", "", [{ concealed: true, label: "x".repeat(120), value: "secret" }]).valid).toBe(true);
-    expect(validateSendDraft("fields", "", [{ concealed: true, label: `${"x".repeat(119)}€`, value: "secret" }]).message).toContain("labels");
+    expect(validateSendDraft("fields", "", [{ label: "x".repeat(120), type: "secret", value: "secret" }]).valid).toBe(true);
+    expect(validateSendDraft("fields", "", [{ label: `${"x".repeat(119)}€`, type: "secret", value: "secret" }]).message).toContain("labels");
   });
 
   it("counts optional instructions inside the 32-item request schema", () => {

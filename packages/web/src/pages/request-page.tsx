@@ -7,7 +7,7 @@ import { deriveHpkeKeyPair, deriveRequestOwnerKeys, deriveRequestWriteKeys, enco
 import { ApiFailure } from "../api-client";
 import { useClient } from "../client-context";
 import { artifactUrl, createFactor, reconcileRequestCreation, requestFieldId, type FactorMaterial } from "../crypto-flow";
-import { DEFAULT_TTL, TTL_CHOICES, formatTtl } from "../format";
+import { DEFAULT_TTL, TTL_CHOICES, VALUE_FIELD_TYPES, formatFieldType, formatTtl, isValueFieldType } from "../format";
 import { AdvancedDisclosure, ExpiryNote, FieldHint, NavigationGuard, OperationNotice, PageIntro, PassphraseFields, PolicySummary, ProtectionOptions, ShareSlip, StatusMessage, type OperationState, type Protection, type ShareArtifact } from "../ui";
 import { validatePassphrase, validateRequestDraft } from "../validation";
 import { gatePath } from "../verification";
@@ -19,13 +19,6 @@ const PROTECTION_SUMMARY: Readonly<Record<Protection, string>> = {
   "link-only": "Anyone who has the write link can answer — nothing else is needed",
   "passphrase": "The other person also needs the passphrase you chose",
   "second-key": "The other person also needs the second key Kryptex generates"
-};
-
-const FIELD_TYPE_LABELS: Readonly<Record<RequestFieldType, string>> = {
-  "instruction": "Instruction — label only",
-  "long": "Long text",
-  "secret": "Secret",
-  "short": "Short text"
 };
 
 export function RequestPage() {
@@ -169,16 +162,14 @@ export function RequestPage() {
         <div className="request-item-list">
           {fields.map((field, index) => <div className="request-item" key={index}>
             <label><span>Label</span><input onChange={(event) => { updateField(index, "label", event.currentTarget.value); }} placeholder="API key" value={field.label} /></label>
-            <p className="request-item__summary">{FIELD_TYPE_LABELS[field.type]}{field.type === "instruction" ? "" : field.required ? " · required" : " · optional"}</p>
+            <p className="request-item__summary">{formatFieldType(field.type)}{field.type === "instruction" ? "" : field.required ? " · required" : " · optional"}</p>
             <details>
               <summary>Field options</summary>
               <div>
                 <label className="field-block"><span>Type</span>
-                  <select onChange={(event) => { const value = event.currentTarget.value; selectFieldType(index, value === "short" || value === "long" || value === "instruction" ? value : "secret"); }} value={field.type}>
-                    <option value="secret">Secret</option>
-                    <option value="short">Short text</option>
-                    <option value="long">Long text</option>
-                    <option value="instruction">Instruction — label only</option>
+                  <select onChange={(event) => { const value = event.currentTarget.value; selectFieldType(index, isValueFieldType(value) ? value : "instruction"); }} value={field.type}>
+                    {VALUE_FIELD_TYPES.map((type) => <option key={type} value={type}>{formatFieldType(type)}</option>)}
+                    <option value="instruction">{formatFieldType("instruction")}</option>
                   </select>
                 </label>
                 {field.type === "instruction"

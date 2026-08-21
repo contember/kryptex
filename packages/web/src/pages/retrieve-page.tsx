@@ -3,7 +3,7 @@ import type { SendPayload } from "@kryptex/contracts/payloads";
 import { decryptSendEnvelope, deriveSendRecipientKeys, encodeBase64Url } from "@kryptex/crypto";
 import { useClient } from "../client-context";
 import { checkedResponseExpiry, classifyConsumingFailure, consumeBundle, factorFromInput } from "../crypto-flow";
-import { formatOpens } from "../format";
+import { formatOpens, isSensitiveField } from "../format";
 import type { FragmentCapture } from "../fragment";
 import { AmbiguousNotice, FactorInput, FragmentNotice, OperationNotice, PageIntro, SecretField, StatusMessage, normalizedFactorInput, type OperationState } from "../ui";
 
@@ -37,7 +37,7 @@ export function RetrievePage({ capture }: { readonly capture: FragmentCapture })
       </PageIntro>
       {payload.kind === "text"
         ? <SecretField codeLike={false} label="Secret text" value={payload.text} />
-        : payload.fields.map((field) => <SecretField codeLike={field.concealed} key={field.label} label={field.label} value={field.value} />)}
+        : payload.fields.map((field) => <SecretField codeLike={isSensitiveField(field.type)} key={field.label} label={field.label} value={field.value} />)}
       <StatusMessage tone="warning">Whatever you save is yours to protect from here on. Expiry closes access and starts stored-ciphertext deletion; it cannot take back what was already released.</StatusMessage>
     </div>;
   }

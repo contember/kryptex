@@ -3,6 +3,7 @@ import type { RequestResponsePayload, RequestSchemaPayload } from "@kryptex/cont
 import { decodeBase64Url, decryptRequestSchemaEnvelope, deriveRequestWriteKeys, encodeBase64Url, receiptBase64Url, receiptDisplay, sealRequestResponse } from "@kryptex/crypto";
 import { useClient } from "../client-context";
 import { checkedResponseExpiry, classifyReadFailure, classifySubmitFailure, consumeBundle, exactEnvelopeForRetry, factorFromInput } from "../crypto-flow";
+import { isMultilineField, isSensitiveField } from "../format";
 import type { FragmentCapture } from "../fragment";
 import { FactorInput, FieldHint, FragmentNotice, OperationNotice, PageIntro, StatusMessage, normalizedFactorInput, type OperationState } from "../ui";
 import { validateRequestAnswers } from "../validation";
@@ -88,9 +89,9 @@ export function WriterPage({ capture }: { readonly capture: FragmentCapture }) {
               : <div className="field-block" key={field.id}>
                 <label>
                   <span>{field.label}{field.required ? "" : " (optional)"}</span>
-                  {field.type === "long"
-                    ? <textarea disabled={sealed} onChange={(event) => { setAnswers({ ...answers, [field.id]: event.currentTarget.value }); }} rows={4} value={answers[field.id] ?? ""} />
-                    : <input autoComplete="off" disabled={sealed} onChange={(event) => { setAnswers({ ...answers, [field.id]: event.currentTarget.value }); }} spellCheck={field.type !== "secret"} type={field.type === "secret" ? "password" : "text"} value={answers[field.id] ?? ""} />}
+                  {isMultilineField(field.type)
+                    ? <textarea disabled={sealed} onChange={(event) => { setAnswers({ ...answers, [field.id]: event.currentTarget.value }); }} rows={4} spellCheck={!isSensitiveField(field.type)} value={answers[field.id] ?? ""} />
+                    : <input autoComplete="off" disabled={sealed} onChange={(event) => { setAnswers({ ...answers, [field.id]: event.currentTarget.value }); }} spellCheck={!isSensitiveField(field.type)} type={isSensitiveField(field.type) ? "password" : "text"} value={answers[field.id] ?? ""} />}
                 </label>
                 {field.help.length === 0 ? null : <span className="field-hint field-hint--requester">{field.help}</span>}
               </div>)}

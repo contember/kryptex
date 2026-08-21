@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { describeRequestState, describeSendState, formatOpenAllowance, formatOpens, formatTimeLeft, formatTtl } from "./format";
+import { VALUE_FIELD_TYPES, describeRequestState, describeSendState, formatFieldType, formatOpenAllowance, formatOpens, formatTimeLeft, formatTtl, isMultilineField, isSensitiveField, isValueFieldType } from "./format";
 
 describe("human-readable protocol state", () => {
   it("names every send and request state without exposing wire values", () => {
@@ -30,5 +30,26 @@ describe("human-readable protocol state", () => {
     expect(formatOpenAllowance(2)).toBe("can be opened twice");
     expect(formatOpenAllowance(5)).toBe("can be opened 5 times");
     expect(formatTtl(28_800)).toBe("8 hours");
+  });
+});
+
+describe("shared value-type vocabulary", () => {
+  it("offers the same four value types to send and request composers", () => {
+    expect(VALUE_FIELD_TYPES).toEqual(["secret", "text", "long-secret", "long-text"]);
+    expect(VALUE_FIELD_TYPES.map(formatFieldType)).toEqual(["Secret", "Plain text", "Long secret — multi-line", "Long text — multi-line"]);
+    expect(formatFieldType("instruction")).toBe("Instruction — label only");
+  });
+
+  it("derives entry shape and sensitivity from the type alone", () => {
+    expect(VALUE_FIELD_TYPES.filter(isSensitiveField)).toEqual(["secret", "long-secret"]);
+    expect(VALUE_FIELD_TYPES.filter(isMultilineField)).toEqual(["long-secret", "long-text"]);
+    expect(isSensitiveField("instruction")).toBe(false);
+    expect(isMultilineField("instruction")).toBe(false);
+  });
+
+  it("rejects a request-only type where only a value type is allowed", () => {
+    expect(VALUE_FIELD_TYPES.every(isValueFieldType)).toBe(true);
+    expect(isValueFieldType("instruction")).toBe(false);
+    expect(isValueFieldType("long")).toBe(false);
   });
 });

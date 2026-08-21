@@ -14,8 +14,8 @@ export interface SendTextPayload {
 }
 
 export interface SendField {
-  readonly concealed: boolean;
   readonly label: string;
+  readonly type: ValueFieldType;
   readonly value: string;
 }
 
@@ -25,7 +25,14 @@ export interface SendFieldsPayload {
 }
 
 export type SendPayload = SendTextPayload | SendFieldsPayload;
-export type RequestFieldType = "short" | "secret" | "long" | "instruction";
+
+/**
+ * One vocabulary for every labelled value, on both the send and the request side.
+ * `long-*` means a multi-line value; `*-secret` means sensitive, so clients mask
+ * entry where the control allows it and render the value in monospace.
+ */
+export type ValueFieldType = "secret" | "text" | "long-secret" | "long-text";
+export type RequestFieldType = ValueFieldType | "instruction";
 
 export interface RequestSchemaField {
   readonly help: string;
@@ -55,12 +62,19 @@ export interface RequestResponsePayload {
 
 export type CanonicalPayload = SendPayload | RequestSchemaPayload | RequestResponsePayload;
 
+function parseValueFieldType(value: unknown, context: string): ValueFieldType {
+  if (value === "secret" || value === "text" || value === "long-secret" || value === "long-text") {
+    return value;
+  }
+  throw new TypeError(`${context} has an unsupported field type`);
+}
+
 function parseSendField(value: unknown, index: number): SendField {
   const context = `send.fields[${index}]`;
-  const object = expectExactObject(value, ["concealed", "label", "value"], context);
+  const object = expectExactObject(value, ["label", "type", "value"], context);
   return {
-    concealed: expectBoolean(readProperty(object, "concealed", context), `${context}.concealed`),
     label: expectUtf8Length(readProperty(object, "label", context), 1, 120, `${context}.label`),
+    type: parseValueFieldType(readProperty(object, "type", context), `${context}.type`),
     value: expectUtf8Length(readProperty(object, "value", context), 1, 262144, `${context}.value`)
   };
 }
@@ -89,10 +103,10 @@ export function parseSendPayload(value: unknown): SendPayload {
 }
 
 function parseRequestFieldType(value: unknown, context: string): RequestFieldType {
-  if (value === "short" || value === "secret" || value === "long" || value === "instruction") {
+  if (value === "instruction") {
     return value;
   }
-  throw new TypeError(`${context} has an unsupported field type`);
+  return parseValueFieldType(value, context);
 }
 
 function parseRequestSchemaField(value: unknown, index: number): RequestSchemaField {
@@ -209,8 +223,8 @@ export function serializeCanonicalPayload(payload: CanonicalPayload): string {
   if (payload.kind === "fields") {
     return JSON.stringify({
       fields: payload.fields.map((field) => ({
-        concealed: field.concealed,
         label: field.label,
+        type: field.type,
         value: field.value
       })),
       kind: payload.kind

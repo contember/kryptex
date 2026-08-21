@@ -200,7 +200,7 @@ Every listed key is mandatory, including `help`. Additional keys are forbidden a
 ```
 
 ```json
-{"fields":[{"concealed":true,"label":"...","value":"..."}],"kind":"fields"}
+{"fields":[{"label":"...","type":"secret","value":"..."}],"kind":"fields"}
 ```
 
 ```json
@@ -217,11 +217,25 @@ Validation grammar:
 | --- | --- | --- |
 | send text | `kind`, `text` | `kind="text"`; `text` is 1 through 262144 UTF-8 bytes. |
 | send fields | `fields`, `kind` | `kind="fields"`; `fields` contains 1 through 32 send-field objects. |
-| send field | `concealed`, `label`, `value` | `concealed` is a boolean; `label` is 1 through 120 UTF-8 bytes; `value` is 1 through 262144 UTF-8 bytes. |
+| send field | `label`, `type`, `value` | `label` is 1 through 120 UTF-8 bytes; `type` is a value type; `value` is 1 through 262144 UTF-8 bytes. |
 | request schema | `fields`, `kind`, `recipientPublicKey`, `title` | `kind="request-schema"`; `title` is 1 through 120 UTF-8 bytes; `fields` contains 1 through 32 schema-field objects; `recipientPublicKey` is canonical base64url decoding to 32 bytes. |
-| schema field | `help`, `id`, `label`, `required`, `type` | `id` matches `[a-z0-9]{8,32}` and is unique; `label` is 1 through 120 UTF-8 bytes; `help` is 0 through 500 UTF-8 bytes; `required` is a boolean; `type` is `short`, `secret`, `long`, or `instruction`. An instruction has `required=false`. |
+| schema field | `help`, `id`, `label`, `required`, `type` | `id` matches `[a-z0-9]{8,32}` and is unique; `label` is 1 through 120 UTF-8 bytes; `help` is 0 through 500 UTF-8 bytes; `required` is a boolean; `type` is a value type or `instruction`. An instruction has `required=false`. |
 | request response | `answers`, `kind`, `schema` | `kind="request-response"`; `schema` is deeply equal to the valid decrypted request schema; `answers` follows the rules below. |
 | answer | `id`, `value` | `id` equals one non-instruction schema ID; `value` is 0 through 262144 UTF-8 bytes. A required field has a nonempty value. |
+
+### Value types
+
+Send fields and request schema fields share one type vocabulary. The type carries presentation intent only; it never changes how a value is encrypted, stored, or authorized.
+
+| `type` | Shape | Sensitive |
+| --- | --- | --- |
+| `secret` | single line | yes |
+| `text` | single line | no |
+| `long-secret` | multiple lines | yes |
+| `long-text` | multiple lines | no |
+| `instruction` | no value | not applicable |
+
+A sensitive value is entered through a masked control where the control supports masking, and is rendered in a monospace face. A non-sensitive value is entered and rendered as ordinary text. A multi-line shape is entered through a multi-line control. `instruction` is valid only in a request schema field, where it carries a label and help text and collects no answer.
 
 Answers appear exactly once and in schema order for every non-instruction field. Instruction fields have no answer. An optional unanswered value is `""`. The response carries the exact schema object so pickup can reconstruct trusted labels. Its nested recipient public key must equal the write bundle key. The whole JCS payload plus its four-byte length must fit the smallest mandatory envelope bucket.
 

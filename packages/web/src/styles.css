@@ -164,6 +164,11 @@ input[type="radio"], input[type="checkbox"] { flex: 0 0 auto; width: 18px; heigh
 .passphrase-fields > .field-hint, .passphrase-fields > .status-message { grid-column: 1 / -1; }
 .inline-fields { display: grid; gap: 12px; }
 .inline-fields > div { padding: 14px; display: grid; grid-template-columns: 1fr 1fr auto; align-items: end; gap: 10px; border: 1px solid var(--rule); border-radius: 4px; background: var(--raised); }
+/* A multi-line value makes the columns wildly different heights, so stop bottom-aligning them. */
+.inline-fields > div:has(textarea) { align-items: start; }
+.inline-fields > div:has(textarea) > .quiet-button { align-self: center; }
+.inline-fields__options { grid-column: 1 / -1; }
+.inline-fields__options > div { padding: 12px 0 4px; display: grid; gap: 14px; }
 
 .request-items { display: grid; gap: 12px; }
 .request-items > h2 { margin-bottom: 0; }
@@ -171,8 +176,8 @@ input[type="radio"], input[type="checkbox"] { flex: 0 0 auto; width: 18px; heigh
 .request-item { padding: 14px; display: grid; gap: 6px; border: 1px solid var(--rule); border-radius: 4px; background: var(--raised); }
 .request-item__summary { margin: 0; color: var(--muted); font: 400 0.78rem/1.4 var(--mono); }
 .request-item details > div { padding: 12px 0 4px; display: grid; gap: 14px; }
-.request-item summary, .advanced > summary { padding: 8px 0; cursor: pointer; color: var(--secondary); font-weight: 700; font-size: 0.9rem; transition: color 140ms var(--ease); }
-.request-item summary:hover, .advanced > summary:hover { color: var(--ink); }
+.request-item summary, .inline-fields__options > summary, .advanced > summary { padding: 8px 0; cursor: pointer; color: var(--secondary); font-weight: 700; font-size: 0.9rem; transition: color 140ms var(--ease); }
+.request-item summary:hover, .inline-fields__options > summary:hover, .advanced > summary:hover { color: var(--ink); }
 .advanced { border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); }
 .advanced > summary { padding: 14px 0; font-size: 1rem; }
 .advanced > div { padding: 4px 0 24px; display: grid; gap: 24px; }

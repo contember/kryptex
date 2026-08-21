@@ -237,6 +237,8 @@ function restrictedJcs(value) {
   fail("forbidden_json_type");
 }
 
+const valueFieldTypes = ["secret", "text", "long-secret", "long-text"];
+
 function exactKeys(value, keys) {
   const actual = Object.keys(value).sort();
   const expected = [...keys].sort();
@@ -265,7 +267,8 @@ function validateSchema(schema) {
     if (typeof field.id !== "string" || !/^[a-z0-9]{8,32}$/.test(field.id)) fail("invalid_field_id");
     if (ids.has(field.id)) fail("duplicate_field_id");
     ids.add(field.id);
-    if (typeof field.required !== "boolean" || !["short", "secret", "long", "instruction"].includes(field.type)) fail("invalid_field");
+    if (typeof field.required !== "boolean") fail("invalid_field");
+    if (!valueFieldTypes.includes(field.type) && field.type !== "instruction") fail("invalid_field_type");
     if (field.type === "instruction" && field.required) fail("invalid_instruction");
   }
   if (typeof schema.recipientPublicKey !== "string" || decodeCanonicalBase64url(schema.recipientPublicKey).length !== 32) {
@@ -284,8 +287,8 @@ function validatePayload(value, expectedSchema) {
     exactKeys(value, ["fields", "kind"]);
     if (!Array.isArray(value.fields) || value.fields.length < 1 || value.fields.length > 32) fail("invalid_field_count");
     for (const field of value.fields) {
-      exactKeys(field, ["concealed", "label", "value"]);
-      if (typeof field.concealed !== "boolean") fail("invalid_concealed");
+      exactKeys(field, ["label", "type", "value"]);
+      if (!valueFieldTypes.includes(field.type)) fail("invalid_field_type");
       requireString(field.label, 1, 120, "invalid_label");
       requireString(field.value, 1, 262144, "invalid_value");
     }

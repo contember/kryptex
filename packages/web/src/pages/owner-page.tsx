@@ -4,7 +4,7 @@ import type { RequestResponsePayload } from "@kryptex/contracts/payloads";
 import { deriveRequestOwnerKeys, encodeBase64Url, equalBytes, openRequestResponse, parseKxr1Header, receiptDisplay } from "@kryptex/crypto";
 import { useClient } from "../client-context";
 import { artifactUrl, checkedResponseExpiry, consumeBundle, pickupRecoveryForStatus, shortenedExpiryRequest } from "../crypto-flow";
-import { describeRequestState, formatExactTime, formatTimeLeft } from "../format";
+import { describeRequestState, formatExactTime, formatTimeLeft, isSensitiveField } from "../format";
 import type { FragmentCapture } from "../fragment";
 import { AmbiguousNotice, BurnAction, FieldHint, FragmentNotice, OperationNotice, PageIntro, SecretField, ShareSlip, StatusMessage, StatusSheet, useNowSeconds, type OperationState } from "../ui";
 
@@ -144,7 +144,7 @@ export function OwnerPage({ capture }: { readonly capture: FragmentCapture }) {
       </PageIntro>
       {payload.answers.map((answer) => {
         const field = payload.schema.fields.find((candidate) => candidate.id === answer.id);
-        return <SecretField codeLike={field?.type === "secret"} key={answer.id} label={field?.label ?? answer.id} value={answer.value} />;
+        return <SecretField codeLike={field !== undefined && isSensitiveField(field.type)} key={answer.id} label={field?.label ?? answer.id} value={answer.value} />;
       })}
       <div className="fingerprint">
         <span>Receipt for this answer</span>

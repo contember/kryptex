@@ -54,7 +54,7 @@ describe("canonical payload contracts", () => {
     expect(() =>
       parseRequestSchemaPayload({
         fields: [
-          { help: "", id: "duplicate", label: "First", required: false, type: "short" },
+          { help: "", id: "duplicate", label: "First", required: false, type: "text" },
           { help: "", id: "duplicate", label: "Second", required: false, type: "secret" }
         ],
         kind: "request-schema",
@@ -72,7 +72,10 @@ describe("canonical payload contracts", () => {
     ).toThrow();
     expect(() => parseSendPayload({ kind: "text", text: "\ud800" })).toThrow();
     expect(() =>
-      parseSendPayload({ fields: [{ concealed: true, extra: false, label: "Key", value: "secret" }], kind: "fields" })
+      parseSendPayload({ fields: [{ extra: false, label: "Key", type: "secret", value: "secret" }], kind: "fields" })
+    ).toThrow();
+    expect(() =>
+      parseSendPayload({ fields: [{ label: "Key", type: "instruction", value: "secret" }], kind: "fields" })
     ).toThrow();
   });
 
