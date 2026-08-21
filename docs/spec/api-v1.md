@@ -95,7 +95,7 @@ Requires an unused creation permit.
 {"attemptId":"<base64url-16>","clientNotAfter":1787230800,"envelope":"<base64url-KXE1>","locator":"<base64url-16>","manageToken":"<base64url-32>","maxRetrievals":1,"retrieveToken":"<base64url-32>","settleNotAfter":1787227290,"ttlSeconds":3600}
 ```
 
-`attemptId` is random and immutable for this POST. At initial receipt, `settleNotAfter` must satisfy `serverNow + 15 <= settleNotAfter <= serverNow + 90`. The final Durable Object init rejects the attempt when its current server time is greater than `settleNotAfter`; no later retry may commit it. `ttlSeconds` is one of `900`, `3600`, `28800`, `86400`, `259200`, or `604800`. The clear `KXE1` header must have send mode and exactly match `clientNotAfter` and `maxRetrievals`. Creation follows the candidate-object sequence in the protocol using the supplied attempt ID.
+`attemptId` is random and immutable for this POST. At initial receipt, `settleNotAfter` must satisfy `serverNow + 15 <= settleNotAfter <= serverNow + 90`. The final Durable Object init rejects the attempt when its current server time is greater than `settleNotAfter`; no later retry may commit it. `ttlSeconds` is one of `900`, `3600`, `28800`, `86400`, `259200`, `604800`, `1209600`, or `2592000`. The clear `KXE1` header must have send mode and exactly match `clientNotAfter` and `maxRetrievals`. Creation follows the candidate-object sequence in the protocol using the supplied attempt ID.
 
 Response:
 

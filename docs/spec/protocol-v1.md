@@ -345,7 +345,7 @@ Client-enforced decrypted payload limits are defined by the grammar above: at mo
 
 Server-enforceable limits are:
 
-- Allowed TTL: 15 minutes, 1 hour, 8 hours, 1 day, 3 days, or 7 days.
+- Allowed TTL: 15 minutes, 1 hour, 8 hours, 1 day, 3 days, 7 days, 14 days, or 30 days.
 - Send releases: 1 through 10.
 - Request writes and pickups: exactly 1.
 - Encoded envelope type and mode: `KXE1` send or request schema, and `KXR1` request response.

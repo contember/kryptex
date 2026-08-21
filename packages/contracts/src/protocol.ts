@@ -3,7 +3,7 @@ export type ContentMode = 1 | 2;
 export type BundleKind = 1 | 2 | 3 | 4;
 export type ResourceKind = 1 | 2 | 3;
 export type CapabilityKind = 1 | 2 | 3;
-export type TtlSeconds = 900 | 3600 | 28800 | 86400 | 259200 | 604800;
+export type TtlSeconds = 900 | 3600 | 28800 | 86400 | 259200 | 604800 | 1209600 | 2592000;
 
 export const PROTOCOL_VERSION = 1;
 export const KXB1_MAGIC = "KXB1";
@@ -29,7 +29,9 @@ export const ALLOWED_TTL_SECONDS: readonly number[] = Object.freeze([
   28800,
   86400,
   259200,
-  604800
+  604800,
+  1209600,
+  2592000
 ]);
 export const ALLOWED_PLAINTEXT_BUCKET_LENGTHS: readonly number[] = Object.freeze([
   4096,
@@ -91,5 +93,5 @@ export const RESPONSE_HEADERS = Object.freeze({
 });
 
 export function isTtlSeconds(value: number): value is TtlSeconds {
-  return value === 900 || value === 3600 || value === 28800 || value === 86400 || value === 259200 || value === 604800;
+  return value === 900 || value === 3600 || value === 28800 || value === 86400 || value === 259200 || value === 604800 || value === 1209600 || value === 2592000;
 }

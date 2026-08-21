@@ -5,8 +5,10 @@ readonly WRANGLER_VERSION="4.124.0"
 readonly BUCKET_NAME="kryptex-ciphertext"
 readonly RULE_NAME="kryptex-v1-candidate-backstop"
 readonly RULE_PREFIX="v1/candidates/"
-readonly EXPIRE_DAYS="14"
-readonly EXPECTED_ACTION="Expire objects after 14 days"
+# Must stay above the maximum supported lifetime (30 days) so the backstop never
+# deletes ciphertext a live resource still needs. See docs/reference/r2-lifecycle.md.
+readonly EXPIRE_DAYS="31"
+readonly EXPECTED_ACTION="Expire objects after 31 days"
 readonly EXPECTED_DEV_URL_STATUS="Public access via the r2.dev URL is disabled."
 readonly EXPECTED_DOMAIN_STATUS="There are no custom domains connected to this bucket."
 readonly CONFIG_PATH="packages/worker/wrangler.jsonc"

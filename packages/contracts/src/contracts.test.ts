@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "vitest";
 import jcsVectors from "../../../vectors/v1/jcs.json";
 import {
@@ -5,6 +7,7 @@ import {
   parseRequestSubmitResponse,
   parseSendRetrieveRequest
 } from "./api.js";
+import { ALLOWED_TTL_SECONDS, isTtlSeconds } from "./protocol.js";
 import {
   parseRequestResponsePayload,
   parseRequestSchemaPayload,
@@ -133,5 +136,24 @@ describe("HTTP API contracts", () => {
         receipt: "XjRiA1HoeeUaoQOPidcGWU_2lcqoMPhmtt3-exx8hPo"
       })
     ).toThrow();
+  });
+});
+
+describe("resource lifetimes", () => {
+  test("accepts only the published ladder from 15 minutes to 30 days", () => {
+    expect(ALLOWED_TTL_SECONDS).toEqual([900, 3600, 28800, 86400, 259200, 604800, 1209600, 2592000]);
+    for (const ttl of ALLOWED_TTL_SECONDS) expect(isTtlSeconds(ttl)).toBe(true);
+    for (const rejected of [0, -900, 899, 1800, 2592001, 5184000, 900.5, Number.NaN]) {
+      expect(isTtlSeconds(rejected), String(rejected)).toBe(false);
+    }
+  });
+
+  test("keeps the R2 orphan backstop above the longest lifetime", () => {
+    const script = readFileSync(fileURLToPath(new URL("../../../tools/infrastructure/r2-lifecycle.sh", import.meta.url)), "utf8");
+    const expireDays = Number(/readonly EXPIRE_DAYS="(\d+)"/u.exec(script)?.[1]);
+    const maximumTtlDays = Math.max(...ALLOWED_TTL_SECONDS) / 86_400;
+    // Committed ciphertext keeps its v1/candidates/ key, so a shorter rule would delete live objects.
+    expect(expireDays).toBeGreaterThan(maximumTtlDays);
+    expect(script).toContain(`Expire objects after ${expireDays} days`);
   });
 });

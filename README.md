@@ -9,7 +9,7 @@ Kryptex is a capability-based, end-to-end encrypted service for sending or reque
 - A React client creates keys, encrypts content, derives capabilities, and removes secret URL fragments from the address bar before rendering a secret page.
 - A Cloudflare Worker validates requests and serves the client. Plaintext, passphrases, second keys, link seeds, and content keys must never reach it.
 - SQLite Durable Objects serialize retrieval, write-once, expiry, shorten, and revoke state.
-- A private R2 bucket stores ciphertext. Durable Object alarms perform primary cleanup; a 14-day lifecycle rule is an orphan backstop.
+- A private R2 bucket stores ciphertext. Durable Object alarms perform primary cleanup; a 31-day lifecycle rule is an orphan backstop.
 - Cloudflare Turnstile runs only in an isolated creation gate. It is an abuse control, not part of encryption or capability authorization.
 
 Compromise of the served browser code can expose secrets used after that compromise. A recipient can also retain plaintext after retrieval; expiry cannot take it back. See the [threat model](docs/spec/threat-model.md) for the full boundary.

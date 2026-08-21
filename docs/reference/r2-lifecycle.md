@@ -4,9 +4,11 @@ The `kryptex-ciphertext` bucket is private. Its `v1/candidates/` prefix must hav
 
 | Rule | Prefix | Expiration |
 | --- | --- | --- |
-| `kryptex-v1-candidate-backstop` | `v1/candidates/` | 14 days |
+| `kryptex-v1-candidate-backstop` | `v1/candidates/` | 31 days |
 
-The 14-day rule is only an orphan backstop. Durable Object alarms remain the primary cleanup path. They delete active or terminal ciphertext earlier when the protocol state releases, expires, revokes, or otherwise terminates a resource, and retry failed deletion work.
+Committed ciphertext keeps the key it was uploaded under, so this prefix holds live objects as well as orphans. The expiration must therefore stay above the maximum supported lifetime of 30 days; 31 days is that maximum plus a one-day operational margin. Raising the maximum lifetime requires raising this rule in the same change.
+
+The 31-day rule is only an orphan backstop. Durable Object alarms remain the primary cleanup path. They delete active or terminal ciphertext earlier when the protocol state releases, expires, revokes, or otherwise terminates a resource, and retry failed deletion work.
 
 Cloudflare can expose an R2 bucket independently through an `r2.dev` URL or a custom domain, as described in [Public buckets](https://developers.cloudflare.com/r2/buckets/public-buckets/). Kryptex permits neither path. Ciphertext is available only through the Worker binding.
 
@@ -22,7 +24,7 @@ Run these steps after creating the bucket and before the first Worker deployment
    bun run infra:r2-lifecycle:apply
    ```
 
-2. Run the predeploy gate. It prints the full Wrangler output and fails unless one lifecycle record contains the expected enabled rule, prefix, and 14-day expiration. It also fails unless the `r2.dev` URL is disabled and the bucket has no custom domains:
+2. Run the predeploy gate. It prints the full Wrangler output and fails unless one lifecycle record contains the expected enabled rule, prefix, and 31-day expiration. It also fails unless the `r2.dev` URL is disabled and the bucket has no custom domains:
 
    ```sh
    bun run infra:predeploy:verify
