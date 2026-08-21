@@ -12,6 +12,7 @@ Successful binary responses use `application/octet-stream`. All responses, inclu
 Cache-Control: no-store
 Referrer-Policy: no-referrer
 X-Content-Type-Options: nosniff
+Strict-Transport-Security: max-age=63072000; includeSubDomains
 Kryptex-Server-Time: <integer Unix seconds at response creation>
 ```
 
@@ -26,7 +27,7 @@ Content-Type: application/json
 
 Rate limiting returns `429` and `{"error":"rate_limited"}` before existence-dependent work. Malformed, oversized, or unsupported input returns `400` and `{"error":"invalid_request"}` before resource lookup. An invalid browser origin returns `403` and `{"error":"forbidden"}`. A missing, expired, or consumed create cookie returns `403` and `{"error":"creation_permit_required"}`. Unexpected failures return `500` and `{"error":"internal_error"}`. Raw exception text is never returned.
 
-Every request must match the configured exact `Origin`. Requests that mutate state must have `Sec-Fetch-Site: same-origin` when Fetch Metadata headers are present. The service does not enable credentialed cross-origin requests.
+Every request must match the configured exact `Origin`. API URLs with a query string are rejected before the body is read. Requests that mutate state must have `Sec-Fetch-Site: same-origin` when Fetch Metadata headers are present. The service does not enable credentialed cross-origin requests.
 
 ## Creation permit version 2
 
@@ -42,7 +43,7 @@ Request:
 
 `requestId` is a canonical lowercase UUID v4 and `turnstileResponse` is at most 2048 bytes. The Worker passes the request ID as Turnstile Siteverify `idempotency_key` so retries of the same verification use the same value. Verification must return `success=true`, the configured hostname, and action `create_permit`.
 
-After verification, the Worker decodes the UUID to 16 bytes and derives one stable pseudorandom permit seed with a separate versioned 32-byte secret:
+After verification, a Durable Object keyed by the request ID records the active permit-issuance key ID for the 1,800-second permit window. Retries reuse that recorded key ID across rolling key rotation. The Worker then decodes the UUID to 16 bytes and derives one stable pseudorandom permit seed with the selected versioned 32-byte secret:
 
 ```text
 P = HMAC-SHA256(
@@ -59,7 +60,7 @@ permitLocator = Expand(permitPrk, "kryptex/v1/create-permit/locator", 16)
 permitToken = Expand(permitPrk, "kryptex/v1/create-permit/token", 32)
 ```
 
-It idempotently creates the permit Durable Object containing only the capability tag, key ID, creation time, expiry, and `unused` or `consumed` state. A retry with the same request ID derives the same `P` and returns the same unused permit; it never mints another permit from the same Turnstile solve. A consumed or expired permit requires a new Turnstile token and request ID. The Worker validates the Turnstile token within its 300-second validity window, then gives the Kryptex permit a maximum lifetime of 1,800 seconds. The response sets this cookie:
+The request-ID Durable Object stores only the selected issuance key ID and its retention deadline, never the key or permit seed. The selected key must remain in the issuance keyring for at least 1,800 seconds after rotation. The Worker idempotently creates the permit Durable Object containing only the capability tag, key ID, creation time, expiry, and `unused` or `consumed` state. A retry with the same request ID derives the same `P` and returns the same unused permit; it never mints another permit from the same Turnstile solve. A consumed or expired permit requires a new Turnstile token and request ID. The Worker validates the Turnstile token within its 300-second validity window, then gives the Kryptex permit a maximum lifetime of 1,800 seconds. The response sets this cookie:
 
 ```text
 Set-Cookie: kx_create_v2=v2.<base64url(P)>; Max-Age=1800; Path=/api/; Secure; HttpOnly; SameSite=Strict

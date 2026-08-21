@@ -46,13 +46,15 @@ test ! -e packages/worker/.dev.vars || {
   printf '%s\n' \
     'TURNSTILE_SECRET_KEY="1x0000000000000000000000000000000AA"' \
     "CAPABILITY_HMAC_KEYRING='{\"dev-v1\":\"$capability_hmac_key\"}'" \
-    "PERMIT_ISSUANCE_KEY=\"$permit_issuance_key\"" \
+    "PERMIT_ISSUANCE_KEYRING='{\"dev-v1\":\"$permit_issuance_key\"}'" \
     "RATE_LIMIT_KEY=\"$rate_limit_key\"" \
     > packages/worker/.dev.vars
 )
 ```
 
-The three random keys have different purposes and must not be reused. `CAPABILITY_HMAC_KEYRING` contains the `dev-v1` key selected by `CAPABILITY_ACTIVE_KEY_ID`.
+The three random keys have different purposes and must not be reused. `CAPABILITY_HMAC_KEYRING` contains the `dev-v1` key selected by `CAPABILITY_ACTIVE_KEY_ID`. `PERMIT_ISSUANCE_KEYRING` contains the key selected by `PERMIT_ISSUANCE_ACTIVE_KEY_ID`.
+
+During permit-issuance key rotation, add the new key and make it active in one deployment. Keep the previous key in the keyring for at least 30 minutes. The Worker records the selected key ID for each Turnstile request ID, so a retry remains mapped to the original permit during rolling deployment. Remove the previous key only after the overlap window.
 
 Start the local Worker and Vite application:
 
@@ -105,8 +107,9 @@ The repository intentionally has no deploy workflow and no production deploy scr
 - a real Turnstile sitekey and secret for the production hostname, with the expected action `create_permit`;
 - the exact production `EXPECTED_ORIGIN` and `TURNSTILE_EXPECTED_HOSTNAME`;
 - independently generated production capability, permit-issuance, and rate-limit secrets;
+- an issuance-key rotation policy that retains prior keys for at least 30 minutes;
 - the private `kryptex-ciphertext` R2 bucket with public development URLs and custom domains disabled;
-- the 14-day `v1/candidates/` lifecycle backstop; and
+- the 31-day `v1/candidates/` lifecycle backstop; and
 - a successful `bun run infra:predeploy:verify` CI gate.
 
 The lifecycle apply order, privacy checks, and gate behavior are documented in [R2 candidate lifecycle backstop](./r2-lifecycle.md). Durable Object alarms delete active or terminal ciphertext earlier; the lifecycle rule only removes orphaned candidates.
