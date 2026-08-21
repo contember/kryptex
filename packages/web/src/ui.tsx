@@ -19,11 +19,6 @@ export function PageIntro({ title, children }: { readonly title: string; readonl
   return <header className="page-intro"><h1>{title}</h1><div>{children}</div></header>;
 }
 
-export function VerificationStep({ opened, state, onAction }: { readonly opened: boolean; readonly state: OperationState; readonly onAction: () => void }) {
-  const label = opened ? "Check verification" : "Verify to continue";
-  return <section className="verification-step" aria-labelledby="verification-title"><h2 id="verification-title">{label}</h2><p>{opened ? "Complete the check in the separate tab, then return here." : "The secret form stays closed until verification completes."}</p><button className="primary-button" disabled={state === "working"} onClick={onAction} type="button">{state === "working" ? "Checking…" : label}</button>{state === "waiting" ? <StatusMessage tone="warning">Verification is not ready yet.</StatusMessage> : <OperationNotice state={state} />}</section>;
-}
-
 export function InfoSection({ title, children }: { readonly title: string; readonly children: ReactNode }) {
   return <section className="info-section"><h2>{title}</h2>{children}</section>;
 }

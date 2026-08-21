@@ -45,14 +45,14 @@ const clientNotAfter = envelopeVectors.kxr1.clientNotAfter;
 
 const requestCases: readonly ContractCase[] = [
   {
-    name: "POST /api/v1/create-permits",
+    name: "POST /api/v2/create-permits",
     parse: parseCreatePermitRequest,
     value: {
       requestId: "550e8400-e29b-41d4-a716-446655440000",
       turnstileResponse: "turnstile-token"
     }
   },
-  { name: "POST /api/v1/create-permits/status", parse: parseEmptyRequest, value: {} },
+  { name: "POST /api/v2/create-permits/status", parse: parseEmptyRequest, value: {} },
   {
     name: "POST /api/v1/sends",
     parse: parseSendCreateRequest,

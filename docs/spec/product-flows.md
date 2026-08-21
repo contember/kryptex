@@ -31,9 +31,9 @@ It states that encryption and decryption happen in the browser and the service s
 
 ## Isolated creation authorization
 
-Secret composition happens in a crypto page with no third-party scripts. Immediately before creation, the page calls the create-permit status endpoint. If no unused permit exists, **Authorize creation** opens `/gate` in a new tab with `noopener,noreferrer`. The gate tab contains Turnstile but no secret fields, fragment, or opener. It does not read, write, or exchange application data through shared browser APIs. The crypto tab places no secret material in shared storage. The only intended shared state is the HttpOnly permit cookie. The user returns to the original tab and selects **Check authorization**; there is no cross-tab completion message.
+The home actions perform a full-page navigation to `/gate` before opening a secret form. The gate contains Turnstile but no secret fields or fragment. After Siteverify succeeds, the Worker sets a single-use HttpOnly permit cookie and the browser performs another full-page navigation to `/send` or `/request`. The navigation unloads Turnstile before the crypto page opens. No third-party script executes in a document that holds plaintext or key material, and no secret material is placed in shared browser storage.
 
-After a successful status check, the original tab uses the returned server time and generates fresh seeds, nonce, padding, and `clientNotAfter`. If the permit expires before the create POST, the user repeats authorization and the client discards the prepared cryptographic material before generating a fresh set. Plaintext remains only in the original tab memory.
+The crypto route checks the permit before rendering the form. Immediately before creation, it checks status again, uses the returned server time, and generates fresh seeds, nonce, padding, and `clientNotAfter`. If the permit expires while the form is open, the page keeps the draft in current-document memory and tells the user to copy it before a new full-page verification. It does not load Turnstile into the crypto document or persist the draft.
 
 ## Send creation
 
@@ -41,7 +41,7 @@ After a successful status check, the original tab uses the returned server time 
 2. The user selects lifetime and retrieval count.
 3. Protection defaults to the recommended **Link + second key**. Alternatives are **Link only** and **Link + passphrase**.
 4. A summary names each value and the channel through which it should travel.
-5. The user completes isolated creation authorization and confirms creation. Encryption happens locally with fresh material.
+5. After isolated creation authorization, the user confirms creation. Encryption happens locally with fresh material.
 6. The receipt shows separate recipient-link, second-key when applicable, and management-link artifacts. Each has its own copy action; no action combines the link and second key.
 7. The user confirms each required artifact separately: **Recipient link saved**, **Second key saved** when present, and **Management link saved or intentionally discarded**. A navigation warning is secondary only.
 
@@ -73,7 +73,7 @@ After an ambiguous revoke or shorten response, the page refreshes authenticated 
 
 1. The owner defines 1 through 32 fixed field types: short text, secret text, multiline text, or a label-only instruction.
 2. The owner selects lifetime and protection. The recommended default and alternatives match Send.
-3. The owner completes isolated creation authorization and confirms creation.
+3. After isolated creation authorization, the owner confirms creation.
 4. The receipt shows separate write-link, second-key when applicable, and pickup-link artifacts.
 5. The owner confirms **Write link saved**, **Second key saved** when present, and **Pickup link saved** separately. The pickup link contains the only private-key seed and cannot be recovered.
 
@@ -112,7 +112,8 @@ The owner and writer compare all 64 hexadecimal fingerprint digits through a cha
 | Operation and trigger | User message | Retry rule | Capability effect | Safe next action and memory |
 | --- | --- | --- | --- | --- |
 | Any shell: malformed or unsupported bundle | This link is malformed or uses an unsupported version. | No API retry. | None. | Discard copied fragment bytes; request a new original link. |
-| Create permit missing or expired | Creation authorization is required. | Complete isolated gate, then check status. | No resource capability consumed. | Keep plaintext in original-tab memory; generate crypto only after authorization. |
+| Create permit missing before form entry | Creation authorization is required. | Complete the isolated gate in the current tab. | No resource capability consumed. | Open the crypto form only after a full-page navigation unloads Turnstile. |
+| Create permit expires while editing | Verification expired. | Copy the draft, then complete a new full-page gate. | No resource capability consumed. | Keep plaintext in current-document memory until the user leaves; do not persist it. |
 | Create: local validation or encryption failure | Creation did not start. | Correct input or retry with fresh crypto material. | Permit is not consumed before valid request syntax. | Keep plaintext only while the page remains open. |
 | Create: response lost after POST | Reconciling creation; outcome is not settled yet. | Poll manage/owner status with bounded backoff until state appears or settlement deadline passes; never repeat create. | Permit may be consumed and resource may still commit before the deadline. | Keep current seeds and envelope in memory until status or the deadline resolves it. |
 | Retrieve: unavailable | This secret is unavailable. | No automatic retry. | Wrong authorization does not consume; real state is hidden. | Discard derived transient keys. |

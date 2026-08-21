@@ -1,5 +1,8 @@
+import { useEffect, useState, type ReactNode } from "react";
 import { Link, Outlet, createBrowserRouter, useLocation } from "react-router";
 
+import { ApiFailure } from "./api-client";
+import { useClient } from "./client-context";
 import type { FragmentCapture } from "./fragment";
 import { ManagementPage } from "./pages/management-page";
 import { OwnerPage } from "./pages/owner-page";
@@ -8,6 +11,7 @@ import { RetrievePage } from "./pages/retrieve-page";
 import { SendPage } from "./pages/send-page";
 import { GatePage, HomePage, SecurityPage } from "./pages/static-pages";
 import { WriterPage } from "./pages/writer-page";
+import { gatePath, type CreationIntent } from "./verification";
 
 export const APP_ROUTES: readonly string[] = ["/", "/send", "/request", "/s", "/m", "/r", "/i", "/gate", "/security"];
 
@@ -29,8 +33,8 @@ export function createAppRouter(fragmentCapture: FragmentCapture) {
     errorElement: <RouteError />,
     children: [
       { index: true, element: <HomePage /> },
-      { path: "send", element: <SendPage /> },
-      { path: "request", element: <RequestPage /> },
+      { path: "send", element: <CreationPermitGuard intent="send"><SendPage /></CreationPermitGuard> },
+      { path: "request", element: <CreationPermitGuard intent="request"><RequestPage /></CreationPermitGuard> },
       { path: "s", element: <RetrievePage capture={fragmentCapture} /> },
       { path: "m", element: <ManagementPage capture={fragmentCapture} /> },
       { path: "r", element: <WriterPage capture={fragmentCapture} /> },
@@ -39,6 +43,29 @@ export function createAppRouter(fragmentCapture: FragmentCapture) {
       { path: "security", element: <SecurityPage /> }
     ]
   }]);
+}
+
+function CreationPermitGuard({ children, intent }: { readonly children: ReactNode; readonly intent: CreationIntent }) {
+  const client = useClient();
+  const [state, setState] = useState<"checking" | "ready" | "unavailable">("checking");
+
+  useEffect(() => {
+    let cancelled = false;
+    void client.permitStatus().then(() => {
+      if (!cancelled) setState("ready");
+    }).catch((error: unknown) => {
+      if (cancelled) return;
+      if (error instanceof ApiFailure && error.code === "creation_permit_required") {
+        window.location.replace(gatePath(intent));
+        return;
+      }
+      setState("unavailable");
+    });
+    return () => { cancelled = true; };
+  }, [client, intent]);
+
+  if (state === "ready") return children;
+  return <div className="task-page task-page--narrow"><p className="eyebrow">Creation verification</p><h1>{state === "checking" ? "Checking verification…" : "Verification is unavailable"}</h1><p>{state === "checking" ? "The secret form will open after the permit is confirmed." : "Reload the page to try again. No secret form was opened."}</p></div>;
 }
 
 function RootLayout() {

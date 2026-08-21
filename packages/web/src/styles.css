@@ -123,10 +123,6 @@ input[type="radio"], input[type="checkbox"] { width: 18px; height: 18px; min-hei
 .option-list small { font-weight: 400; }
 .passphrase-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .passphrase-fields .status-message { grid-column: 1 / -1; }
-.verification-step { max-width: 460px; padding: 20px; border: 1px solid var(--rule-strong); border-radius: 4px; background: var(--raised); }
-.verification-step p { color: var(--secondary); }
-.verification-step .operation-notice { margin-top: 16px; }
-
 .inline-fields { display: grid; gap: 12px; }
 .inline-fields > div { padding: 12px; display: grid; grid-template-columns: 1fr 1fr auto; align-items: end; gap: 8px; border: 1px solid var(--rule); border-radius: 4px; }
 .request-items { display: grid; gap: 12px; }

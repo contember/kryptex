@@ -21,7 +21,7 @@ Kryptex transports short-lived secrets without exposing plaintext or decryption 
 3. The Worker receives ciphertext, high-entropy derived capabilities, policy metadata, and network metadata.
 4. A per-resource Durable Object serializes state changes.
 5. A private R2 bucket stores encrypted envelopes.
-6. Cloudflare Turnstile executes only in an isolated gate tab with no opener, fragment, or secret fields. The gate does not use shared browser APIs for application data; the only intended shared state is the HttpOnly permit cookie. Turnstile never executes in the crypto tab.
+6. Cloudflare Turnstile executes only in an isolated gate document with no fragment or secret fields. Full-page navigation unloads it before a crypto document opens. The only state carried forward is the HttpOnly permit cookie. Turnstile never executes in a document that holds plaintext or key material.
 
 ## Adversaries and expected outcome
 
@@ -62,4 +62,4 @@ Content Security Policy, Trusted Types, dependency pinning, and a minimal bundle
 
 The service cannot inspect encrypted content. Creation therefore requires a short-lived, single-use Turnstile-backed permit, strict size and lifetime limits, and approximate edge rate limiting by both client network plus route and blinded resource locator. External rate-limit bindings fail open because they are abuse and cost controls; the exact per-resource Durable Object authorization lease and backoff remain fail closed. The Worker validates Siteverify hostname and action. Retrieval and write routes must remain usable without Turnstile. Displayed content is plain text only; URLs are not made clickable.
 
-Turnstile runs in an isolated `noopener,noreferrer` tab immediately before creation. The secret may already exist in memory in the original tab, but no secret material is placed in shared browser storage and the gate has no opener reference. The gate does not read or write shared application data; completion intentionally shares only the HttpOnly permit cookie. This gate is an abuse control, not part of encryption or authorization. A valid permit authorizes one creation attempt and expires within five minutes.
+Turnstile runs in an isolated top-level gate before the secret form opens. The gate does not read or write application data. After successful verification, a full-page navigation unloads Turnstile and intentionally carries forward only a versioned HttpOnly permit cookie. This gate is an abuse control, not part of encryption or capability authorization. A version 2 permit authorizes one creation attempt and expires within 30 minutes. If it expires while a draft is open, re-verification requires leaving that document; the client never persists the draft to bridge the navigation.

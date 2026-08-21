@@ -31,8 +31,8 @@ async function apiFailure(operation: Promise<unknown>): Promise<ApiFailure> {
 }
 
 function successResponse(pathname: string): Response {
-  if (pathname === API_ROUTES.createPermit) return new Response(`{"permitExpiresAt":${now + 300},"serverTime":${now}}`, { headers: headers() });
-  if (pathname === API_ROUTES.createPermitStatus) return new Response(`{"permitExpiresAt":${now + 300},"serverTime":${now},"state":"unused"}`, { headers: headers() });
+  if (pathname === API_ROUTES.createPermit) return new Response(`{"permitExpiresAt":${now + 1800},"serverTime":${now}}`, { headers: headers() });
+  if (pathname === API_ROUTES.createPermitStatus) return new Response(`{"permitExpiresAt":${now + 1800},"serverTime":${now},"state":"unused"}`, { headers: headers() });
   if (pathname === API_ROUTES.sendCreate || pathname === API_ROUTES.requestCreate) return new Response(`{"serverExpiresAt":${expiresAt}}`, { headers: headers() });
   if (pathname === API_ROUTES.sendRetrieve) return new Response(Uint8Array.of(1, 2, 3), { headers: headers({ "Content-Type": "application/octet-stream", "Kryptex-Remaining-Releases": "2", "Kryptex-Server-Expires-At": String(expiresAt) }) });
   if (pathname === API_ROUTES.sendStatus) return new Response(`{"remainingRetrievals":2,"serverExpiresAt":${expiresAt},"state":"active"}`, { headers: headers({ "Kryptex-State-Checked-At": String(now + 1) }) });
@@ -70,8 +70,8 @@ describe("same-origin API adapter", () => {
       return Promise.resolve(successResponse(pathname));
     };
     const client = new KryptexClient(fetchStub, "https://secrets.example");
-    await expect(client.createPermit({ requestId: "00000000-0000-4000-8000-000000000001", turnstileResponse: "token" })).resolves.toEqual({ permitExpiresAt: now + 300, serverTime: now });
-    await expect(client.permitStatus()).resolves.toEqual({ permitExpiresAt: now + 300, serverTime: now, state: "unused" });
+    await expect(client.createPermit({ requestId: "00000000-0000-4000-8000-000000000001", turnstileResponse: "token" })).resolves.toEqual({ permitExpiresAt: now + 1800, serverTime: now });
+    await expect(client.permitStatus()).resolves.toEqual({ permitExpiresAt: now + 1800, serverTime: now, state: "unused" });
     await expect(client.createSend({ attemptId, clientNotAfter: expiresAt, envelope: "send-envelope", locator, manageToken: token, maxRetrievals: 2, retrieveToken: token, settleNotAfter: now + 60, ttlSeconds: 3600 })).resolves.toEqual({ serverExpiresAt: expiresAt });
     await expect(client.retrieveSend({ locator, retrieveToken: token })).resolves.toMatchObject({ metadata: { remainingReleases: 2, serverExpiresAt: expiresAt } });
     await expect(client.sendStatus({ locator, manageToken: token })).resolves.toEqual({ remainingRetrievals: 2, serverExpiresAt: expiresAt, state: "active", stateCheckedAt: now + 1 });
@@ -135,7 +135,7 @@ describe("same-origin API adapter", () => {
       call += 1;
       return Promise.resolve(call === 1
         ? new Response('{"error":"gate_unavailable"}', { headers: headers(), status: 503 })
-        : new Response(`{"permitExpiresAt":${now + 300},"serverTime":${now}}`, { headers: headers() }));
+        : new Response(`{"permitExpiresAt":${now + 1800},"serverTime":${now}}`, { headers: headers() }));
     };
     const client = new KryptexClient(fetchStub, "https://secrets.example");
     const input = { requestId: "00000000-0000-4000-8000-000000000001", turnstileResponse: "same-token" };

@@ -6,9 +6,9 @@ import { deriveSendKeys, encodeBase64Url, encryptSendEnvelope, randomBytes } fro
 import { ApiFailure } from "../api-client";
 import { useClient } from "../client-context";
 import { artifactUrl, createFactor, reconcileSendCreation, type FactorMaterial } from "../crypto-flow";
-import { openIsolatedVerification } from "../verification";
 import { NavigationGuard, OperationNotice, PageIntro, PassphraseFields, ProtectionOptions, ShareSlip, StatusMessage, type OperationState, type Protection, type ShareArtifact } from "../ui";
 import { validatePassphrase, validateSendDraft } from "../validation";
+import { gatePath } from "../verification";
 
 interface PendingSend {
   readonly factor: FactorMaterial;
@@ -29,7 +29,7 @@ export function SendPage() {
   const [ttl, setTtl] = useState<TtlSeconds>(3600);
   const [retrievals, setRetrievals] = useState(1);
   const [state, setState] = useState<OperationState>("idle");
-  const [gateOpened, setGateOpened] = useState(false);
+  const [verificationExpired, setVerificationExpired] = useState(false);
   const [artifacts, setArtifacts] = useState<readonly ShareArtifact[] | null>(null);
   const [pending, setPending] = useState<PendingSend | null>(null);
   const [reconciling, setReconciling] = useState(false);
@@ -66,9 +66,8 @@ export function SendPage() {
       permit = await client.permitStatus();
     } catch (error) {
       if (error instanceof ApiFailure && error.code === "creation_permit_required") {
-        openIsolatedVerification((url, target, features) => window.open(url, target, features));
-        setGateOpened(true);
-        setState("waiting");
+        setVerificationExpired(true);
+        setState("idle");
         return;
       }
       setState(error instanceof ApiFailure && error.ambiguous ? "unknown" : "unavailable");
@@ -96,9 +95,8 @@ export function SendPage() {
           setReconciling(false);
           setPending(null);
           if (error instanceof ApiFailure && error.code === "creation_permit_required") {
-            openIsolatedVerification((url, target, features) => window.open(url, target, features));
-            setGateOpened(true);
-            setState("waiting");
+            setVerificationExpired(true);
+            setState("idle");
             return;
           }
           throw error;
@@ -126,8 +124,8 @@ export function SendPage() {
     <StatusMessage tone={draft.valid ? "success" : "warning"}>{draft.message}</StatusMessage>
     <ProtectionOptions onChange={setProtection} value={protection} />{protection === "passphrase" ? <PassphraseFields confirmation={confirmation} message={phrase.message} onConfirmation={setConfirmation} onPassphrase={setPassphrase} passphrase={passphrase} valid={phrase.valid} /> : null}
     <details className="advanced"><summary>Advanced</summary><div><label><span>Expires after</span><select onChange={(event) => { selectTtl(Number(event.currentTarget.value)); }} value={ttl}><option value={900}>15 minutes</option><option value={3600}>1 hour</option><option value={28800}>8 hours</option><option value={86400}>1 day</option><option value={259200}>3 days</option><option value={604800}>7 days</option></select></label><label><span>Maximum opens</span><input max={10} min={1} onChange={(event) => { setRetrievals(event.currentTarget.valueAsNumber); }} type="number" value={retrievals} /></label></div></details>
-    <button className="primary-button full-button" disabled={!draft.valid || (protection === "passphrase" && !phrase.valid) || state === "working"} onClick={() => { void create(); }} type="button">{reconciling ? "Reconciling…" : state === "working" ? "Sealing…" : gateOpened ? "Check verification and seal" : "Seal and create link"}</button>
-    {reconciling ? <StatusMessage tone="warning"><strong>Reconciling creation.</strong> Keep this tab open. The exact in-memory capability and encrypted attempt cannot be recovered if you leave.</StatusMessage> : state === "waiting" ? <StatusMessage tone="warning">Complete verification in the isolated tab, then press the button again. Your draft stays only in this tab.</StatusMessage> : <OperationNotice state={state} />}
+    <button className="primary-button full-button" disabled={!draft.valid || (protection === "passphrase" && !phrase.valid) || state === "working" || verificationExpired} onClick={() => { void create(); }} type="button">{reconciling ? "Reconciling…" : state === "working" ? "Sealing…" : "Seal and create link"}</button>
+    {reconciling ? <StatusMessage tone="warning"><strong>Reconciling creation.</strong> Keep this tab open. The exact in-memory capability and encrypted attempt cannot be recovered if you leave.</StatusMessage> : verificationExpired ? <div className="operation-notice"><strong>Verification expired.</strong><p>Copy your draft before verifying again. Leaving this page clears it.</p><a className="primary-button" href={gatePath("send")}>Verify again</a></div> : <OperationNotice state={state} />}
     <NavigationGuard description="Leaving now permanently loses the in-memory capability needed to confirm this creation attempt." title="Keep confirming creation?" when={pending !== null} />
   </div>;
 }

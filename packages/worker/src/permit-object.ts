@@ -1,5 +1,5 @@
 import { authenticate } from "./auth.js";
-import { capabilityTag, unixSeconds } from "./core.js";
+import { capabilityTag, CREATE_PERMIT_V2_TTL_SECONDS, unixSeconds } from "./core.js";
 import { checkWorkerEnvironment, type CheckedWorkerEnvironment, type WorkerEnv } from "./env.js";
 import { apiError, jsonResponse, rateLimited } from "./http.js";
 import { decodeCanonicalBase64Url, exactObject, integerProperty, parseJson, stringProperty } from "./strict.js";
@@ -111,7 +111,7 @@ export class CreatePermitDurableObject {
         }
         return { kind: "unavailable" };
       }
-      if (input.permitExpiresAt <= now || input.permitExpiresAt > now + 300) {
+      if (input.permitExpiresAt <= now || input.permitExpiresAt > now + CREATE_PERMIT_V2_TTL_SECONDS) {
         return { kind: "unavailable" };
       }
       const permitExpiresAt = input.permitExpiresAt;

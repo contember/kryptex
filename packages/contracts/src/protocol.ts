@@ -63,8 +63,8 @@ export const MAX_HELP_UTF8_BYTES = 500;
 export const MAX_VALUE_UTF8_BYTES = 262144;
 
 export const API_ROUTES = Object.freeze({
-  createPermit: "/api/v1/create-permits",
-  createPermitStatus: "/api/v1/create-permits/status",
+  createPermit: "/api/v2/create-permits",
+  createPermitStatus: "/api/v2/create-permits/status",
   requestCreate: "/api/v1/requests",
   requestPickup: "/api/v1/requests/pickup",
   requestRevoke: "/api/v1/requests/revoke",

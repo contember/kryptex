@@ -45,14 +45,14 @@ async function creationCookie(fill: number): Promise<string> {
   const response = await env.CREATE_PERMIT_OBJECTS.getByName(locator).fetch("https://durable-object.invalid/init", {
     body: JSON.stringify({
       locator,
-      permitExpiresAt: unixSeconds() + 300,
+      permitExpiresAt: unixSeconds() + 1800,
       token: encodeBase64Url(material.token)
     }),
     headers: { "Content-Type": "application/json" },
     method: "POST"
   });
   expect(response.status).toBe(200);
-  return `kx_create=v1.${encodeBase64Url(seed)}`;
+  return `kx_create_v2=v2.${encodeBase64Url(seed)}`;
 }
 
 function vectorById(id: string): string {
@@ -88,7 +88,7 @@ describe("send routes and release linearization", () => {
     const manage = serverTag("send-manage");
     const envelope = envelopeAt(vectorById("send-none"), now + 900, "kxe1");
     const cookie = await creationCookie(7);
-    const permitStatus = await exports.default.fetch(apiRequest("/api/v1/create-permits/status", {}, cookie));
+    const permitStatus = await exports.default.fetch(apiRequest("/api/v2/create-permits/status", {}, cookie));
     expect(permitStatus.status).toBe(200);
     expect(await permitStatus.json()).toMatchObject({ state: "unused" });
 
@@ -430,10 +430,18 @@ describe("public request rejection", () => {
       retrieveToken: filledBase64Url(32, 66),
       settleNotAfter: unixSeconds() + 30,
       ttlSeconds: 900
-    }, "kx_create=v1.not-a-valid-seed"));
+    }, "kx_create_v2=v2.not-a-valid-seed"));
     expect(invalidCookie.status).toBe(403);
     expect(await invalidCookie.json()).toEqual({ error: "creation_permit_required" });
     expect(invalidCookie.headers.get("Cache-Control")).toBe("no-store");
+
+    const retiredCookie = await exports.default.fetch(apiRequest(
+      "/api/v2/create-permits/status",
+      {},
+      `kx_create=v1.${filledBase64Url(32, 67)}`
+    ));
+    expect(retiredCookie.status).toBe(403);
+    expect(await retiredCookie.json()).toEqual({ error: "creation_permit_required" });
   });
 
   test("applies exact per-resource authorization backoff", async () => {

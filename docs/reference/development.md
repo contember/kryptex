@@ -82,7 +82,7 @@ The local Worker treats this exact dummy credential pair as a deterministic deve
 4. Use explicit retrieve, submit, or pickup actions. Page loads and `GET` requests are non-consuming.
 5. In second-key mode, transfer the link and second key through independently secured channels. Two apps under one compromised device or account may not be independent.
 
-Creation authorization opens `/gate` in an isolated tab. Complete Turnstile there, return to the original tab, and check authorization. The only intended cross-tab state is the HttpOnly permit cookie.
+The Send and Request actions navigate to `/gate` before opening a secret form. Complete Turnstile there. The browser then performs a full-page navigation to the selected form so the gate and its third-party script are unloaded. The only state carried to the form is the HttpOnly permit cookie.
 
 ## Repository gates
 

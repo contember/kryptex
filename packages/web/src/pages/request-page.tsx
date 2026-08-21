@@ -6,9 +6,9 @@ import { deriveHpkeKeyPair, deriveRequestOwnerKeys, deriveRequestWriteKeys, enco
 import { ApiFailure } from "../api-client";
 import { useClient } from "../client-context";
 import { artifactUrl, createFactor, reconcileRequestCreation, requestFieldId, type FactorMaterial } from "../crypto-flow";
-import { openIsolatedVerification } from "../verification";
 import { NavigationGuard, OperationNotice, PageIntro, PassphraseFields, ProtectionOptions, ShareSlip, StatusMessage, type OperationState, type Protection, type ShareArtifact } from "../ui";
 import { validatePassphrase, validateRequestDraft } from "../validation";
+import { gatePath } from "../verification";
 
 interface DraftField { readonly help: string; readonly label: string; readonly required: boolean; readonly type: RequestFieldType; }
 interface PendingRequest { readonly factor: FactorMaterial; readonly locator: Uint8Array<ArrayBuffer>; readonly ownerSeed: Uint8Array<ArrayBuffer>; readonly publicKey: Uint8Array<ArrayBuffer>; readonly request: RequestCreateRequest; readonly writeSeed: Uint8Array<ArrayBuffer>; }
@@ -23,7 +23,7 @@ export function RequestPage() {
   const [confirmation, setConfirmation] = useState("");
   const [ttl, setTtl] = useState<TtlSeconds>(3600);
   const [state, setState] = useState<OperationState>("idle");
-  const [gateOpened, setGateOpened] = useState(false);
+  const [verificationExpired, setVerificationExpired] = useState(false);
   const [artifacts, setArtifacts] = useState<readonly ShareArtifact[] | null>(null);
   const [pending, setPending] = useState<PendingRequest | null>(null);
   const [reconciling, setReconciling] = useState(false);
@@ -65,7 +65,7 @@ export function RequestPage() {
     try { permit = await client.permitStatus(); }
     catch (error) {
       if (error instanceof ApiFailure && error.code === "creation_permit_required") {
-        openIsolatedVerification((url, target, features) => window.open(url, target, features)); setGateOpened(true); setState("waiting"); return;
+        setVerificationExpired(true); setState("idle"); return;
       }
       setState(error instanceof ApiFailure && error.ambiguous ? "unknown" : "unavailable"); return;
     }
@@ -95,9 +95,8 @@ export function RequestPage() {
           setReconciling(false);
           setPending(null);
           if (error instanceof ApiFailure && error.code === "creation_permit_required") {
-            openIsolatedVerification((url, target, features) => window.open(url, target, features));
-            setGateOpened(true);
-            setState("waiting");
+            setVerificationExpired(true);
+            setState("idle");
             return;
           }
           throw error;
@@ -122,8 +121,8 @@ export function RequestPage() {
     <StatusMessage tone={draft.valid ? "success" : "warning"}>{draft.message}</StatusMessage>
     <ProtectionOptions onChange={setProtection} value={protection} />{protection === "passphrase" ? <PassphraseFields confirmation={confirmation} message={phrase.message} onConfirmation={setConfirmation} onPassphrase={setPassphrase} passphrase={passphrase} valid={phrase.valid} /> : null}
     <details className="advanced"><summary>More options</summary><label><span>Expires after</span><select onChange={(event) => { selectTtl(Number(event.currentTarget.value)); }} value={ttl}><option value={900}>15 minutes</option><option value={3600}>1 hour</option><option value={28800}>8 hours</option><option value={86400}>1 day</option><option value={259200}>3 days</option><option value={604800}>7 days</option></select></label></details>
-    <button className="primary-button full-button" disabled={!draft.valid || (protection === "passphrase" && !phrase.valid) || state === "working"} onClick={() => { void create(); }} type="button">{reconciling ? "Reconciling…" : state === "working" ? "Creating…" : gateOpened ? "Check verification and create" : "Create request"}</button>
-    {reconciling ? <StatusMessage tone="warning"><strong>Reconciling creation.</strong> Keep this tab open. The exact in-memory capability and encrypted attempt cannot be recovered if you leave.</StatusMessage> : state === "waiting" ? <StatusMessage tone="warning">Complete verification in the isolated tab, then press the button again. Your draft remains only here.</StatusMessage> : <OperationNotice state={state} />}
+    <button className="primary-button full-button" disabled={!draft.valid || (protection === "passphrase" && !phrase.valid) || state === "working" || verificationExpired} onClick={() => { void create(); }} type="button">{reconciling ? "Reconciling…" : state === "working" ? "Creating…" : "Create request"}</button>
+    {reconciling ? <StatusMessage tone="warning"><strong>Reconciling creation.</strong> Keep this tab open. The exact in-memory capability and encrypted attempt cannot be recovered if you leave.</StatusMessage> : verificationExpired ? <div className="operation-notice"><strong>Verification expired.</strong><p>Copy your draft before verifying again. Leaving this page clears it.</p><a className="primary-button" href={gatePath("request")}>Verify again</a></div> : <OperationNotice state={state} />}
     <NavigationGuard description="Leaving now permanently loses the in-memory capability needed to confirm this creation attempt." title="Keep confirming creation?" when={pending !== null} />
   </div>;
 }

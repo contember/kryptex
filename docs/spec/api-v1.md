@@ -1,10 +1,10 @@
-# Kryptex HTTP API version 1
+# Kryptex HTTP API
 
-Status: frozen public Worker boundary for version 1.
+Status: frozen resource boundary for version 1 with creation-permit version 2.
 
 ## Encoding and common responses
 
-All routes are `POST /api/v1/...`. Request JSON uses `Content-Type: application/json` and UTF-8. Binary envelopes in JSON are canonical unpadded base64url. Locators decode to 16 bytes and tokens decode to 32 bytes.
+Resource routes are `POST /api/v1/...`. Creation-permit routes are `POST /api/v2/create-permits...`. Request JSON uses `Content-Type: application/json` and UTF-8. Binary envelopes in JSON are canonical unpadded base64url. Locators decode to 16 bytes and tokens decode to 32 bytes.
 
 Successful binary responses use `application/octet-stream`. All responses, including errors, set:
 
@@ -28,9 +28,11 @@ Rate limiting returns `429` and `{"error":"rate_limited"}` before existence-depe
 
 Every request must match the configured exact `Origin`. Requests that mutate state must have `Sec-Fetch-Site: same-origin` when Fetch Metadata headers are present. The service does not enable credentialed cross-origin requests.
 
-## Creation permit
+## Creation permit version 2
 
-### `POST /api/v1/create-permits`
+Version 2 moves verification before secret composition and extends the single-use permit lifetime without reinterpreting the retired `kx_create=v1...` cookie. Resource routes remain version 1.
+
+### `POST /api/v2/create-permits`
 
 Request:
 
@@ -57,31 +59,31 @@ permitLocator = Expand(permitPrk, "kryptex/v1/create-permit/locator", 16)
 permitToken = Expand(permitPrk, "kryptex/v1/create-permit/token", 32)
 ```
 
-It idempotently creates the permit Durable Object containing only the capability tag, key ID, creation time, expiry, and `unused` or `consumed` state. A retry with the same request ID derives the same `P` and returns the same unused permit; it never mints another permit from the same Turnstile solve. A consumed or expired permit requires a new Turnstile token and request ID. Expiry is no later than 300 seconds after the first successful Siteverify result. The response sets this cookie:
+It idempotently creates the permit Durable Object containing only the capability tag, key ID, creation time, expiry, and `unused` or `consumed` state. A retry with the same request ID derives the same `P` and returns the same unused permit; it never mints another permit from the same Turnstile solve. A consumed or expired permit requires a new Turnstile token and request ID. The Worker validates the Turnstile token within its 300-second validity window, then gives the Kryptex permit a maximum lifetime of 1,800 seconds. The response sets this cookie:
 
 ```text
-Set-Cookie: kx_create=v1.<base64url(P)>; Max-Age=300; Path=/api/v1/; Secure; HttpOnly; SameSite=Strict
+Set-Cookie: kx_create_v2=v2.<base64url(P)>; Max-Age=1800; Path=/api/; Secure; HttpOnly; SameSite=Strict
 ```
 
 Response:
 
 ```json
-{"permitExpiresAt":1787227500,"serverTime":1787227200}
+{"permitExpiresAt":1787229000,"serverTime":1787227200}
 ```
 
 One permit authorizes one send or request creation. After body syntax, envelope, size, and policy validation, but before an R2 write, the create route snapshots the permit tag, key ID, and generation, awaits `crypto.subtle.verify`, then synchronously rechecks them and changes `unused` to `consumed`. WebCrypto never runs inside `transactionSync`. The route expires the cookie in its response. A storage or network failure after consumption requires a new permit.
 
 Rejected Siteverify results return `403` and `{"error":"gate_failed"}`. A Siteverify timeout or upstream failure returns `503` and `{"error":"gate_unavailable"}`; retry uses the same request ID and token. Neither response includes upstream details.
 
-### `POST /api/v1/create-permits/status`
+### `POST /api/v2/create-permits/status`
 
 Request body is `{}` and the permit cookie is ambient. The route snapshots the permit tag and generation, awaits `crypto.subtle.verify`, then synchronously rechecks and returns:
 
 ```json
-{"permitExpiresAt":1787227500,"serverTime":1787227200,"state":"unused"}
+{"permitExpiresAt":1787229000,"serverTime":1787227200,"state":"unused"}
 ```
 
-Missing, expired, or consumed permits return `403` and `{"error":"creation_permit_required"}`. The crypto page uses this endpoint immediately before generating fresh seeds, nonce, padding, and `clientNotAfter`.
+Missing, expired, or consumed permits return `403` and `{"error":"creation_permit_required"}`. A crypto route checks this endpoint before rendering its form and again immediately before generating fresh seeds, nonce, padding, and `clientNotAfter`.
 
 ## Send routes
 

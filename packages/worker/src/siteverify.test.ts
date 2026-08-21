@@ -96,7 +96,7 @@ describe("Turnstile Siteverify", () => {
       fetchCalled = true;
       return Promise.reject(new Error("must not call Siteverify"));
     };
-    const request = (requestId: string, turnstileResponse: string) => new Request(`${ORIGIN}/api/v1/create-permits`, {
+    const request = (requestId: string, turnstileResponse: string) => new Request(`${ORIGIN}/api/v2/create-permits`, {
       body: JSON.stringify({ requestId, turnstileResponse }),
       headers: { "Content-Type": "application/json", Origin: ORIGIN, "Sec-Fetch-Site": "same-origin" },
       method: "POST"
@@ -112,7 +112,10 @@ describe("Turnstile Siteverify", () => {
       siteverifyFetch
     );
     expect(accepted.status).toBe(200);
-    expect(accepted.headers.get("Set-Cookie")).toContain("kx_create=v1.");
+    expect(accepted.headers.get("Set-Cookie")).toContain("kx_create_v2=v2.");
+    expect(accepted.headers.get("Set-Cookie")).toContain("Max-Age=1800");
+    const acceptedBody = await accepted.json<{ permitExpiresAt: number; serverTime: number }>();
+    expect(acceptedBody.permitExpiresAt - acceptedBody.serverTime).toBe(1800);
     expect(rejected.status).toBe(403);
     expect(await rejected.json()).toEqual({ error: "gate_failed" });
     expect(fetchCalled).toBe(false);
@@ -134,7 +137,7 @@ describe("Turnstile Siteverify", () => {
   });
 
   test("rejects a deployed request URL even when localhost headers are spoofed", async () => {
-    const response = await handleApiRequest(new Request("https://deployed.example/api/v1/create-permits", {
+    const response = await handleApiRequest(new Request("https://deployed.example/api/v2/create-permits", {
       body: JSON.stringify({
         requestId: "00000000-0000-4000-8000-000000000012",
         turnstileResponse: LOCAL_TURNSTILE_DUMMY_TOKEN
@@ -169,7 +172,7 @@ describe("Turnstile Siteverify", () => {
         success: true
       }));
     };
-    const createRequest = () => new Request(`${ORIGIN}/api/v1/create-permits`, {
+    const createRequest = () => new Request(`${ORIGIN}/api/v2/create-permits`, {
       body: JSON.stringify({ requestId, turnstileResponse: "turnstile-response" }),
       headers: {
         "Content-Type": "application/json",
@@ -188,7 +191,7 @@ describe("Turnstile Siteverify", () => {
   });
 
   test("maps public Siteverify mismatch and outage without leaking upstream details", async () => {
-    const createRequest = () => new Request(`${ORIGIN}/api/v1/create-permits`, {
+    const createRequest = () => new Request(`${ORIGIN}/api/v2/create-permits`, {
       body: JSON.stringify({
         requestId: "00000000-0000-4000-8000-000000000005",
         turnstileResponse: "turnstile-response"

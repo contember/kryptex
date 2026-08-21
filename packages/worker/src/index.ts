@@ -16,6 +16,7 @@ import { CreatePermitDurableObject } from "./permit-object.js";
 import { RequestDurableObject } from "./request-object.js";
 import { SendDurableObject } from "./send-object.js";
 import {
+  CREATE_PERMIT_V2_TTL_SECONDS,
   decodeUuid,
   blindedLocator,
   derivePermitFromSeed,
@@ -112,13 +113,13 @@ function permitSeedFromCookie(request: Request): string | null {
   const values = cookie
     .split(";")
     .map((part) => part.trim())
-    .filter((part) => part.startsWith("kx_create="))
-    .map((part) => part.slice("kx_create=".length));
+    .filter((part) => part.startsWith("kx_create_v2="))
+    .map((part) => part.slice("kx_create_v2=".length));
   if (values.length !== 1) {
     return null;
   }
   const value = values[0];
-  if (!value?.startsWith("v1.")) {
+  if (!value?.startsWith("v2.")) {
     return null;
   }
   const seed = value.slice(3);
@@ -168,7 +169,7 @@ export async function verifyTurnstile(
 ): Promise<TurnstileResult> {
   if (environment.localTurnstileDummy) {
     return responseToken === LOCAL_TURNSTILE_DUMMY_TOKEN
-      ? { kind: "accepted", permitExpiresAt: unixSeconds() + 300 }
+      ? { kind: "accepted", permitExpiresAt: unixSeconds() + CREATE_PERMIT_V2_TTL_SECONDS }
       : { kind: "failed" };
   }
   const body = new FormData();
@@ -208,8 +209,10 @@ export async function verifyTurnstile(
       return { kind: "unavailable" };
     }
     const now = unixSeconds();
-    const permitExpiresAt = Math.min(now + 300, Math.floor(challengeTimeMs / 1_000) + 300);
-    return permitExpiresAt > now ? { kind: "accepted", permitExpiresAt } : { kind: "failed" };
+    if (Math.floor(challengeTimeMs / 1_000) + 300 <= now) {
+      return { kind: "failed" };
+    }
+    return { kind: "accepted", permitExpiresAt: now + CREATE_PERMIT_V2_TTL_SECONDS };
   } catch {
     return { kind: "unavailable" };
   }

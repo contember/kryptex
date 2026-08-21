@@ -1,5 +1,5 @@
 import type { ApiErrorCode } from "@kryptex/contracts/api";
-import { unixSeconds } from "./core.js";
+import { CREATE_PERMIT_V2_TTL_SECONDS, unixSeconds } from "./core.js";
 
 const JSON_CONTENT_TYPE = "application/json; charset=utf-8";
 
@@ -42,11 +42,11 @@ export function finalizeApiResponse(response: Response, origin: string, setCooki
 }
 
 export function expiredPermitCookie(): string {
-  return "kx_create=; Max-Age=0; Path=/api/v1/; Secure; HttpOnly; SameSite=Strict";
+  return "kx_create_v2=; Max-Age=0; Path=/api/; Secure; HttpOnly; SameSite=Strict";
 }
 
 export function permitCookie(seed: string): string {
-  return `kx_create=v1.${seed}; Max-Age=300; Path=/api/v1/; Secure; HttpOnly; SameSite=Strict`;
+  return `kx_create_v2=v2.${seed}; Max-Age=${CREATE_PERMIT_V2_TTL_SECONDS}; Path=/api/; Secure; HttpOnly; SameSite=Strict`;
 }
 
 const APPLICATION_CSP = [

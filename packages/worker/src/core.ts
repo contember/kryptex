@@ -9,6 +9,7 @@ const PERMIT_LOCATOR_LABEL = "kryptex/v1/create-permit/locator";
 const PERMIT_TOKEN_LABEL = "kryptex/v1/create-permit/token";
 
 export const ZERO_TAG = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+export const CREATE_PERMIT_V2_TTL_SECONDS = 1800;
 
 export interface PermitMaterial {
   readonly locator: Uint8Array;
