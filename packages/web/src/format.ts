@@ -67,7 +67,7 @@ export function describeSendState(state: SendState): StateDescription {
   if (state === "revoked") {
     return { detail: "This secret was revoked and can no longer be opened.", label: "Revoked", tone: "danger" };
   }
-  return { detail: "The expiry time passed. The stored data is gone.", label: "Expired", tone: "warning" };
+  return { detail: "The expiry time passed. Nothing can be released, and stored-ciphertext deletion may still be retrying.", label: "Expired", tone: "warning" };
 }
 
 export function describeRequestState(state: RequestState): StateDescription {
@@ -83,5 +83,5 @@ export function describeRequestState(state: RequestState): StateDescription {
   if (state === "revoked") {
     return { detail: "This request was revoked and can no longer be answered.", label: "Revoked", tone: "danger" };
   }
-  return { detail: "The expiry time passed. The stored data is gone.", label: "Expired", tone: "warning" };
+  return { detail: "The expiry time passed. Nothing can be released, and stored-ciphertext deletion may still be retrying.", label: "Expired", tone: "warning" };
 }

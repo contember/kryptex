@@ -177,15 +177,15 @@ export function SendPage() {
         </div>}
 
       <div className="field-block">
-        <label><span>Delete after</span>
+        <label><span>Access ends after</span>
           <select onChange={(event) => { selectTtl(Number(event.currentTarget.value)); }} value={ttl}>
             {TTL_CHOICES.map((choice) => <option key={choice} value={choice}>{formatTtl(choice)}</option>)}
           </select>
         </label>
-        <FieldHint>When the time is up, the stored data is deleted whether or not anyone opened it. Shorter is safer.</FieldHint>
+        <FieldHint>When the time is up, the service stops releasing the data and starts deleting the stored ciphertext. Failed deletion is retried. Shorter is safer.</FieldHint>
       </div>
 
-      <PolicySummary items={[`Deleted after ${formatTtl(ttl)}`, formatOpenAllowance(retrievals), PROTECTION_SUMMARY[protection]]} />
+      <PolicySummary items={[`Access ends after ${formatTtl(ttl)}`, formatOpenAllowance(retrievals), PROTECTION_SUMMARY[protection]]} />
 
       <AdvancedDisclosure summary="Protection and opens">
         <ProtectionOptions onChange={setProtection} value={protection} />

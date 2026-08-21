@@ -199,15 +199,15 @@ export function RequestPage() {
       </section>
 
       <div className="field-block">
-        <label><span>Delete after</span>
+        <label><span>Access ends after</span>
           <select onChange={(event) => { selectTtl(Number(event.currentTarget.value)); }} value={ttl}>
             {TTL_CHOICES.map((choice) => <option key={choice} value={choice}>{formatTtl(choice)}</option>)}
           </select>
         </label>
-        <FieldHint>The request and any answer are deleted when the time is up, answered or not.</FieldHint>
+        <FieldHint>When the time is up, the service closes access and starts deleting the stored request and answer. Failed deletion is retried.</FieldHint>
       </div>
 
-      <PolicySummary items={[`Deleted after ${formatTtl(ttl)}`, "One answer only — the write link stops working once it is used", PROTECTION_SUMMARY[protection]]} />
+      <PolicySummary items={[`Access ends after ${formatTtl(ttl)}`, "One answer only — the write link stops working once it is used", PROTECTION_SUMMARY[protection]]} />
 
       <AdvancedDisclosure summary="Protection">
         <ProtectionOptions onChange={setProtection} value={protection} />

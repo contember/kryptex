@@ -38,7 +38,7 @@ export function RetrievePage({ capture }: { readonly capture: FragmentCapture })
       {payload.kind === "text"
         ? <SecretField codeLike={false} label="Secret text" value={payload.text} />
         : payload.fields.map((field) => <SecretField codeLike={field.concealed} key={field.label} label={field.label} value={field.value} />)}
-      <StatusMessage tone="warning">Whatever you save is yours to protect from here on. Expiry deletes the stored copy; it cannot take back what was already released.</StatusMessage>
+      <StatusMessage tone="warning">Whatever you save is yours to protect from here on. Expiry closes access and starts stored-ciphertext deletion; it cannot take back what was already released.</StatusMessage>
     </div>;
   }
 

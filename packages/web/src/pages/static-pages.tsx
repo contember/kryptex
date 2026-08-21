@@ -39,8 +39,8 @@ export function HomePage() {
         <p>Send the second key through a different channel, so one leaked message is not enough to open the secret.</p>
       </li>
       <li>
-        <strong>It disappears</strong>
-        <p>Once the allowed opens are used or the clock runs out, the stored copy is deleted.</p>
+        <strong>Access closes</strong>
+        <p>Once the allowed opens are used or the clock runs out, the service releases nothing else and starts deleting the stored ciphertext.</p>
       </li>
     </ol>
     <div className="home-footer">
@@ -149,7 +149,7 @@ export function SecurityPage() {
       <p>A link on its own is a bearer credential: whoever holds it can try to open the content. Sending the second key another way — a call, a different device, in person — means one intercepted message is not enough.</p>
     </InfoSection>
     <InfoSection title="What expiry can and cannot do">
-      <p>Expiry deletes the stored copy, and revoking stops further opens. Neither can take back a secret that was already opened. Once someone reads it, protecting it is up to them.</p>
+      <p>Expiry and revocation stop further releases and start deleting the active stored copy. Failed deletion is retried, and provider backups may persist. Neither can take back a secret that was already opened.</p>
     </InfoSection>
     <InfoSection title="Where it stops">
       <p>Kryptex serves the code that does the encrypting. If that code were compromised, secrets used after that point could be exposed. The service can also see when transfers are created and released, just not what is in them.</p>
@@ -222,7 +222,7 @@ function TechnicalDescription() {
       <ul>
         <li>The recipient&apos;s browser reads <code>S</code> from the fragment, takes the passphrase or second key if one is required, and re-derives <code>locator</code>, <code>contentKey</code>, and <code>retrieveToken</code> with the same HKDF schedule. Opening a page or any <code>GET</code> request consumes nothing.</li>
         <li>Pressing open sends <code>POST /api/v1/sends/retrieve</code> with the locator and the retrieve token.</li>
-        <li>The Durable Object recomputes the HMAC tag, compares it with <code>crypto.subtle.verify</code>, reads the R2 object, checks its length and digest, and in one transaction rechecks state and expiry and decrements the counter. Only then are the envelope bytes returned. The last open deletes the R2 object.</li>
+        <li>The Durable Object recomputes the HMAC tag, compares it with <code>crypto.subtle.verify</code>, reads the R2 object, checks its length and digest, and in one transaction rechecks state and expiry and decrements the counter. Only then are the envelope bytes returned. The last open closes access and starts deleting the R2 object.</li>
         <li>A wrong factor produces a wrong token. The server answers with the same generic <code>unavailable</code> response it gives for a missing, expired, or revoked transfer, and releases no ciphertext. Each transfer serializes guesses: a failure delays the next attempt with exponential backoff from 250&nbsp;ms up to 30&nbsp;s.</li>
         <li>The browser validates the header, decrypts with AES-256-GCM, requires the envelope&apos;s factor mode to match the link, and rejects content past <code>min(clientNotAfter, serverExpiresAt)</code>. Decrypted text is rendered as plain text, never as HTML or Markdown.</li>
       </ul>
@@ -230,7 +230,7 @@ function TechnicalDescription() {
 
     <InfoSection title="6. Deletion">
       <ul>
-        <li>The final open, a revoke from the management link, or expiry moves the transfer to a terminal state inside the Durable Object, then deletes the R2 object. A failed delete is retried from an alarm with backoff; access stays closed meanwhile.</li>
+        <li>The final open, a revoke from the management link, or expiry moves the transfer to a terminal state inside the Durable Object, then attempts to delete the R2 object. A failed delete is retried from an alarm with backoff; access stays closed meanwhile.</li>
         <li>At expiry the Durable Object wipes its own storage. A small tombstone without ciphertext remains until the original expiry so status queries stay consistent.</li>
         <li>A 31-day R2 lifecycle rule is only a backstop for orphaned objects; it is not the access-control clock.</li>
       </ul>
