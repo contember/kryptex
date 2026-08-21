@@ -91,9 +91,13 @@ export function shortenedExpiryRequest(currentExpiresAt: number, nowSeconds: num
   return Math.min(currentExpiresAt - 1, nowSeconds + 900);
 }
 
-export function classifyConsumingFailure(error: unknown, responseReleased: boolean): "unknown" | "unavailable" {
+export function classifyConsumingFailure(error: unknown, responseReleased: boolean): "unknown" | "unavailable" | "rate_limited" {
   if (responseReleased || error instanceof ApiFailure && error.ambiguous) return "unknown";
-  return "unavailable";
+  return classifyReadFailure(error);
+}
+
+export function classifyReadFailure(error: unknown): "unavailable" | "rate_limited" {
+  return error instanceof ApiFailure && error.code === "rate_limited" ? "rate_limited" : "unavailable";
 }
 
 export function classifySubmitFailure(error: unknown): "unknown" | "unavailable" {

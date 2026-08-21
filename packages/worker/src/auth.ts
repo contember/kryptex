@@ -1,5 +1,6 @@
 import { decodeCanonicalBase64Url } from "./strict.js";
 import {
+  AUTH_FAILURE_SATURATION,
   RECORD_KEY,
   authDelayMs,
   authKey,
@@ -51,6 +52,11 @@ function snapshotFor(record: StoredRecord | undefined, capabilityKind: 1 | 2 | 3
     };
   }
   return { generation: record.generation, keyId: record.authKeyId, tag: record.tag };
+}
+
+/** Only a passphrase-derived retrieve or write token can be guessed online; every other token is 128 bits or more of randomness. */
+function guessableCapability(record: StoredRecord | undefined, capabilityKind: 1 | 2 | 3): boolean {
+  return capabilityKind === 1 && (record?.kind === "send" || record?.kind === "request") && record.factorMode === 1;
 }
 
 function currentTag(record: StoredRecord | undefined, capabilityKind: 1 | 2 | 3): string | null | undefined {
@@ -157,13 +163,13 @@ export function finishAuthentication(
       record.authKeyId === reservation.snapshot.keyId &&
       tag === reservation.snapshot.tag;
     if (!verified || !snapshotStillMatches) {
-      const failureCount = Math.min(lease.failureCount + 1, 8);
+      const failureCount = Math.min(lease.failureCount + 1, AUTH_FAILURE_SATURATION);
       const nowMs = clock();
       storage.kv.put<AuthLease>(key, {
         attemptId: "",
         authBusyUntil: 0,
         failureCount,
-        nextAuthAt: nowMs + authDelayMs(failureCount)
+        nextAuthAt: nowMs + authDelayMs(failureCount, guessableCapability(record, capabilityKind))
       });
       return {
         kind: "unavailable",

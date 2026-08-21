@@ -1,3 +1,5 @@
+import type { FactorMode } from "@kryptex/contracts/protocol";
+
 export interface ObjectMetadata {
   readonly digest: string;
   readonly key: string;
@@ -23,6 +25,7 @@ interface ResourceRecord {
 export interface SendRecord extends ResourceRecord {
   readonly attemptId: string | null;
   readonly clientNotAfter: number | null;
+  readonly factorMode: FactorMode;
   readonly kind: "send";
   readonly manageTag: string;
   readonly maxRetrievals: number;
@@ -35,6 +38,7 @@ export interface SendRecord extends ResourceRecord {
 export interface RequestRecord extends ResourceRecord {
   readonly attemptId: string | null;
   readonly clientNotAfter: number | null;
+  readonly factorMode: FactorMode;
   readonly kind: "request";
   readonly ownerTag: string;
   readonly responseAttemptId: string | null;
@@ -106,6 +110,11 @@ export async function recordCleanupFailure(
   });
 }
 
-export function authDelayMs(failureCount: number): number {
-  return Math.min(250 * 2 ** Math.max(0, failureCount - 1), 30_000);
+export const AUTH_FAILURE_SATURATION = 15;
+const AUTH_DELAY_CAP_MS = 30_000;
+const GUESSABLE_AUTH_DELAY_CAP_MS = 3_600_000;
+
+/** A longer cap applies where online guessing is feasible: a passphrase-derived retrieve or write token. */
+export function authDelayMs(failureCount: number, guessable: boolean): number {
+  return Math.min(250 * 2 ** Math.max(0, failureCount - 1), guessable ? GUESSABLE_AUTH_DELAY_CAP_MS : AUTH_DELAY_CAP_MS);
 }

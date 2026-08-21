@@ -2,7 +2,7 @@ import { useState } from "react";
 import type { RequestResponsePayload, RequestSchemaPayload } from "@kryptex/contracts/payloads";
 import { decodeBase64Url, decryptRequestSchemaEnvelope, deriveRequestWriteKeys, encodeBase64Url, receiptBase64Url, receiptDisplay, sealRequestResponse } from "@kryptex/crypto";
 import { useClient } from "../client-context";
-import { checkedResponseExpiry, classifySubmitFailure, consumeBundle, exactEnvelopeForRetry, factorFromInput } from "../crypto-flow";
+import { checkedResponseExpiry, classifyReadFailure, classifySubmitFailure, consumeBundle, exactEnvelopeForRetry, factorFromInput } from "../crypto-flow";
 import type { FragmentCapture } from "../fragment";
 import { FactorInput, FieldHint, FragmentNotice, OperationNotice, PageIntro, StatusMessage, normalizedFactorInput, type OperationState } from "../ui";
 import { validateRequestAnswers } from "../validation";
@@ -32,7 +32,7 @@ export function WriterPage({ capture }: { readonly capture: FragmentCapture }) {
       const result = await decryptRequestSchemaEnvelope(response.bytes, keys.schemaKey, bundle.factorMode, bundle.recipientPublicKey, serverExpiresAt, Math.floor(Date.now() / 1_000));
       setOpened({ clientNotAfter: result.header.clientNotAfter, digest: result.header.schemaDigest, schema: result.payload, serverExpiresAt, writeToken: encodeBase64Url(keys.writeToken) });
       setState("done");
-    } catch { setState("unavailable"); }
+    } catch (error) { setState(classifyReadFailure(error)); }
   }
 
   async function submit(): Promise<void> {

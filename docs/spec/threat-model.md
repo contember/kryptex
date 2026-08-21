@@ -31,7 +31,7 @@ Kryptex transports short-lived secrets without exposing plaintext or decryption 
 | Obtains a basic recipient link | Can retrieve and decrypt the secret. Basic links are bearer credentials. |
 | Obtains only the link in split-key mode | Cannot authorize retrieval or decrypt content without the independent factor. |
 | Obtains only the independent factor | Has no locator and cannot identify or decrypt a resource. |
-| Obtains a passphrase-protected link | Can make rate-limited online guesses. If the attacker also obtains ciphertext, or Durable Object tags plus the Worker HMAC key, it can test guesses offline. Argon2id raises cost but weak passphrases remain weak. |
+| Obtains a passphrase-protected link | Can make online guesses serialized per resource with a backoff that reaches one hour, which bounds them to roughly 24 per day after warm-up. If the attacker also obtains ciphertext, or Durable Object tags plus the Worker HMAC key, it can test guesses offline. Argon2id raises cost but weak passphrases remain weak. |
 | Runs a link preview crawler | Can load the generic application shell but cannot consume a capability through GET. |
 | Sends concurrent retrievals | At most the configured number pass the Durable Object transaction. |
 | Controls the intended recipient | Can save, copy, photograph, or forward plaintext after release. Expiry is not DRM. |

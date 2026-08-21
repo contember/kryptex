@@ -7,7 +7,7 @@ import type { FragmentCapture } from "./fragment";
 import { isValidCrockfordFactor, normalizeCrockfordFactor, type PassphraseStrength } from "./validation";
 
 export type Protection = "second-key" | "link-only" | "passphrase";
-export type OperationState = "idle" | "working" | "waiting" | "unknown" | "unavailable" | "done";
+export type OperationState = "idle" | "working" | "waiting" | "unknown" | "unavailable" | "rate_limited" | "done";
 export type Tone = "quiet" | "success" | "warning" | "danger";
 
 export interface ShareArtifact {
@@ -279,6 +279,12 @@ export function OperationNotice({ state, retry }: { readonly state: OperationSta
     return <div className="operation-notice">
       <strong>Unavailable.</strong>
       <p>The link may be expired, already used, revoked, or incomplete. Kryptex cannot tell you which — that is deliberate.</p>
+    </div>;
+  }
+  if (state === "rate_limited") {
+    return <div className="operation-notice">
+      <strong>Too many attempts.</strong>
+      <p>Each wrong passphrase or second key delays the next try, and the delay grows with every failure — up to an hour. Wait, then try again with the exact value.</p>
     </div>;
   }
   return null;

@@ -158,6 +158,7 @@ export class SendDurableObject {
             authKeyId: this.#environment().activeCapabilityKeyId,
             cleanupFailureCount: 0,
             clientNotAfter: input.clientNotAfter,
+            factorMode: envelope.factorMode,
             generation: 1,
             kind: "send",
             manageTag,

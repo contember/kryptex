@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { RequestStatusResponse, SendStatusResponse, StateCheckedMetadata } from "@kryptex/contracts/api";
 import { ApiFailure } from "./api-client";
-import { checkedResponseExpiry, classifyConsumingFailure, classifySubmitFailure, createFactor, exactEnvelopeForRetry, factorFromInput, pickupRecoveryForStatus, reconcileRequestCreation, reconcileSendCreation, shortenedExpiryRequest } from "./crypto-flow";
+import { checkedResponseExpiry, classifyConsumingFailure, classifyReadFailure, classifySubmitFailure, createFactor, exactEnvelopeForRetry, factorFromInput, pickupRecoveryForStatus, reconcileRequestCreation, reconcileSendCreation, shortenedExpiryRequest } from "./crypto-flow";
 
 describe("factor helpers", () => {
   it("round-trips all three factor modes", async () => {
@@ -41,6 +41,10 @@ describe("safe controller decisions", () => {
     expect(classifyConsumingFailure(new Error("decrypt"), true)).toBe("unknown");
     expect(classifyConsumingFailure(new ApiFailure("network", true), false)).toBe("unknown");
     expect(classifyConsumingFailure(new ApiFailure("unavailable", false), false)).toBe("unavailable");
+    expect(classifyConsumingFailure(new ApiFailure("rate_limited", false), false)).toBe("rate_limited");
+    expect(classifyConsumingFailure(new ApiFailure("rate_limited", false), true)).toBe("unknown");
+    expect(classifyReadFailure(new ApiFailure("rate_limited", false))).toBe("rate_limited");
+    expect(classifyReadFailure(new Error("decrypt"))).toBe("unavailable");
     expect(classifySubmitFailure(new ApiFailure("unavailable", false))).toBe("unknown");
     expect(classifySubmitFailure(new ApiFailure("invalid_request", false))).toBe("unavailable");
     expect(pickupRecoveryForStatus("submitted")).toBe("retry");

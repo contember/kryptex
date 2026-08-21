@@ -6,7 +6,11 @@ import { finishAuthentication, reserveAuthentication } from "./auth.js";
 import { commitRequestPickup, commitRequestSubmission } from "./request-object.js";
 import { commitFinalSendRelease } from "./send-object.js";
 import {
+  AUTH_FAILURE_SATURATION,
   RECORD_KEY,
+  authDelayMs,
+  authKey,
+  type AuthLease,
   type CapabilitySnapshot,
   type ObjectMetadata,
   type PermitRecord,
@@ -39,6 +43,7 @@ describe("authorized final CAS transitions", () => {
         authKeyId: "dev-v1",
         cleanupFailureCount: 0,
         clientNotAfter: EXPIRES_AT,
+        factorMode: 0,
         generation: 1,
         kind: "send",
         manageTag: TAG,
@@ -67,6 +72,84 @@ describe("authorized final CAS transitions", () => {
     });
   });
 
+  test("caps the backoff curve at 30 seconds, or one hour where a passphrase can be guessed", () => {
+    expect(authDelayMs(1, false)).toBe(250);
+    expect(authDelayMs(1, true)).toBe(250);
+    expect(authDelayMs(8, false)).toBe(30_000);
+    expect(authDelayMs(8, true)).toBe(32_000);
+    expect(authDelayMs(AUTH_FAILURE_SATURATION, false)).toBe(30_000);
+    expect(authDelayMs(AUTH_FAILURE_SATURATION, true)).toBe(3_600_000);
+  });
+
+  test("applies the hour-long cap only to the passphrase-derived capability", async () => {
+    const stub = env.SEND_OBJECTS.getByName("auth-passphrase-backoff");
+    await runInDurableObject(stub, async (_instance, state) => {
+      const record: SendRecord = {
+        attemptId: "AAAAAAAAAAAAAAAAAAAAAA",
+        authKeyId: "dev-v1",
+        cleanupFailureCount: 0,
+        clientNotAfter: EXPIRES_AT,
+        factorMode: 1,
+        generation: 1,
+        kind: "send",
+        manageTag: TAG,
+        maxRetrievals: 1,
+        nextCleanupAt: null,
+        object: metadata("send-object", "send-digest"),
+        pendingKeys: [],
+        remainingRetrievals: 1,
+        retrieveTag: TAG,
+        serverExpiresAt: EXPIRES_AT,
+        state: "active"
+      };
+      await state.storage.put(RECORD_KEY, record);
+      const saturated: AuthLease = { attemptId: "", authBusyUntil: 0, failureCount: AUTH_FAILURE_SATURATION, nextAuthAt: 0 };
+      await state.storage.put(authKey(1), saturated);
+      await state.storage.put(authKey(2), saturated);
+
+      const retrieve = reserveAuthentication(state.storage, 1, "dev-v1", "retrieve-attempt", () => NOW_MS);
+      if (retrieve.kind !== "reserved") throw new Error("Retrieve authentication was not reserved");
+      expect(finishAuthentication(state.storage, 1, retrieve.reservation, false, () => NOW_MS).kind).toBe("unavailable");
+      expect((await state.storage.get<AuthLease>(authKey(1)))?.nextAuthAt).toBe(NOW_MS + 3_600_000);
+
+      const manage = reserveAuthentication(state.storage, 2, "dev-v1", "manage-attempt", () => NOW_MS);
+      if (manage.kind !== "reserved") throw new Error("Manage authentication was not reserved");
+      expect(finishAuthentication(state.storage, 2, manage.reservation, false, () => NOW_MS).kind).toBe("unavailable");
+      expect((await state.storage.get<AuthLease>(authKey(2)))?.nextAuthAt).toBe(NOW_MS + 30_000);
+    });
+  });
+
+  test("keeps the short cap for a retrieve token that carries a random second key", async () => {
+    const stub = env.SEND_OBJECTS.getByName("auth-random-factor-backoff");
+    await runInDurableObject(stub, async (_instance, state) => {
+      const record: SendRecord = {
+        attemptId: "AAAAAAAAAAAAAAAAAAAAAA",
+        authKeyId: "dev-v1",
+        cleanupFailureCount: 0,
+        clientNotAfter: EXPIRES_AT,
+        factorMode: 2,
+        generation: 1,
+        kind: "send",
+        manageTag: TAG,
+        maxRetrievals: 1,
+        nextCleanupAt: null,
+        object: metadata("send-object", "send-digest"),
+        pendingKeys: [],
+        remainingRetrievals: 1,
+        retrieveTag: TAG,
+        serverExpiresAt: EXPIRES_AT,
+        state: "active"
+      };
+      await state.storage.put(RECORD_KEY, record);
+      await state.storage.put<AuthLease>(authKey(1), { attemptId: "", authBusyUntil: 0, failureCount: AUTH_FAILURE_SATURATION, nextAuthAt: 0 });
+
+      const retrieve = reserveAuthentication(state.storage, 1, "dev-v1", "retrieve-attempt", () => NOW_MS);
+      if (retrieve.kind !== "reserved") throw new Error("Retrieve authentication was not reserved");
+      expect(finishAuthentication(state.storage, 1, retrieve.reservation, false, () => NOW_MS).kind).toBe("unavailable");
+      expect((await state.storage.get<AuthLease>(authKey(1)))?.nextAuthAt).toBe(NOW_MS + 30_000);
+    });
+  });
+
   test("commits exactly one final send release after two callers already authorized", async () => {
     const stub = env.SEND_OBJECTS.getByName("cas-final-send");
     await runInDurableObject(stub, async (_instance, state) => {
@@ -76,6 +159,7 @@ describe("authorized final CAS transitions", () => {
         authKeyId: "dev-v1",
         cleanupFailureCount: 0,
         clientNotAfter: EXPIRES_AT,
+        factorMode: 0,
         generation: 1,
         kind: "send",
         manageTag: TAG,
@@ -110,6 +194,7 @@ describe("authorized final CAS transitions", () => {
         authKeyId: "dev-v1",
         cleanupFailureCount: 0,
         clientNotAfter: EXPIRES_AT,
+        factorMode: 0,
         generation: 1,
         kind: "request",
         nextCleanupAt: null,
@@ -148,6 +233,7 @@ describe("authorized final CAS transitions", () => {
         authKeyId: "dev-v1",
         cleanupFailureCount: 0,
         clientNotAfter: EXPIRES_AT,
+        factorMode: 0,
         generation: 2,
         kind: "request",
         nextCleanupAt: null,
