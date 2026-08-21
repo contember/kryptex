@@ -10,7 +10,8 @@ function validEnvironment(): WorkerSecurityEnvironment {
     CAPABILITY_ACTIVE_KEY_ID: "dev-v1",
     CAPABILITY_HMAC_KEYRING: `{"dev-v1":"${key}"}`,
     EXPECTED_ORIGIN: "https://secrets.example",
-    PERMIT_ISSUANCE_KEY: key,
+    PERMIT_ISSUANCE_ACTIVE_KEY_ID: "dev-v1",
+    PERMIT_ISSUANCE_KEYRING: `{"dev-v1":"${key}"}`,
     RATE_LIMIT_KEY: key,
     TURNSTILE_EXPECTED_ACTION: "create_permit",
     TURNSTILE_EXPECTED_HOSTNAME: "secrets.example",
@@ -32,7 +33,9 @@ describe("Worker environment validation", () => {
     const checked = checkWorkerEnvironment(validEnvironment());
     expect(checked.activeCapabilityKeyId).toBe("dev-v1");
     expect(checked.activeCapabilityKey).toHaveLength(32);
-    expect(checked.permitIssuanceKey).toHaveLength(32);
+    expect(checked.activePermitIssuanceKeyId).toBe("dev-v1");
+    expect(checked.activePermitIssuanceKey).toHaveLength(32);
+    expect(checked.permitIssuanceKeys.get("dev-v1")).toHaveLength(32);
     expect(checked.rateLimitKey).toHaveLength(32);
   });
 
@@ -41,6 +44,12 @@ describe("Worker environment validation", () => {
       checkWorkerEnvironment({
         ...validEnvironment(),
         CAPABILITY_ACTIVE_KEY_ID: "missing"
+      })
+    ).toThrow();
+    expect(() =>
+      checkWorkerEnvironment({
+        ...validEnvironment(),
+        PERMIT_ISSUANCE_ACTIVE_KEY_ID: "missing"
       })
     ).toThrow();
     expect(() =>
@@ -64,5 +73,16 @@ describe("Worker environment validation", () => {
         EXPECTED_ORIGIN: "https://secrets.example/path"
       })
     ).toThrow();
+    expect(() =>
+      checkWorkerEnvironment({
+        ...validEnvironment(),
+        EXPECTED_ORIGIN: "http://secrets.example"
+      })
+    ).toThrow(/HTTPS/u);
+    expect(checkWorkerEnvironment({
+      ...validEnvironment(),
+      EXPECTED_ORIGIN: "http://localhost:5173",
+      TURNSTILE_EXPECTED_HOSTNAME: "localhost"
+    }).expectedOrigin).toBe("http://localhost:5173");
   });
 });

@@ -3,7 +3,7 @@ import { capabilityTag, CREATE_PERMIT_V2_TTL_SECONDS, unixSeconds } from "./core
 import { checkWorkerEnvironment, type CheckedWorkerEnvironment, type WorkerEnv } from "./env.js";
 import { apiError, jsonResponse, rateLimited } from "./http.js";
 import { decodeCanonicalBase64Url, exactObject, integerProperty, parseJson, stringProperty } from "./strict.js";
-import { RECORD_KEY, type CapabilitySnapshot, type PermitRecord } from "./state.js";
+import { RECORD_KEY, type CapabilitySnapshot, type PermitIssuanceRecord, type PermitRecord } from "./state.js";
 
 interface PermitInput {
   readonly locator: string;
@@ -12,6 +12,11 @@ interface PermitInput {
 
 interface PermitInitializationInput extends PermitInput {
   readonly permitExpiresAt: number;
+}
+
+interface PermitIssuanceInput {
+  readonly keyId: string;
+  readonly retainUntil: number;
 }
 
 export function commitPermitOperation(
@@ -63,6 +68,18 @@ function parsePermitInitializationInput(text: string): PermitInitializationInput
   };
 }
 
+function parsePermitIssuanceInput(text: string): PermitIssuanceInput {
+  const object = exactObject(parseJson(text), ["keyId", "retainUntil"], "permit issuance key selection");
+  const keyId = stringProperty(object, "keyId", "permit issuance key selection");
+  if (!/^[A-Za-z0-9._-]{1,64}$/.test(keyId)) {
+    throw new Error("permit issuance key ID is invalid");
+  }
+  return {
+    keyId,
+    retainUntil: integerProperty(object, "retainUntil", "permit issuance key selection")
+  };
+}
+
 export class CreatePermitDurableObject {
   readonly #context: DurableObjectState;
   readonly #rawEnvironment: WorkerEnv;
@@ -81,6 +98,9 @@ export class CreatePermitDurableObject {
   async fetch(request: Request): Promise<Response> {
     const pathname = new URL(request.url).pathname;
     const text = await request.text();
+    if (pathname === "/resolve-issuance-key") {
+      return this.#resolveIssuanceKey(parsePermitIssuanceInput(text));
+    }
     if (pathname === "/init") {
       return this.#initialize(parsePermitInitializationInput(text));
     }
@@ -132,6 +152,31 @@ export class CreatePermitDurableObject {
       return apiError("creation_permit_required", 403);
     }
     return jsonResponse({ permitExpiresAt: result.expiresAt, serverTime: unixSeconds() });
+  }
+
+  async #resolveIssuanceKey(input: PermitIssuanceInput): Promise<Response> {
+    const result = await this.#context.storage.transaction(async (transaction) => {
+      const now = unixSeconds();
+      const current = await transaction.get<PermitIssuanceRecord | PermitRecord>(RECORD_KEY);
+      if (current?.kind === "permit_issuance" && current.retainUntil > now) {
+        return current.keyId;
+      }
+      if (current !== undefined && current.kind !== "permit_issuance") {
+        return null;
+      }
+      if (input.retainUntil <= now || input.retainUntil > now + CREATE_PERMIT_V2_TTL_SECONDS) {
+        return null;
+      }
+      const record: PermitIssuanceRecord = {
+        keyId: input.keyId,
+        kind: "permit_issuance",
+        retainUntil: input.retainUntil
+      };
+      await transaction.put(RECORD_KEY, record);
+      await transaction.setAlarm(record.retainUntil * 1_000);
+      return record.keyId;
+    });
+    return result === null ? apiError("internal_error", 500) : jsonResponse({ keyId: result });
   }
 
   async #operate(input: PermitInput, consume: boolean): Promise<Response> {

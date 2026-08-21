@@ -441,7 +441,32 @@ async function handleCreatePermit(
   if (gate.kind === "unavailable") {
     return { response: apiError("gate_unavailable", 503) };
   }
-  const material = await derivePermitMaterial(checked.permitIssuanceKey, decodeUuid(input.requestId));
+  const selection = await invokeWithRetry(
+    stubFor(environment.CREATE_PERMIT_OBJECTS, `issuance:${input.requestId}`),
+    "resolve-issuance-key",
+    { keyId: checked.activePermitIssuanceKeyId, retainUntil: gate.permitExpiresAt }
+  );
+  if (!selection.ok) {
+    return { response: apiError("gate_unavailable", 503) };
+  }
+  let issuanceKey: Uint8Array | undefined;
+  try {
+    const value = parseJson(await selection.text());
+    if (typeof value !== "object" || value === null || Array.isArray(value)) {
+      return { response: apiError("gate_unavailable", 503) };
+    }
+    const keyId = property(value, "keyId", "permit issuance key selection");
+    if (typeof keyId !== "string") {
+      return { response: apiError("gate_unavailable", 503) };
+    }
+    issuanceKey = checked.permitIssuanceKeys.get(keyId);
+  } catch {
+    return { response: apiError("gate_unavailable", 503) };
+  }
+  if (issuanceKey === undefined) {
+    return { response: apiError("gate_unavailable", 503) };
+  }
+  const material = await derivePermitMaterial(issuanceKey, decodeUuid(input.requestId));
   const body = {
     locator: encodeBase64Url(material.locator),
     permitExpiresAt: gate.permitExpiresAt,
@@ -598,6 +623,9 @@ export async function handleApiRequest(
     return finalizeApiResponse(apiError("internal_error", 500), environment.EXPECTED_ORIGIN);
   }
   const requestUrl = new URL(request.url);
+  if (requestUrl.search !== "") {
+    return finalizeApiResponse(apiError("invalid_request", 400), checked.expectedOrigin);
+  }
   if (checked.localTurnstileDummy && requestUrl.origin !== checked.expectedOrigin) {
     return finalizeApiResponse(apiError("forbidden", 403), checked.expectedOrigin);
   }

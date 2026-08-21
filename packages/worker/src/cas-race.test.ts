@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "vitest";
 import { env } from "cloudflare:workers";
 import { reset, runInDurableObject } from "cloudflare:test";
 import { commitPermitOperation } from "./permit-object.js";
+import { finishAuthentication, reserveAuthentication } from "./auth.js";
 import { commitRequestPickup, commitRequestSubmission } from "./request-object.js";
 import { commitFinalSendRelease } from "./send-object.js";
 import {
@@ -30,6 +31,42 @@ function snapshot(generation: number): CapabilitySnapshot {
 }
 
 describe("authorized final CAS transitions", () => {
+  test("keeps authentication backoff isolated by capability kind", async () => {
+    const stub = env.SEND_OBJECTS.getByName("auth-kind-isolation");
+    await runInDurableObject(stub, async (_instance, state) => {
+      const record: SendRecord = {
+        attemptId: "AAAAAAAAAAAAAAAAAAAAAA",
+        authKeyId: "dev-v1",
+        cleanupFailureCount: 0,
+        clientNotAfter: EXPIRES_AT,
+        generation: 1,
+        kind: "send",
+        manageTag: TAG,
+        maxRetrievals: 1,
+        nextCleanupAt: null,
+        object: metadata("send-object", "send-digest"),
+        pendingKeys: [],
+        remainingRetrievals: 1,
+        retrieveTag: TAG,
+        serverExpiresAt: EXPIRES_AT,
+        state: "active"
+      };
+      await state.storage.put(RECORD_KEY, record);
+
+      const retrieve = reserveAuthentication(state.storage, 1, "dev-v1", "retrieve-attempt", () => NOW_MS);
+      expect(retrieve.kind).toBe("reserved");
+      if (retrieve.kind !== "reserved") throw new Error("Retrieve authentication was not reserved");
+      expect(finishAuthentication(state.storage, 1, retrieve.reservation, false, () => NOW_MS).kind).toBe("unavailable");
+
+      const manage = reserveAuthentication(state.storage, 2, "dev-v1", "manage-attempt", () => NOW_MS);
+      expect(manage.kind).toBe("reserved");
+      if (manage.kind !== "reserved") throw new Error("Manage authentication was not reserved");
+      expect(finishAuthentication(state.storage, 2, manage.reservation, true, () => NOW_MS).kind).toBe("authorized");
+
+      expect(reserveAuthentication(state.storage, 1, "dev-v1", "retrieve-retry", () => NOW_MS + 1).kind).toBe("rate_limited");
+    });
+  });
+
   test("commits exactly one final send release after two callers already authorized", async () => {
     const stub = env.SEND_OBJECTS.getByName("cas-final-send");
     await runInDurableObject(stub, async (_instance, state) => {

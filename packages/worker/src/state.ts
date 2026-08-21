@@ -55,6 +55,12 @@ export interface PermitRecord {
   readonly tag: string;
 }
 
+export interface PermitIssuanceRecord {
+  readonly keyId: string;
+  readonly kind: "permit_issuance";
+  readonly retainUntil: number;
+}
+
 export interface CapabilitySnapshot {
   readonly generation: number;
   readonly keyId: string;
@@ -67,7 +73,9 @@ export type AuthResult =
   | { readonly kind: "unavailable"; readonly stateCheckedAt: number };
 
 export const RECORD_KEY = "record";
-export const AUTH_KEY = "auth";
+export function authKey(capabilityKind: 1 | 2 | 3): string {
+  return `auth:${capabilityKind}`;
+}
 
 export function cleanupDelayMs(failureCount: number): number {
   return Math.min(2_000 * 2 ** Math.max(0, failureCount - 1), 300_000);

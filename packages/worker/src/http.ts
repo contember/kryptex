@@ -31,6 +31,7 @@ export function finalizeApiResponse(response: Response, origin: string, setCooki
   const headers = new Headers(response.headers);
   headers.set("Cache-Control", "no-store");
   headers.set("Referrer-Policy", "no-referrer");
+  headers.set("Strict-Transport-Security", "max-age=63072000; includeSubDomains");
   headers.set("X-Content-Type-Options", "nosniff");
   headers.set("Kryptex-Server-Time", String(unixSeconds()));
   headers.set("Access-Control-Allow-Origin", origin);
@@ -59,7 +60,7 @@ const APPLICATION_CSP = [
   "img-src 'self' data:",
   "object-src 'none'",
   "require-trusted-types-for 'script'",
-  "script-src 'self'",
+  "script-src 'self' 'wasm-unsafe-eval'",
   "style-src 'self'",
   "trusted-types kryptex",
   "worker-src 'none'"
@@ -85,8 +86,14 @@ export function secureAssetResponse(response: Response, gate: boolean): Response
   headers.set("Content-Security-Policy", gate ? GATE_CSP : APPLICATION_CSP);
   headers.set("Cross-Origin-Opener-Policy", "same-origin");
   headers.set("Cross-Origin-Resource-Policy", "same-origin");
-  headers.set("Permissions-Policy", "camera=(), geolocation=(), microphone=(), payment=(), usb=(), clipboard-read=(self), clipboard-write=(self)");
+  headers.set(
+    "Permissions-Policy",
+    gate
+      ? "camera=(), geolocation=(), microphone=(), payment=(), usb=(), clipboard-read=(), clipboard-write=()"
+      : "camera=(), geolocation=(), microphone=(), payment=(), usb=(), clipboard-read=(), clipboard-write=(self)"
+  );
   headers.set("Referrer-Policy", "no-referrer");
+  headers.set("Strict-Transport-Security", "max-age=63072000; includeSubDomains");
   headers.set("X-Content-Type-Options", "nosniff");
   headers.set("X-Frame-Options", "DENY");
   return new Response(response.body, {

@@ -2,5 +2,5 @@
 # Never use Cloudflare's dummy Turnstile secret in production.
 TURNSTILE_SECRET_KEY="1x0000000000000000000000000000000AA"
 CAPABILITY_HMAC_KEYRING='{"dev-v1":"replace-with-32-byte-base64url-key"}'
-PERMIT_ISSUANCE_KEY="replace-with-32-byte-base64url-key"
+PERMIT_ISSUANCE_KEYRING='{"dev-v1":"replace-with-32-byte-base64url-key"}'
 RATE_LIMIT_KEY="replace-with-32-byte-base64url-key"

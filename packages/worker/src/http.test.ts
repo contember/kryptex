@@ -30,7 +30,11 @@ describe("asset security policies", () => {
     expect(response.headers.get("Content-Type")).toBe("text/plain");
     expect(response.headers.get("ETag")).toBe("test-tag");
     expect(response.headers.get("Content-Security-Policy")).toContain("require-trusted-types-for 'script'");
+    expect(response.headers.get("Content-Security-Policy")).toContain("script-src 'self' 'wasm-unsafe-eval'");
     expect(response.headers.get("Content-Security-Policy")).not.toContain("challenges.cloudflare.com");
+    expect(response.headers.get("Permissions-Policy")).toContain("clipboard-read=()");
+    expect(response.headers.get("Permissions-Policy")).toContain("clipboard-write=(self)");
+    expect(response.headers.get("Strict-Transport-Security")).toBe("max-age=63072000; includeSubDomains");
     expect(response.headers.get("X-Frame-Options")).toBe("DENY");
     expect(response.headers.get("Referrer-Policy")).toBe("no-referrer");
   });
@@ -41,5 +45,7 @@ describe("asset security policies", () => {
     expect(policy).toContain("script-src 'self' https://challenges.cloudflare.com");
     expect(policy).toContain("frame-src https://challenges.cloudflare.com");
     expect(policy).not.toContain("require-trusted-types-for 'script'");
+    expect(response.headers.get("Permissions-Policy")).toContain("clipboard-read=()");
+    expect(response.headers.get("Permissions-Policy")).toContain("clipboard-write=()");
   });
 });

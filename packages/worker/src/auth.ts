@@ -1,8 +1,8 @@
 import { decodeCanonicalBase64Url } from "./strict.js";
 import {
-  AUTH_KEY,
   RECORD_KEY,
   authDelayMs,
+  authKey,
   type AuthLease,
   type AuthResult,
   type CapabilitySnapshot,
@@ -113,12 +113,13 @@ export function reserveAuthentication(
 ): ReservationResult {
   return storage.transactionSync<ReservationResult>(() => {
     const nowMs = clock();
-    const lease = storage.kv.get<AuthLease>(AUTH_KEY);
+    const key = authKey(capabilityKind);
+    const lease = storage.kv.get<AuthLease>(key);
     if (lease !== undefined && (lease.authBusyUntil > nowMs || lease.nextAuthAt > nowMs)) {
       return { kind: "rate_limited" };
     }
     const failureCount = lease?.failureCount ?? 0;
-    storage.kv.put<AuthLease>(AUTH_KEY, {
+    storage.kv.put<AuthLease>(key, {
       attemptId,
       authBusyUntil: nowMs + 5_000,
       failureCount,
@@ -144,7 +145,8 @@ export function finishAuthentication(
   clock: () => number
 ): AuthResult {
   return storage.transactionSync<AuthResult>(() => {
-    const lease = storage.kv.get<AuthLease>(AUTH_KEY);
+    const key = authKey(capabilityKind);
+    const lease = storage.kv.get<AuthLease>(key);
     if (lease?.attemptId !== reservation.attemptId) {
       return { kind: "unavailable", stateCheckedAt: reservation.stateCheckedAt };
     }
@@ -156,18 +158,19 @@ export function finishAuthentication(
       tag === reservation.snapshot.tag;
     if (!verified || !snapshotStillMatches) {
       const failureCount = Math.min(lease.failureCount + 1, 8);
-      storage.kv.put<AuthLease>(AUTH_KEY, {
+      const nowMs = clock();
+      storage.kv.put<AuthLease>(key, {
         attemptId: "",
         authBusyUntil: 0,
         failureCount,
-        nextAuthAt: Date.now() + authDelayMs(failureCount)
+        nextAuthAt: nowMs + authDelayMs(failureCount)
       });
       return {
         kind: "unavailable",
-        stateCheckedAt: reservation.snapshot.generation === -1 ? reservation.stateCheckedAt : unixSeconds(clock())
+        stateCheckedAt: reservation.snapshot.generation === -1 ? reservation.stateCheckedAt : unixSeconds(nowMs)
       };
     }
-    storage.kv.put<AuthLease>(AUTH_KEY, {
+    storage.kv.put<AuthLease>(key, {
       attemptId: "",
       authBusyUntil: 0,
       failureCount: 0,

@@ -409,6 +409,17 @@ describe("public request rejection", () => {
     expect(response.headers.get("Kryptex-Server-Time")).toMatch(/^[0-9]+$/u);
     expect(response.headers.get("Referrer-Policy")).toBe("no-referrer");
     expect(response.headers.get("X-Content-Type-Options")).toBe("nosniff");
+    expect(response.headers.get("Strict-Transport-Security")).toBe("max-age=63072000; includeSubDomains");
+  });
+
+  test("rejects API query strings before parsing the request body", async () => {
+    const response = await exports.default.fetch(new Request(`${ORIGIN}/api/v1/sends/retrieve?capability=must-not-be-accepted`, {
+      body: "not-json",
+      headers: { "Content-Type": "application/json", Origin: ORIGIN },
+      method: "POST"
+    }));
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: "invalid_request" });
   });
 
   test("rejects an untrusted origin and an invalid permit cookie with fixed errors", async () => {

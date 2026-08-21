@@ -16,7 +16,8 @@ function checkedEnvironment() {
     CAPABILITY_ACTIVE_KEY_ID: "dev-v1",
     CAPABILITY_HMAC_KEYRING: `{"dev-v1":"${key}"}`,
     EXPECTED_ORIGIN: "https://secrets.example",
-    PERMIT_ISSUANCE_KEY: key,
+    PERMIT_ISSUANCE_ACTIVE_KEY_ID: "dev-v1",
+    PERMIT_ISSUANCE_KEYRING: `{"dev-v1":"${key}"}`,
     RATE_LIMIT_KEY: key,
     TURNSTILE_EXPECTED_ACTION: "create_permit",
     TURNSTILE_EXPECTED_HOSTNAME: "secrets.example",
@@ -30,7 +31,8 @@ function localCheckedEnvironment() {
     CAPABILITY_ACTIVE_KEY_ID: "dev-v1",
     CAPABILITY_HMAC_KEYRING: `{"dev-v1":"${key}"}`,
     EXPECTED_ORIGIN: ORIGIN,
-    PERMIT_ISSUANCE_KEY: key,
+    PERMIT_ISSUANCE_ACTIVE_KEY_ID: "dev-v1",
+    PERMIT_ISSUANCE_KEYRING: `{"dev-v1":"${key}"}`,
     RATE_LIMIT_KEY: key,
     TURNSTILE_EXPECTED_ACTION: "create_permit",
     TURNSTILE_EXPECTED_HOSTNAME: "localhost",
@@ -48,7 +50,8 @@ function workerEnvironment(): WorkerEnv {
     EDGE_RATE_LIMITER: env.EDGE_RATE_LIMITER,
     EXPECTED_ORIGIN: env.EXPECTED_ORIGIN,
     LOCATOR_RATE_LIMITER: env.LOCATOR_RATE_LIMITER,
-    PERMIT_ISSUANCE_KEY: key,
+    PERMIT_ISSUANCE_ACTIVE_KEY_ID: "dev-v1",
+    PERMIT_ISSUANCE_KEYRING: `{"dev-v1":"${key}"}`,
     RATE_LIMIT_KEY: key,
     REQUEST_OBJECTS: env.REQUEST_OBJECTS,
     SEND_OBJECTS: env.SEND_OBJECTS,
@@ -126,7 +129,8 @@ describe("Turnstile Siteverify", () => {
       CAPABILITY_ACTIVE_KEY_ID: "dev-v1",
       CAPABILITY_HMAC_KEYRING: `{"dev-v1":"${key}"}`,
       EXPECTED_ORIGIN: "https://secrets.example",
-      PERMIT_ISSUANCE_KEY: key,
+      PERMIT_ISSUANCE_ACTIVE_KEY_ID: "dev-v1",
+      PERMIT_ISSUANCE_KEYRING: `{"dev-v1":"${key}"}`,
       RATE_LIMIT_KEY: key,
       TURNSTILE_EXPECTED_ACTION: "create_permit",
       TURNSTILE_EXPECTED_HOSTNAME: "secrets.example",
@@ -188,6 +192,37 @@ describe("Turnstile Siteverify", () => {
     expect(second.status).toBe(200);
     expect(second.headers.get("Set-Cookie")).toBe(first.headers.get("Set-Cookie"));
     expect(await second.json()).toEqual(await first.json());
+  });
+
+  test("keeps permit derivation stable across issuance-key rotation", async () => {
+    const requestId = "00000000-0000-4000-8000-000000000014";
+    const nextKey = "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE";
+    const createRequest = () => new Request(`${ORIGIN}/api/v2/create-permits`, {
+      body: JSON.stringify({ requestId, turnstileResponse: "turnstile-response" }),
+      headers: { "Content-Type": "application/json", Origin: ORIGIN, "Sec-Fetch-Site": "same-origin" },
+      method: "POST"
+    });
+    const siteverifyFetch: typeof fetch = () => Promise.resolve(Response.json({
+      action: "create_permit",
+      challenge_ts: new Date().toISOString(),
+      hostname: "localhost",
+      success: true
+    }));
+    const keyring = `{"dev-v1":"${key}","dev-v2":"${nextKey}"}`;
+    const initial = await handleApiRequest(createRequest(), {
+      ...workerEnvironment(),
+      PERMIT_ISSUANCE_KEYRING: keyring
+    }, siteverifyFetch);
+    const rotated = await handleApiRequest(createRequest(), {
+      ...workerEnvironment(),
+      PERMIT_ISSUANCE_ACTIVE_KEY_ID: "dev-v2",
+      PERMIT_ISSUANCE_KEYRING: keyring
+    }, siteverifyFetch);
+
+    expect(initial.status).toBe(200);
+    expect(rotated.status).toBe(200);
+    expect(rotated.headers.get("Set-Cookie")).toBe(initial.headers.get("Set-Cookie"));
+    expect(await rotated.json()).toEqual(await initial.json());
   });
 
   test("maps public Siteverify mismatch and outage without leaking upstream details", async () => {
