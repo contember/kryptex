@@ -1,0 +1,13 @@
+{
+  "name": "@kryptex/infrastructure",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run --config vitest.config.ts",
+    "typecheck": "tsc -b"
+  },
+  "dependencies": {
+    "@kryptex/contracts": "workspace:*"
+  }
+}

@@ -16,6 +16,14 @@
     "CAPABILITY_ACTIVE_KEY_ID": "dev-v1",
     "PERMIT_ISSUANCE_ACTIVE_KEY_ID": "dev-v1"
   },
+  "secrets": {
+    "required": [
+      "CAPABILITY_HMAC_KEYRING",
+      "PERMIT_ISSUANCE_KEYRING",
+      "RATE_LIMIT_KEY",
+      "TURNSTILE_SECRET_KEY"
+    ]
+  },
   "durable_objects": {
     "bindings": [
       { "name": "SEND_OBJECTS", "class_name": "SendDurableObject" },

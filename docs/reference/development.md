@@ -102,7 +102,7 @@ cpu-lease run -n 4 -- bun run build
 
 ## Production prerequisites
 
-The repository intentionally has no deploy workflow and no production deploy script. Do not deploy manually. A future CI deployment must provide all of the following before its deploy step:
+Production deployment runs only through the repository's GitHub Actions workflow. Do not deploy manually. The protected `production` GitHub Environment must provide all of the following:
 
 - a real Turnstile sitekey and secret for the production hostname, with the expected action `create_permit`;
 - the exact production `EXPECTED_ORIGIN` and `TURNSTILE_EXPECTED_HOSTNAME`;
@@ -110,6 +110,7 @@ The repository intentionally has no deploy workflow and no production deploy scr
 - an issuance-key rotation policy that retains prior keys for at least 30 minutes;
 - the private `kryptex-ciphertext` R2 bucket with public development URLs and custom domains disabled;
 - the 31-day `v1/candidates/` lifecycle backstop; and
-- a successful `bun run infra:predeploy:verify` CI gate.
+- Cloudflare account and API-token credentials; and
+- a Worker URL or a separately configured Worker custom domain that exactly matches the expected origin.
 
-The lifecycle apply order, privacy checks, and gate behavior are documented in [R2 candidate lifecycle backstop](./r2-lifecycle.md). Durable Object alarms delete active or terminal ciphertext earlier; the lifecycle rule only removes orphaned candidates.
+The complete environment contract and pipeline behavior are documented in [Production deployment](./deployment.md). The lifecycle reconciliation and privacy checks are documented in [R2 candidate lifecycle backstop](./r2-lifecycle.md). Durable Object alarms delete active or terminal ciphertext earlier; the lifecycle rule only removes orphaned candidates.

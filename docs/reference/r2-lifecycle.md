@@ -16,24 +16,30 @@ Cloudflare manages lifecycle rules as bucket-level configuration. The Worker `wr
 
 ## CI provisioning order
 
-Run these steps after creating the bucket and before the first Worker deployment:
+The production workflow runs these steps before every Worker deployment:
 
-1. Apply the rule once:
+1. Reconcile the bucket and managed lifecycle rule:
 
    ```sh
-   bun run infra:r2-lifecycle:apply
+   bun run infra:r2:reconcile
    ```
 
-2. Run the predeploy gate. It prints the full Wrangler output and fails unless one lifecycle record contains the expected enabled rule, prefix, and 31-day expiration. It also fails unless the `r2.dev` URL is disabled and the bucket has no custom domains:
+   The command creates the bucket if it is absent. It reads the complete lifecycle configuration, preserves unrelated rules, replaces every stale copy of the managed rule with one exact rule, and verifies the result after the write.
+
+2. Run the independent predeploy gate:
 
    ```sh
    bun run infra:predeploy:verify
    ```
 
-3. Deploy the Worker through the normal CI deployment job only after verification passes.
+   The gate fails unless exactly one managed rule is enabled with the expected prefix and 31-day expiration. It also fails unless the `r2.dev` URL is disabled and the bucket has no custom domains.
 
-The repository intentionally has no deployment workflow or deployment script yet. UI and API integration is incomplete, and the deployment architecture has not been authorized. Nothing can deploy through CI until a future workflow explicitly calls `infra:predeploy:verify` as a required gate before its deploy step.
+3. Deploy the Worker only after both commands pass.
 
-The apply and verification commands use exactly `wrangler@4.124.0` and the bucket name already declared in `packages/worker/wrangler.jsonc`. Apply passes `--force` for noninteractive CI execution. CI authentication needs R2 Storage Write permission. Do not run the apply command as part of every deployment: `wrangler r2 bucket lifecycle add` appends a rule. For an existing bucket, verify first and reconcile a missing or mismatched rule deliberately so that unrelated bucket rules are not replaced.
+Both commands use the authenticated Cloudflare API and the bucket name declared in `packages/worker/wrangler.jsonc`. They require `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, and R2 read/write permission. The reconciler sends one bucket-level lifecycle update only when the managed rule differs. It never appends duplicate rules.
+
+Any other enabled delete rule whose prefix contains or is contained by `v1/candidates/` is a conflict. Reconciliation stops without writing. Public `r2.dev` access or an R2 custom domain also stops deployment; the command reports the drift but does not remove it automatically.
+
+The complete CI setup is documented in [Production deployment](./deployment.md).
 
 Cloudflare notes that lifecycle deletion usually occurs within 24 hours after an object reaches its expiration threshold. The rule therefore must not be used for authorization, protocol expiry, or timely ciphertext deletion.

@@ -52,6 +52,13 @@
         "@kryptex/contracts": "workspace:*",
       },
     },
+    "tools/infrastructure": {
+      "name": "@kryptex/infrastructure",
+      "version": "0.0.0",
+      "dependencies": {
+        "@kryptex/contracts": "workspace:*",
+      },
+    },
     "tools/vectors": {
       "name": "@kryptex/protocol-vectors",
       "dependencies": {
@@ -266,6 +273,8 @@
     "@kryptex/contracts": ["@kryptex/contracts@workspace:packages/contracts"],
 
     "@kryptex/crypto": ["@kryptex/crypto@workspace:packages/crypto"],
+
+    "@kryptex/infrastructure": ["@kryptex/infrastructure@workspace:tools/infrastructure"],
 
     "@kryptex/protocol-vectors": ["@kryptex/protocol-vectors@workspace:tools/vectors"],
 

@@ -149,11 +149,11 @@ describe("resource lifetimes", () => {
   });
 
   test("keeps the R2 orphan backstop above the longest lifetime", () => {
-    const script = readFileSync(fileURLToPath(new URL("../../../tools/infrastructure/r2-lifecycle.sh", import.meta.url)), "utf8");
-    const expireDays = Number(/readonly EXPIRE_DAYS="(\d+)"/u.exec(script)?.[1]);
+    const policy = readFileSync(fileURLToPath(new URL("../../../tools/infrastructure/r2-policy.ts", import.meta.url)), "utf8");
+    const expireDays = Number(/export const CANDIDATE_MAX_AGE_DAYS = (\d+);/u.exec(policy)?.[1]);
     const maximumTtlDays = Math.max(...ALLOWED_TTL_SECONDS) / 86_400;
     // Committed ciphertext keeps its v1/candidates/ key, so a shorter rule would delete live objects.
     expect(expireDays).toBeGreaterThan(maximumTtlDays);
-    expect(script).toContain(`Expire objects after ${expireDays} days`);
+    expect(policy).toContain("CANDIDATE_MAX_AGE_SECONDS = CANDIDATE_MAX_AGE_DAYS * 24 * 60 * 60");
   });
 });
