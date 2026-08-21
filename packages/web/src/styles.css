@@ -259,6 +259,16 @@ input[type="radio"], input[type="checkbox"] { flex: 0 0 auto; width: 18px; heigh
 .info-section { margin: 32px 0; padding-top: 16px; border-top: 1px solid var(--rule-strong); }
 .info-section p { margin-bottom: 0; color: var(--secondary); }
 
+.tech-spec { margin-top: 48px; }
+.tech-spec__head { padding-top: 16px; border-top: 1px solid var(--rule-strong); }
+.tech-spec__head p { color: var(--secondary); }
+.tech-spec .info-section { margin: 24px 0; border-top-color: var(--rule); }
+.tech-spec .info-section h2 { font-size: 1rem; }
+.tech-spec ul { margin: 0 0 12px; padding-left: 18px; display: grid; gap: 8px; color: var(--secondary); }
+.tech-spec ul ul { margin: 6px 0 0; gap: 4px; }
+.tech-spec li { font-size: 0.95rem; }
+.tech-spec code { padding: 1px 4px; border-radius: 3px; background: var(--inset); color: var(--ink); font-family: var(--mono); font-size: 0.85em; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+
 .confirm-dialog { width: min(480px, calc(100% - 32px)); padding: 24px; border: 1px solid var(--rule-strong); border-radius: 12px; background: var(--raised); color: var(--ink); }
 .confirm-dialog::backdrop { background: rgb(12 16 15 / 65%); }
 .confirm-dialog h2 { margin-bottom: 8px; }
