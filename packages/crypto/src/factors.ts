@@ -26,8 +26,9 @@ async function instantiateArgon2(
   return { instance, module };
 }
 
+/** 128 random bits: short enough to dictate, far beyond brute force. `deriveRandomFactor` expands it to the 32-byte factor. */
 export function encodeRandomFactor(bytes: Uint8Array): string {
-  requireLength(bytes, 32, "invalid_random_factor");
+  requireLength(bytes, 16, "invalid_random_factor");
   let accumulator = 0;
   let bitCount = 0;
   let compact = "";
@@ -41,7 +42,7 @@ export function encodeRandomFactor(bytes: Uint8Array): string {
     }
   }
   if (bitCount > 0) compact += alphabet[(accumulator << (5 - bitCount)) & 31] ?? "";
-  return `${compact.slice(0, 13)}-${compact.slice(13, 26)}-${compact.slice(26, 39)}-${compact.slice(39)}`;
+  return `${compact.slice(0, 5)}-${compact.slice(5, 10)}-${compact.slice(10, 15)}-${compact.slice(15, 20)}-${compact.slice(20)}`;
 }
 
 export function decodeRandomFactor(value: string): Uint8Array<ArrayBuffer> {
@@ -50,7 +51,7 @@ export function decodeRandomFactor(value: string): Uint8Array<ArrayBuffer> {
   let lastHyphen = false;
   for (const character of value.toUpperCase()) {
     if (character === "-") {
-      if (lastHyphen || ![13, 26, 39].includes(compact.length)) fail("invalid_random_factor");
+      if (lastHyphen || ![5, 10, 15, 20].includes(compact.length)) fail("invalid_random_factor");
       lastHyphen = true;
       continue;
     }
@@ -59,7 +60,7 @@ export function decodeRandomFactor(value: string): Uint8Array<ArrayBuffer> {
   }
   if (lastHyphen) fail("invalid_random_factor");
   compact = compact.replaceAll("O", "0").replaceAll("I", "1").replaceAll("L", "1");
-  if (compact.length !== 52 || /[^0-9A-HJKMNP-TV-Z]/u.test(compact) || compact.includes("U")) {
+  if (compact.length !== 26 || /[^0-9A-HJKMNP-TV-Z]/u.test(compact) || compact.includes("U")) {
     fail("invalid_random_factor");
   }
   const output: number[] = [];
@@ -76,13 +77,13 @@ export function decodeRandomFactor(value: string): Uint8Array<ArrayBuffer> {
       accumulator &= (1 << bitCount) - 1;
     }
   }
-  if (bitCount !== 4 || accumulator !== 0 || output.length !== 32) fail("invalid_random_factor");
+  if (bitCount !== 2 || accumulator !== 0 || output.length !== 16) fail("invalid_random_factor");
   return Uint8Array.from(output);
 }
 
 export function validatePassphrase(passphrase: string): Uint8Array<ArrayBuffer> {
   const bytes = utf8(passphrase);
-  if (bytes.byteLength < 12 || bytes.byteLength > 256) fail("invalid_passphrase");
+  if (bytes.byteLength < 8 || bytes.byteLength > 256) fail("invalid_passphrase");
   return bytes;
 }
 

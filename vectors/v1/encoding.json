@@ -17,21 +17,26 @@
     },
     {
       "id": "factor",
-      "bytesHex": "404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f",
-      "canonical": "QEFCQ0RFRkdISUpLTE1OT1BRUlNUVVZXWFlaW1xdXl8"
+      "bytesHex": "41f2850f7849b0b778cbb9795fbe823512fc2a8406599264f85d435c09052303",
+      "canonical": "QfKFD3hJsLd4y7l5X76CNRL8KoQGWZJk-F1DXAkFIwM"
     }
   ],
   "crockfordBase32": {
-    "bytesHex": "404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f",
-    "canonicalDisplay": "810M4GT48N34E-J29995MRKAE9X-852MJKAHANCNT-RB5D5PQ2XBSFG",
-    "acceptedAliasDisplay": "8lom4gt48n34e-j29995mrkae9x-852mjkahancnt-rb5d5pq2xbsfg",
+    "bytesHex": "404142434445464748494a4b4c4d4e4f",
+    "canonicalDisplay": "810M4-GT48N-34EJ2-9995M-RKAE9W",
+    "acceptedAliasDisplay": "8lom4-gt48n-34ej2-9995m-rkae9w",
     "acceptedHyphenVariants": [
-      "810M4GT48N34EJ29995MRKAE9X852MJKAHANCNTRB5D5PQ2XBSFG",
-      "810M4GT48N34E-J29995MRKAE9X852MJKAHANCNTRB5D5PQ2XBSFG",
-      "810M4GT48N34EJ29995MRKAE9X-852MJKAHANCNTRB5D5PQ2XBSFG",
-      "810M4GT48N34EJ29995MRKAE9X852MJKAHANCNT-RB5D5PQ2XBSFG"
+      "810M4GT48N34EJ29995MRKAE9W",
+      "810M4-GT48N34EJ29995MRKAE9W",
+      "810M4GT48N-34EJ29995MRKAE9W",
+      "810M4GT48N34EJ29995M-RKAE9W"
     ],
-    "decodedLength": 32,
-    "bitOrder": "most-significant-bit first; final four pad bits are zero"
+    "decodedLength": 16,
+    "bitOrder": "most-significant-bit first; final two pad bits are zero",
+    "expansion": {
+      "extractLabel": "kryptex/v1/factor/random",
+      "expandLabel": "kryptex/v1/factor/random",
+      "factorHex": "41f2850f7849b0b778cbb9795fbe823512fc2a8406599264f85d435c09052303"
+    }
   }
 }

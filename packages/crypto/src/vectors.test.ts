@@ -11,6 +11,7 @@ import {
   decodeBase64Url,
   decodeBundle,
   decodeRandomFactor,
+  deriveRandomFactor,
   decodeRequestResponsePayload,
   decodeRequestSchemaPayload,
   decodeSendPayload,
@@ -74,12 +75,22 @@ describe("external encodings", () => {
       expect(encodeBase64Url(fromHex(fixture.bytesHex))).toBe(fixture.canonical);
       expect(hex(decodeBase64Url(fixture.canonical))).toBe(fixture.bytesHex);
     }
-    const factor = fromHex(encoding.crockfordBase32.bytesHex);
-    expect(encodeRandomFactor(factor)).toBe(encoding.crockfordBase32.canonicalDisplay);
-    expect(hex(decodeRandomFactor(encoding.crockfordBase32.acceptedAliasDisplay))).toBe(hex(factor));
+    const secret = fromHex(encoding.crockfordBase32.bytesHex);
+    expect(secret).toHaveLength(encoding.crockfordBase32.decodedLength);
+    expect(encodeRandomFactor(secret)).toBe(encoding.crockfordBase32.canonicalDisplay);
+    expect(hex(decodeRandomFactor(encoding.crockfordBase32.acceptedAliasDisplay))).toBe(hex(secret));
     for (const accepted of encoding.crockfordBase32.acceptedHyphenVariants) {
-      expect(hex(decodeRandomFactor(accepted))).toBe(hex(factor));
+      expect(hex(decodeRandomFactor(accepted))).toBe(hex(secret));
     }
+  });
+
+  test("expands the transmitted second key into the 32-byte schedule factor", async () => {
+    const secret = fromHex(encoding.crockfordBase32.bytesHex);
+    const factor = await deriveRandomFactor(secret);
+    expect(factor).toHaveLength(32);
+    expect(hex(factor)).toBe(encoding.crockfordBase32.expansion.factorHex);
+    expect(hex(await deriveRandomFactor(decodeRandomFactor(encoding.crockfordBase32.canonicalDisplay)))).toBe(encoding.crockfordBase32.expansion.factorHex);
+    await expect(deriveRandomFactor(new Uint8Array(32))).rejects.toMatchObject({ code: "invalid_random_factor" });
   });
 
   test("rejects every malformed external encoding vector", () => {

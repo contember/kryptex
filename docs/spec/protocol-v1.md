@@ -43,6 +43,7 @@ kryptex/v1/create-permit/locator
 kryptex/v1/create-permit/token
 kryptex/v1/create-permit/issuance
 kryptex/v1/rate-limit-locator
+kryptex/v1/factor/random
 ```
 
 The server capability tag prefix is separate from this label list: it is the 32 ASCII bytes `kryptex/v1/server-capability-tag` followed by one byte `0x00`.
@@ -62,11 +63,17 @@ All seed and factor inputs below are exactly 32 bytes, so concatenation is unamb
 | --- | --- | --- |
 | 0 | none | 32 zero bytes |
 | 1 | passphrase | 32-byte Argon2id output |
-| 2 | random factor | 32 random bytes transmitted independently |
+| 2 | random factor | 32 bytes expanded from a 16-byte second key transmitted independently |
 
-Passphrases must contain 12 through 256 UTF-8 bytes. Creation requires an exact second entry. Clients do not trim or normalize either entry. The UTF-8 passphrase is Argon2 password `P`, the 16-byte bundle salt is Argon2 salt `S`, and optional secret `K` and associated data `X` are empty byte strings. The salt and fixed Argon2id parameters are carried in the link fragment.
+Passphrases must contain 8 through 256 UTF-8 bytes. The floor is deliberately low: link-only protection is the alternative, so a short passphrase behind Argon2id is better than no second secret. Clients must state that a short passphrase can be guessed by whoever holds the link. Creation requires an exact second entry. Clients do not trim or normalize either entry. The UTF-8 passphrase is Argon2 password `P`, the 16-byte bundle salt is Argon2 salt `S`, and optional secret `K` and associated data `X` are empty byte strings. The salt and fixed Argon2id parameters are carried in the link fragment.
 
-The random factor is encoded from its 256 bits in most-significant-bit order with the Crockford Base32 alphabet `0123456789ABCDEFGHJKMNPQRSTVWXYZ`. Four zero bits pad the final five-bit group. Its canonical display is 52 uppercase characters grouped as four groups of 13 with ASCII hyphens. Input is case-insensitive, may contain hyphens only at canonical group boundaries, maps `O` to `0` and `I` or `L` to `1`, rejects `U` and whitespace, requires zero padding bits, and must decode to exactly 32 bytes. It contains no resource identifier or checksum.
+The second key is 16 random bytes, short enough for a person to read aloud or retype. It is encoded from its 128 bits in most-significant-bit order with the Crockford Base32 alphabet `0123456789ABCDEFGHJKMNPQRSTVWXYZ`. Two zero bits pad the final five-bit group. Its canonical display is 26 uppercase characters grouped as four groups of five followed by one group of six, separated by ASCII hyphens. Input is case-insensitive, may contain hyphens only at canonical group boundaries, maps `O` to `0` and `I` or `L` to `1`, rejects `U` and whitespace, requires zero padding bits, and must decode to exactly 16 bytes. It contains no resource identifier or checksum.
+
+Mode 2 expands the second key into its 32-byte factor input so that every schedule input stays 32 bytes:
+
+```text
+factor = Expand(Extract("kryptex/v1/factor/random", secondKey), "kryptex/v1/factor/random", 32)
+```
 
 ## Send key schedule
 

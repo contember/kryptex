@@ -5,6 +5,7 @@ import {
   decodeRandomFactor,
   deriveConfirmedPassphraseFactor,
   derivePassphraseFactor,
+  deriveRandomFactor,
   encodeBundle,
   encodeRandomFactor,
   randomBytes,
@@ -31,8 +32,8 @@ export async function createFactor(
     return { factor: undefined, mode: 0, salt: new Uint8Array(16), secondKey: null };
   }
   if (protection === "second-key") {
-    const factor = randomBytes(32);
-    return { factor, mode: 2, salt: new Uint8Array(16), secondKey: encodeRandomFactor(factor) };
+    const secret = randomBytes(16);
+    return { factor: await deriveRandomFactor(secret), mode: 2, salt: new Uint8Array(16), secondKey: encodeRandomFactor(secret) };
   }
   const salt = randomBytes(16);
   return {
@@ -45,7 +46,7 @@ export async function createFactor(
 
 export async function factorFromInput(mode: FactorMode, salt: Uint8Array, value: string): Promise<Uint8Array<ArrayBuffer> | undefined> {
   if (mode === 0) return undefined;
-  return mode === 1 ? derivePassphraseFactor(value, salt) : decodeRandomFactor(value);
+  return mode === 1 ? derivePassphraseFactor(value, salt) : deriveRandomFactor(decodeRandomFactor(value));
 }
 
 const bundleCache = new WeakMap<FragmentCapture, KryptexBundle | null>();

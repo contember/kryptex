@@ -14,6 +14,7 @@ export {
   deriveCapabilityTag,
   deriveCreatePermitKeys,
   deriveCreatePermitSeed,
+  deriveRandomFactor,
   deriveRateLimitTag,
   deriveRequestOwnerKeys,
   deriveRequestWriteKeys,

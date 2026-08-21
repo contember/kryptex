@@ -39,12 +39,12 @@
     {
       "factorMode": 2,
       "factorModeName": "random-factor",
-      "factorHex": "404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f",
+      "factorHex": "41f2850f7849b0b778cbb9795fbe823512fc2a8406599264f85d435c09052303",
       "locatorPrkHex": "becad5eeeadd9e5875bd8a1670311097d9ec2d0848cd35e922c45181d0128e80",
       "locatorBase64url": "_nuJFiFz7Dyg3t7I9EPe0w",
-      "masterPrkHex": "e004e8489f667a2329e80b4b9fd4453716b65a0f68d7019034c019c743b04b36",
-      "contentKeyHex": "387c8af95e6b8ecac8c16d65542162f3f24ac60dd1cb7aa3a4c392780651f7f1",
-      "retrieveTokenBase64url": "XjRiA1HoeeUaoQOPidcGWU_2lcqoMPhmtt3-exx8hPo",
+      "masterPrkHex": "21c44423ee2f3146c9dcabf5cbb592640996a57d40998f160fd6a1d275540773",
+      "contentKeyHex": "11543f327e084ed4369045d9bbc74fdce996e73b5e4e7ff7d6f69d7fcd951cd5",
+      "retrieveTokenBase64url": "F2T4S7Yz9DFAmTM52KhvQfcG8SxTo3PZHg_rUE6X_5g",
       "managePrkHex": "a9fc20b7326daf5241b61738a96ef751ab9de53f13ccbff2dc9cd67db5eaf71c",
       "manageTokenBase64url": "Sy-OtAKOTvqTUY3nPdF54QCJXzI97jASpZ-9TkpyWYo"
     }
@@ -84,11 +84,11 @@
     {
       "factorMode": 2,
       "factorModeName": "random-factor",
-      "factorHex": "404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f",
+      "factorHex": "41f2850f7849b0b778cbb9795fbe823512fc2a8406599264f85d435c09052303",
       "requestLocatorBase64url": "cHFyc3R1dnd4eXp7fH1-fw",
-      "writePrkHex": "66b47e190393f3d66e828c03482845bb344469f489cead7a4561359ca5348e51",
-      "schemaKeyHex": "f457a93a7f80ec7e7dd7811e7474ca5969f3ae04fe166665766cf3675de6369c",
-      "writeTokenBase64url": "OJdHoI0ZT6VF_GgMyxCnQejde3GLd9ZJ2nIhxSYa1JM",
+      "writePrkHex": "7c9bf3ec1a15b0fdb8d317dc7f909ed5579d324dedffc77f1e9c02953e7f60dc",
+      "schemaKeyHex": "1ac62c55814f81fdb34e23fdf1849bd45097750cd6f3a1f2c3c4dcf647558465",
+      "writeTokenBase64url": "OoNpIb_jpYAWn6EsQmxJiM_89Tef91lj6iXLsEDumYI",
       "ownerPrkHex": "4982ac5b9058fb1f0402f81476f89f9b63f50cb2b06b67ca6e925fa01983633d",
       "ownerTokenBase64url": "wFziiFkFA5nxb3nE5l0ssESBdlRG1Aa_PyVGe4uJMes",
       "hpkeIkmHex": "9636580771229ef7f32ff61173ef5b3c6a979b396de25697cea1186fa7e4ffae",

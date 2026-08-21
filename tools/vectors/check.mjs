@@ -165,7 +165,7 @@ function crockfordEncode(bytes) {
     }
   }
   if (bits > 0) compact += base32Alphabet[(accumulator << (5 - bits)) & 31];
-  return compact.match(/.{13}/g).join("-");
+  return [compact.slice(0, 5), compact.slice(5, 10), compact.slice(10, 15), compact.slice(15, 20), compact.slice(20)].join("-");
 }
 
 function decodeCrockford(value) {
@@ -173,7 +173,7 @@ function decodeCrockford(value) {
   let lastWasHyphen = false;
   for (const character of value.toUpperCase()) {
     if (character === "-") {
-      if (lastWasHyphen || ![13, 26, 39].includes(compact.length)) fail("invalid_random_factor");
+      if (lastWasHyphen || ![5, 10, 15, 20].includes(compact.length)) fail("invalid_random_factor");
       lastWasHyphen = true;
       continue;
     }
@@ -182,7 +182,7 @@ function decodeCrockford(value) {
   }
   if (lastWasHyphen) fail("invalid_random_factor");
   compact = compact.replaceAll("O", "0").replaceAll("I", "1").replaceAll("L", "1");
-  if (compact.length !== 52 || /[^0-9A-HJKMNP-TV-Z]/.test(compact) || compact.includes("U")) {
+  if (compact.length !== 26 || /[^0-9A-HJKMNP-TV-Z]/.test(compact) || compact.includes("U")) {
     fail("invalid_random_factor");
   }
   const output = [];
@@ -199,7 +199,7 @@ function decodeCrockford(value) {
       accumulator &= (1 << bits) - 1;
     }
   }
-  if (bits !== 4 || accumulator !== 0 || output.length !== 32) fail("invalid_random_factor");
+  if (bits !== 2 || accumulator !== 0 || output.length !== 16) fail("invalid_random_factor");
   return Uint8Array.from(output);
 }
 
@@ -396,7 +396,11 @@ async function deriveSchedules(fixtures) {
     t: 3, m: 65536, p: 1, version: 19, dkLen: 32, maxmem: 128 * 1024 * 1024,
   });
   bytesEqual(passphraseFactor, bytesFromHex(expected.argon2id.outputHex), "Argon2id output");
-  const factors = [new Uint8Array(32), passphraseFactor, bytesFromHex(inputs.randomFactorHex)];
+  const randomSecret = bytesFromHex(inputs.randomSecretHex);
+  equal(randomSecret.length, 16, "random secret length");
+  const randomFactor = await hkdf("kryptex/v1/factor/random", randomSecret, "kryptex/v1/factor/random", 256);
+  bytesEqual(randomFactor, bytesFromHex(inputs.randomFactorHex), "random factor expansion from the second key");
+  const factors = [new Uint8Array(32), passphraseFactor, randomFactor];
   const modeNames = ["none", "passphrase", "random-factor"];
   const sends = [];
   const requests = [];
@@ -749,9 +753,16 @@ async function validateMalformed(fixtures, schedules) {
   }
   const factor = encoding.crockfordBase32;
   equal(crockfordEncode(bytesFromHex(factor.bytesHex)), factor.canonicalDisplay, "Crockford canonical display");
+  equal(bytesFromHex(factor.bytesHex).length, factor.decodedLength, "Crockford decoded length");
   for (const value of [factor.canonicalDisplay, factor.acceptedAliasDisplay, ...factor.acceptedHyphenVariants]) {
     bytesEqual(decodeCrockford(value), bytesFromHex(factor.bytesHex), `accepted Crockford form ${value}`);
   }
+  const expansion = factor.expansion;
+  bytesEqual(
+    await hkdf(expansion.extractLabel, bytesFromHex(factor.bytesHex), expansion.expandLabel, 256),
+    bytesFromHex(expansion.factorHex),
+    "random factor expansion",
+  );
   const negative = fixtures["negative.json"];
   for (const vector of negative.malformedExternalEncodings) {
     let result = "accepted";

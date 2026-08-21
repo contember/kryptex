@@ -140,7 +140,7 @@ function crockfordEncode(value) {
   if (bits > 0) {
     output += base32Alphabet[(accumulator << (5 - bits)) & 31];
   }
-  return output.match(/.{13}/g).join("-");
+  return [output.slice(0, 5), output.slice(5, 10), output.slice(10, 15), output.slice(15, 20), output.slice(20)].join("-");
 }
 
 function kxb(kind, body) {
@@ -239,7 +239,12 @@ export async function deriveVectors() {
 
   const sendSeed = sequence(0x00, 32);
   const manageSeed = sequence(0x20, 32);
-  const randomFactor = sequence(0x40, 32);
+  const randomSecret = sequence(0x40, 16);
+  const randomFactor = expand(
+    extract("kryptex/v1/factor/random", randomSecret),
+    "kryptex/v1/factor/random",
+    32,
+  );
   const passphraseSalt = sequence(0x60, 16);
   const requestLocator = sequence(0x70, 16);
   const writeSeed = sequence(0x80, 32);
@@ -711,11 +716,11 @@ export async function deriveVectors() {
       { id: "base64url-standard-alphabet-plus", kind: "base64url", value: "+w", error: "non_canonical_base64url" },
       { id: "base64url-standard-alphabet-slash", kind: "base64url", value: "/w", error: "non_canonical_base64url" },
       { id: "base64url-nonzero-pad-bits", kind: "base64url", value: "_x", error: "non_canonical_base64url" },
-      { id: "crockford-letter-u", kind: "crockford-base32", value: crockfordEncode(randomFactor).replace("0", "U"), error: "invalid_random_factor" },
-      { id: "crockford-whitespace", kind: "crockford-base32", value: `${crockfordEncode(randomFactor)} `, error: "invalid_random_factor" },
-      { id: "crockford-bad-hyphen", kind: "crockford-base32", value: crockfordEncode(randomFactor).replace("-", "--"), error: "invalid_random_factor" },
-      { id: "crockford-nonzero-pad-bits", kind: "crockford-base32", value: `${crockfordEncode(randomFactor).slice(0, -1)}1`, error: "invalid_random_factor" },
-      { id: "crockford-short", kind: "crockford-base32", value: crockfordEncode(randomFactor).slice(0, -1), error: "invalid_random_factor" },
+      { id: "crockford-letter-u", kind: "crockford-base32", value: crockfordEncode(randomSecret).replace("0", "U"), error: "invalid_random_factor" },
+      { id: "crockford-whitespace", kind: "crockford-base32", value: `${crockfordEncode(randomSecret)} `, error: "invalid_random_factor" },
+      { id: "crockford-bad-hyphen", kind: "crockford-base32", value: crockfordEncode(randomSecret).replace("-", "--"), error: "invalid_random_factor" },
+      { id: "crockford-nonzero-pad-bits", kind: "crockford-base32", value: `${crockfordEncode(randomSecret).slice(0, -1)}1`, error: "invalid_random_factor" },
+      { id: "crockford-short", kind: "crockford-base32", value: crockfordEncode(randomSecret).slice(0, -1), error: "invalid_random_factor" },
     ],
     malformedContainers: [
       { id: "kxb-bad-magic", container: "KXB1", valueBase64url: base64url(mutate(recipientNone, 0, 0)), error: "invalid_magic" },
@@ -807,6 +812,7 @@ export async function deriveVectors() {
       fixedInputs: {
         sendSeedHex: hex(sendSeed),
         manageSeedHex: hex(manageSeed),
+        randomSecretHex: hex(randomSecret),
         randomFactorHex: hex(randomFactor),
         passphrase,
         wrongPassphrase,
@@ -832,17 +838,22 @@ export async function deriveVectors() {
         { id: "factor", bytesHex: hex(randomFactor), canonical: base64url(randomFactor) },
       ],
       crockfordBase32: {
-        bytesHex: hex(randomFactor),
-        canonicalDisplay: crockfordEncode(randomFactor),
-        acceptedAliasDisplay: crockfordEncode(randomFactor).toLowerCase().replaceAll("0", "o").replaceAll("1", "l"),
+        bytesHex: hex(randomSecret),
+        canonicalDisplay: crockfordEncode(randomSecret),
+        acceptedAliasDisplay: crockfordEncode(randomSecret).toLowerCase().replaceAll("0", "o").replaceAll("1", "l"),
         acceptedHyphenVariants: [
-          crockfordEncode(randomFactor).replaceAll("-", ""),
-          crockfordEncode(randomFactor).replaceAll("-", "").replace(/(.{13})/, "$1-"),
-          crockfordEncode(randomFactor).replaceAll("-", "").replace(/(.{26})/, "$1-"),
-          crockfordEncode(randomFactor).replaceAll("-", "").replace(/(.{39})/, "$1-"),
+          crockfordEncode(randomSecret).replaceAll("-", ""),
+          crockfordEncode(randomSecret).replaceAll("-", "").replace(/(.{5})/, "$1-"),
+          crockfordEncode(randomSecret).replaceAll("-", "").replace(/(.{10})/, "$1-"),
+          crockfordEncode(randomSecret).replaceAll("-", "").replace(/(.{20})/, "$1-"),
         ],
-        decodedLength: 32,
-        bitOrder: "most-significant-bit first; final four pad bits are zero",
+        decodedLength: 16,
+        bitOrder: "most-significant-bit first; final two pad bits are zero",
+        expansion: {
+          extractLabel: "kryptex/v1/factor/random",
+          expandLabel: "kryptex/v1/factor/random",
+          factorHex: hex(randomFactor),
+        },
       },
     },
     "jcs.json": { payloads, canonicalizationCases, invalidJcsAndPayloads },

@@ -33,31 +33,31 @@
     {
       "id": "crockford-letter-u",
       "kind": "crockford-base32",
-      "value": "81UM4GT48N34E-J29995MRKAE9X-852MJKAHANCNT-RB5D5PQ2XBSFG",
+      "value": "81UM4-GT48N-34EJ2-9995M-RKAE9W",
       "error": "invalid_random_factor"
     },
     {
       "id": "crockford-whitespace",
       "kind": "crockford-base32",
-      "value": "810M4GT48N34E-J29995MRKAE9X-852MJKAHANCNT-RB5D5PQ2XBSFG ",
+      "value": "810M4-GT48N-34EJ2-9995M-RKAE9W ",
       "error": "invalid_random_factor"
     },
     {
       "id": "crockford-bad-hyphen",
       "kind": "crockford-base32",
-      "value": "810M4GT48N34E--J29995MRKAE9X-852MJKAHANCNT-RB5D5PQ2XBSFG",
+      "value": "810M4--GT48N-34EJ2-9995M-RKAE9W",
       "error": "invalid_random_factor"
     },
     {
       "id": "crockford-nonzero-pad-bits",
       "kind": "crockford-base32",
-      "value": "810M4GT48N34E-J29995MRKAE9X-852MJKAHANCNT-RB5D5PQ2XBSF1",
+      "value": "810M4-GT48N-34EJ2-9995M-RKAE91",
       "error": "invalid_random_factor"
     },
     {
       "id": "crockford-short",
       "kind": "crockford-base32",
-      "value": "810M4GT48N34E-J29995MRKAE9X-852MJKAHANCNT-RB5D5PQ2XBSF",
+      "value": "810M4-GT48N-34EJ2-9995M-RKAE9",
       "error": "invalid_random_factor"
     }
   ],
@@ -264,10 +264,10 @@
     },
     {
       "id": "send-random-factor",
-      "correctTokenBase64url": "XjRiA1HoeeUaoQOPidcGWU_2lcqoMPhmtt3-exx8hPo",
-      "wrongFactorHex": "404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5e",
-      "wrongContentKeyHex": "e85a77f4f3447c17792ffa65cc4b33b8f57440ecf79150dd600476b0932fb7bb",
-      "wrongTokenBase64url": "wewdj5wf-1CACowzHZinU1BQSjy1BYyDoQafSI9qd84",
+      "correctTokenBase64url": "F2T4S7Yz9DFAmTM52KhvQfcG8SxTo3PZHg_rUE6X_5g",
+      "wrongFactorHex": "41f2850f7849b0b778cbb9795fbe823512fc2a8406599264f85d435c09052302",
+      "wrongContentKeyHex": "16fc0a826891f6538aa8f751232c2c600b53419f02cd29034ab75fcd97c87aeb",
+      "wrongTokenBase64url": "Lsqj5ZcYyks9yu-uVWTLGaAQe-vxrc8ywPW-xj4hOAQ",
       "expectedAuthorization": "unavailable",
       "expectedDecryption": "authentication_failed"
     },
@@ -282,10 +282,10 @@
     },
     {
       "id": "request-random-factor",
-      "correctTokenBase64url": "OJdHoI0ZT6VF_GgMyxCnQejde3GLd9ZJ2nIhxSYa1JM",
-      "wrongFactorHex": "404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5e",
-      "wrongSchemaKeyHex": "f001fa97deb3ec62177f584e7c9c20a0541f6ec1badc9ccddbcd76eb513affaa",
-      "wrongTokenBase64url": "rCqN7QLKoOhXU8nUZv2B-S-UwTPvD8rA8dOVHiJ-f7Y",
+      "correctTokenBase64url": "OoNpIb_jpYAWn6EsQmxJiM_89Tef91lj6iXLsEDumYI",
+      "wrongFactorHex": "41f2850f7849b0b778cbb9795fbe823512fc2a8406599264f85d435c09052302",
+      "wrongSchemaKeyHex": "54e0ee3f66d467f48ca7e0190774421e170b6213db6ee236405b664b83623144",
+      "wrongTokenBase64url": "Il3An6wYzl0PmJBUzn0dv4hgxHFYfxigrgKCPpEoGCI",
       "expectedAuthorization": "unavailable",
       "expectedDecryption": "authentication_failed"
     }

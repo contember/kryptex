@@ -9,11 +9,20 @@ describe("passphrase validation", () => {
     expect(validatePassphrase("příliš krátké", "příliš krátké").valid).toBe(true);
   });
 
-  it("requires 12 through 256 bytes and an exact confirmation", () => {
-    expect(validatePassphrase("12345678901", "12345678901").valid).toBe(false);
+  it("requires 8 through 256 bytes and an exact confirmation", () => {
+    expect(validatePassphrase("1234567", "1234567").valid).toBe(false);
+    expect(validatePassphrase("12345678", "12345678").valid).toBe(true);
     expect(validatePassphrase("123456789012", "123456789012").valid).toBe(true);
     expect(validatePassphrase("123456789012", "123456789013").valid).toBe(false);
     expect(validatePassphrase("x".repeat(257), "x".repeat(257)).valid).toBe(false);
+  });
+
+  it("accepts a short passphrase but never calls it strong", () => {
+    const short = validatePassphrase("12345678", "12345678");
+    expect(short.strength).toBe("weak");
+    expect(short.message).toContain("can be guessed");
+    expect(validatePassphrase("1234567", "1234567").strength).toBe("short");
+    expect(validatePassphrase("123456789012", "123456789012").strength).toBe("fair");
   });
 });
 
@@ -41,22 +50,22 @@ describe("receipt custody state", () => {
 });
 
 describe("Crockford second-key validation", () => {
-  const zeroFactor = "0".repeat(52);
+  const zeroFactor = "0".repeat(26);
 
   it("accepts ungrouped input and returns the canonical grouped display", () => {
-    expect(normalizeCrockfordFactor(zeroFactor)).toBe("0000000000000-0000000000000-0000000000000-0000000000000");
+    expect(normalizeCrockfordFactor(zeroFactor)).toBe("00000-00000-00000-00000-000000");
   });
 
   it("accepts aliases and canonical hyphen positions", () => {
-    expect(isValidCrockfordFactor("OOOOOOOOOOOOO-OOOOOOOOOOOOO-OOOOOOOOOOOOO-OOOOOOOOOOOOO")).toBe(true);
+    expect(isValidCrockfordFactor("OOOOO-OOOOO-OOOOO-OOOOO-OOOOOO")).toBe(true);
   });
 
   it("rejects short, misplaced, whitespace, U, and nonzero padding-bit input", () => {
     expect(isValidCrockfordFactor("0".repeat(12))).toBe(false);
-    expect(isValidCrockfordFactor(`0-${"0".repeat(51)}`)).toBe(false);
-    expect(isValidCrockfordFactor(`${"0".repeat(51)} `)).toBe(false);
-    expect(isValidCrockfordFactor(`${"0".repeat(51)}U`)).toBe(false);
-    expect(isValidCrockfordFactor(`${"0".repeat(51)}1`)).toBe(false);
+    expect(isValidCrockfordFactor(`0-${"0".repeat(25)}`)).toBe(false);
+    expect(isValidCrockfordFactor(`${"0".repeat(25)} `)).toBe(false);
+    expect(isValidCrockfordFactor(`${"0".repeat(25)}U`)).toBe(false);
+    expect(isValidCrockfordFactor(`${"0".repeat(25)}1`)).toBe(false);
   });
 });
 

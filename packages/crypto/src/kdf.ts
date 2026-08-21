@@ -26,6 +26,16 @@ export async function hkdfExpand(prk: Uint8Array, label: string, length: number)
   return output.slice(0, length);
 }
 
+/**
+ * Expands the 16-byte second key into the 32-byte factor the schedules concatenate.
+ * The transmitted secret is short for humans; every schedule input stays 32 bytes.
+ */
+export async function deriveRandomFactor(secret: Uint8Array): Promise<Uint8Array<ArrayBuffer>> {
+  requireLength(secret, 16, "invalid_random_factor");
+  const prk = await hkdfExtract("kryptex/v1/factor/random", secret);
+  return hkdfExpand(prk, "kryptex/v1/factor/random", 32);
+}
+
 function factorName(mode: FactorMode): string {
   if (mode === 0) return "none";
   if (mode === 1) return "passphrase";
