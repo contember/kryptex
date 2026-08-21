@@ -97,7 +97,11 @@ export function decodeBase64Url(value: string): Uint8Array<ArrayBuffer> {
 }
 
 export function randomBytes(length: number): Uint8Array<ArrayBuffer> {
-  return crypto.getRandomValues(new Uint8Array(length));
+  const output = new Uint8Array(length);
+  for (let offset = 0; offset < output.byteLength; offset += 65_536) {
+    crypto.getRandomValues(output.subarray(offset, Math.min(offset + 65_536, output.byteLength)));
+  }
+  return output;
 }
 
 export async function sha256(bytes: Uint8Array): Promise<Uint8Array<ArrayBuffer>> {
