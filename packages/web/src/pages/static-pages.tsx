@@ -204,7 +204,7 @@ function TechnicalDescription() {
         <li>It does <em>not</em> send the seed <code>S</code>, the factor, the passphrase, the second key, or the content key. Nothing the server receives can decrypt the envelope.</li>
         <li>The recipient link is <code>https://…/s#&lt;bundle&gt;</code>. The bundle after <code>#</code> holds <code>S</code>, the factor mode, the Argon2id salt, and the expiry. Browsers never send the fragment to the server, and the second key or passphrase is not part of it.</li>
         <li>The management link <code>/m#…</code> carries the <code>locator</code> and <code>M</code>; it cannot decrypt anything.</li>
-        <li>On load, the page copies the fragment into memory and calls <code>history.replaceState</code> to remove it from the address bar before any secret UI renders. It is never written to local storage, cookies, or the browser history.</li>
+        <li>On load, the page copies the fragment into memory and calls <code>history.replaceState</code> to remove it from the address bar before any secret UI renders. The application never writes it to local storage, cookies, or session state. The browser itself may still keep the full URL in its visit history, as it does for any link you open.</li>
         <li>Capabilities travel only in POST bodies, never in URLs. Every API response carries <code>Cache-Control: no-store</code> and <code>Referrer-Policy: no-referrer</code>. Request bodies, capabilities, locators, and ciphertext are not logged. The application runs under a strict Content Security Policy with no third-party scripts on any page that handles keys.</li>
       </ul>
     </InfoSection>
