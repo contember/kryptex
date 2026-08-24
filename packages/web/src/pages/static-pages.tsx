@@ -22,9 +22,12 @@ declare global {
 
 export function HomePage() {
   return <div className="home-page">
-    <div className="home-wordmark">Kryptex</div>
+    <div className="home-brand">
+      <span className="home-wordmark">Kryptex</span>
+      <span className="home-tagline">Simple, yet secure secret sharing</span>
+    </div>
     <h1>Hand over a password without leaving it in someone&apos;s inbox.</h1>
-    <p>Kryptex encrypts in your browser, gives you a link that expires, and never receives the readable secret. No account, nothing to install.</p>
+    <p>Write the secret, share the link, watch access close. Kryptex encrypts in your browser and never receives the readable secret — no account, nothing to install.</p>
     <div className="home-actions">
       <Link className="primary-button" reloadDocument to={gatePath("send")}>Send a secret</Link>
       <Link className="secondary-button" reloadDocument to={gatePath("request")}>Ask someone for a secret</Link>

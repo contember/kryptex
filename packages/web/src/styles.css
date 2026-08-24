@@ -89,7 +89,9 @@ small { color: var(--muted); font-size: 0.82rem; }
 /* Home */
 
 .home-page { width: min(720px, calc(100% - 32px)); min-height: 100vh; margin: 0 auto; padding: clamp(56px, 12vh, 120px) 0 64px; }
-.home-wordmark { margin-bottom: 56px; font-size: 1.05rem; font-weight: 800; letter-spacing: 0.02em; }
+.home-brand { margin-bottom: 56px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; }
+.home-wordmark { font-size: 1.05rem; font-weight: 800; letter-spacing: 0.02em; }
+.home-tagline { color: var(--muted); font: 700 0.7rem/1.4 var(--mono); letter-spacing: 0.09em; text-transform: uppercase; }
 .home-page h1 { max-width: 640px; font-size: clamp(2rem, 5vw, 3rem); line-height: 1.1; letter-spacing: -0.02em; }
 .home-page > p { max-width: 560px; color: var(--secondary); font-size: 1.08rem; }
 .home-actions { margin: 32px 0 0; display: flex; flex-wrap: wrap; gap: 12px; }
@@ -286,7 +288,7 @@ input[type="radio"], input[type="checkbox"] { flex: 0 0 auto; width: 18px; heigh
   .experimental-marker { padding: 3px 5px; font-size: 0.58rem; }
   .masthead__flow { overflow: hidden; text-align: center; text-overflow: ellipsis; white-space: nowrap; }
   .task-page { padding-top: 32px; }
-  .home-wordmark { margin-bottom: 40px; }
+  .home-brand { margin-bottom: 40px; }
   .home-actions { display: grid; }
   .home-steps { grid-template-columns: 1fr; gap: 20px; }
   .passphrase-fields { grid-template-columns: 1fr; }
