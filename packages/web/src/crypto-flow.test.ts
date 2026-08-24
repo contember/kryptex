@@ -71,7 +71,7 @@ describe("creation settlement", () => {
       sendStatus(): Promise<SendStatusResponse & StateCheckedMetadata> {
         calls += 1;
         if (calls <= 4) return Promise.reject(new ApiFailure("network", false));
-        return Promise.resolve({ remainingRetrievals: 1, serverExpiresAt: 1_800_003_600, state: "active", stateCheckedAt: 1_800_000_001 });
+        return Promise.resolve({ failedAccessAttempts: 0, releasedAt: [], remainingRetrievals: 1, serverExpiresAt: 1_800_003_600, state: "active", stateCheckedAt: 1_800_000_001 });
       }
     };
     const result = await reconcileSendCreation(client, "locator", "manage-token", 1_800_000_060, (milliseconds) => { waits.push(milliseconds); return Promise.resolve(); });

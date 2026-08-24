@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { VALUE_FIELD_TYPES, describeRequestState, describeSendState, formatFieldType, formatOpenAllowance, formatOpens, formatTimeLeft, formatTtl, isMultilineField, isSensitiveField, isValueFieldType } from "./format";
+import { FAILED_ACCESS_SATURATION } from "@kryptex/contracts/protocol";
+import { VALUE_FIELD_TYPES, describeRequestState, describeSendState, formatFailedAttempts, formatFieldType, formatOpenAllowance, formatOpened, formatOpens, formatTimeLeft, formatTtl, isMultilineField, isSensitiveField, isValueFieldType } from "./format";
 
 describe("human-readable protocol state", () => {
   it("names every send and request state without exposing wire values", () => {
@@ -30,6 +31,16 @@ describe("human-readable protocol state", () => {
     expect(formatOpenAllowance(2)).toBe("can be opened twice");
     expect(formatOpenAllowance(5)).toBe("can be opened 5 times");
     expect(formatTtl(28_800)).toBe("8 hours");
+  });
+
+  it("reports what the service knows about access without implying who opened it", () => {
+    expect(formatOpened(0)).toBe("Not opened yet");
+    expect(formatOpened(1)).toBe("Opened once");
+    expect(formatOpened(2)).toBe("Opened twice");
+    expect(formatOpened(3)).toBe("Opened 3 times");
+    expect(formatFailedAttempts(0)).toBe("0");
+    expect(formatFailedAttempts(7)).toBe("7");
+    expect(formatFailedAttempts(FAILED_ACCESS_SATURATION)).toBe(`${String(FAILED_ACCESS_SATURATION)}+`);
   });
 });
 

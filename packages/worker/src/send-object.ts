@@ -58,6 +58,7 @@ export async function commitFinalSendRelease(
       generation: current.generation + 1,
       nextCleanupAt: nowMs,
       pendingKeys: [object.key],
+      releasedAt: [...current.releasedAt, unixSeconds(nowMs)],
       remainingRetrievals: 0,
       retrieveTag: null,
       state: "exhausted"
@@ -159,6 +160,7 @@ export class SendDurableObject {
             cleanupFailureCount: 0,
             clientNotAfter: input.clientNotAfter,
             factorMode: envelope.factorMode,
+            failedAccessAttempts: 0,
             generation: 1,
             kind: "send",
             manageTag,
@@ -166,6 +168,7 @@ export class SendDurableObject {
             nextCleanupAt: null,
             object: candidate,
             pendingKeys: [],
+            releasedAt: [],
             remainingRetrievals: input.maxRetrievals,
             retrieveTag,
             serverExpiresAt: expiresAt,
@@ -251,7 +254,12 @@ export class SendDurableObject {
         return null;
       }
       const remaining = current.remainingRetrievals - 1;
-      const updated: SendRecord = { ...current, generation: current.generation + 1, remainingRetrievals: remaining };
+      const updated: SendRecord = {
+        ...current,
+        generation: current.generation + 1,
+        releasedAt: [...current.releasedAt, unixSeconds()],
+        remainingRetrievals: remaining
+      };
       this.#context.storage.kv.put(RECORD_KEY, updated);
       return { expiresAt: updated.serverExpiresAt, remaining };
     });
@@ -298,6 +306,8 @@ export class SendDurableObject {
     }
     return jsonResponse(
       {
+        failedAccessAttempts: result.record.failedAccessAttempts,
+        releasedAt: result.record.releasedAt,
         remainingRetrievals: result.record.remainingRetrievals,
         serverExpiresAt: result.record.serverExpiresAt,
         state: result.record.state

@@ -16,6 +16,7 @@ export interface AuthLease {
 interface ResourceRecord {
   readonly authKeyId: string;
   readonly cleanupFailureCount: number;
+  readonly failedAccessAttempts: number;
   readonly generation: number;
   readonly nextCleanupAt: number | null;
   readonly pendingKeys: readonly string[];
@@ -30,6 +31,7 @@ export interface SendRecord extends ResourceRecord {
   readonly manageTag: string;
   readonly maxRetrievals: number;
   readonly object: ObjectMetadata | null;
+  readonly releasedAt: readonly number[];
   readonly remainingRetrievals: number;
   readonly retrieveTag: string | null;
   readonly state: "active" | "exhausted" | "revoked" | "expired";

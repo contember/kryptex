@@ -1,8 +1,9 @@
 import { parseKxe1Envelope, parseKxr1Envelope } from "./envelopes.js";
-import { isTtlSeconds, type TtlSeconds } from "./protocol.js";
+import { FAILED_ACCESS_SATURATION, isTtlSeconds, type TtlSeconds } from "./protocol.js";
 import { parseJsonWithoutDuplicateKeys } from "./json.js";
 import {
   ContractValidationError,
+  expectArray,
   expectCanonicalBase64UrlLength,
   expectExactObject,
   expectIntegerInRange,
@@ -81,6 +82,8 @@ export interface SendShortenRequest extends SendManageRequest {
 }
 
 export interface SendStatusResponse {
+  readonly failedAccessAttempts: number;
+  readonly releasedAt: readonly number[];
   readonly remainingRetrievals: number;
   readonly serverExpiresAt: number;
   readonly state: SendState;
@@ -431,8 +434,15 @@ export function parseCreateResourceResponse(value: unknown): CreateResourceRespo
 
 export function parseSendStatusResponse(value: unknown): SendStatusResponse {
   const context = "send status response";
-  const object = expectExactObject(value, ["remainingRetrievals", "serverExpiresAt", "state"], context);
+  const object = expectExactObject(
+    value,
+    ["failedAccessAttempts", "releasedAt", "remainingRetrievals", "serverExpiresAt", "state"],
+    context
+  );
   return {
+    failedAccessAttempts: expectIntegerInRange(readProperty(object, "failedAccessAttempts", context), 0, FAILED_ACCESS_SATURATION, `${context}.failedAccessAttempts`),
+    releasedAt: expectArray(readProperty(object, "releasedAt", context), 0, 10, `${context}.releasedAt`)
+      .map((entry, index) => parseTimestamp(entry, `${context}.releasedAt[${index}]`)),
     remainingRetrievals: expectIntegerInRange(readProperty(object, "remainingRetrievals", context), 0, 10, `${context}.remainingRetrievals`),
     serverExpiresAt: parseTimestamp(readProperty(object, "serverExpiresAt", context), `${context}.serverExpiresAt`),
     state: parseSendState(readProperty(object, "state", context), `${context}.state`)

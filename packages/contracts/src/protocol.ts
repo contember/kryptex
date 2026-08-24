@@ -23,6 +23,9 @@ export const FACTOR_BYTE_LENGTH = 32;
 export const SALT_BYTE_LENGTH = 16;
 export const REQUEST_ID_BYTE_LENGTH = 16;
 
+/** Reported failed access attempts stop counting here, so the status contract stays bounded. */
+export const FAILED_ACCESS_SATURATION = 999;
+
 export const ALLOWED_TTL_SECONDS: readonly number[] = Object.freeze([
   900,
   3600,

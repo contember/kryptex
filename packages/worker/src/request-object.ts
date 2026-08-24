@@ -221,6 +221,7 @@ export class RequestDurableObject {
             cleanupFailureCount: 0,
             clientNotAfter: input.clientNotAfter,
             factorMode: envelope.factorMode,
+            failedAccessAttempts: 0,
             generation: 1,
             kind: "request",
             nextCleanupAt: null,

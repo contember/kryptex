@@ -29,6 +29,7 @@ Kryptex transports short-lived secrets without exposing plaintext or decryption 
 | --- | --- |
 | Reads R2 and Durable Object storage | Learns ciphertext, sizes, timestamps, and policy metadata; cannot decrypt content. |
 | Obtains a basic recipient link | Can retrieve and decrypt the secret. Basic links are bearer credentials. |
+| Obtains a management link | Learns policy state, release timestamps, and the wrong-token attempt count for that transfer, and can revoke or shorten it. Cannot decrypt, and learns nothing identifying about the recipient. |
 | Obtains only the link in split-key mode | Cannot authorize retrieval or decrypt content without the independent factor. |
 | Obtains only the independent factor | Has no locator and cannot identify or decrypt a resource. |
 | Obtains a passphrase-protected link | Can make online guesses serialized per resource with a backoff that reaches one hour, which bounds them to roughly 24 per day after warm-up. If the attacker also obtains ciphertext, or Durable Object tags plus the Worker HMAC key, it can test guesses offline. Argon2id raises cost but weak passphrases remain weak. |
@@ -52,7 +53,7 @@ Kryptex transports short-lived secrets without exposing plaintext or decryption 
 
 ## Storage compromise separation
 
-R2 stores encrypted envelopes only. Durable Objects store policy state, random R2 object keys, and HMAC tags of capabilities. The HMAC key is a Worker secret and is not stored with Durable Object state. No service-side store contains a content key, link seed, passphrase, random factor, or recipient private key.
+R2 stores encrypted envelopes only. Durable Objects store policy state, release timestamps, a wrong-token attempt count, random R2 object keys, and HMAC tags of capabilities. Release timestamps and the attempt count describe the transfer, not the person who opened it; no store holds a recipient address, user agent, or other identifier. The HMAC key is a Worker secret and is not stored with Durable Object state. No service-side store contains a content key, link seed, passphrase, random factor, or recipient private key.
 
 ## Active-client limitation
 

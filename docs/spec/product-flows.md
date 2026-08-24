@@ -62,7 +62,9 @@ A lost response shows **Outcome unknown: a release may have been consumed**. The
 
 ## Send management
 
-While its authenticated state exists, the management screen shows active, exhausted, expired, or revoked state, expiry, remaining releases, revoke, and shorten. It never shows or reopens the secret. Delivery means ciphertext release, not successful decryption or human viewing.
+While its authenticated state exists, the management screen shows active, exhausted, expired, or revoked state, expiry, remaining releases, release times, wrong-token attempt count, revoke, and shorten. It never shows or reopens the secret. Delivery means ciphertext release, not successful decryption or human viewing.
+
+Release times answer when a copy left the service, never who took it. The screen must not claim identity, and the service must not collect an address, a user agent, or any other recipient identifier to support this view. A wrong-token attempt count above zero is presented as a reason to consider revoking, because it means someone holds the link and is failing the factor.
 
 After shortening, the page creates a replacement management link carrying the new timestamp and tells the user to replace the old local copy. After cleanup, generic unavailable is the only server statement. If the local bundle timestamp has passed, copy says: **This link says it has expired. The server record is unavailable, so the service could not confirm that state.**
 

@@ -1,3 +1,4 @@
+import { FAILED_ACCESS_SATURATION } from "@kryptex/contracts/protocol";
 import { decodeCanonicalBase64Url } from "./strict.js";
 import {
   AUTH_FAILURE_SATURATION,
@@ -52,6 +53,14 @@ function snapshotFor(record: StoredRecord | undefined, capabilityKind: 1 | 2 | 3
     };
   }
   return { generation: record.generation, keyId: record.authKeyId, tag: record.tag };
+}
+
+/** Counts only a wrong access token, so a lost race never reads to the owner as someone probing the link. */
+function withFailedAccess(record: StoredRecord): StoredRecord | null {
+  if (record.kind === "permit" || record.failedAccessAttempts >= FAILED_ACCESS_SATURATION) {
+    return null;
+  }
+  return { ...record, failedAccessAttempts: record.failedAccessAttempts + 1 };
 }
 
 /** Only a passphrase-derived retrieve or write token can be guessed online; every other token is 128 bits or more of randomness. */
@@ -163,6 +172,13 @@ export function finishAuthentication(
       record.authKeyId === reservation.snapshot.keyId &&
       tag === reservation.snapshot.tag;
     if (!verified || !snapshotStillMatches) {
+      if (!verified && capabilityKind === 1 && record !== undefined) {
+        const counted = withFailedAccess(record);
+        if (counted !== null) {
+          // Deliberately keeps the generation, so counting a failure never invalidates a concurrent reservation.
+          storage.kv.put<StoredRecord>(RECORD_KEY, counted);
+        }
+      }
       const failureCount = Math.min(lease.failureCount + 1, AUTH_FAILURE_SATURATION);
       const nowMs = clock();
       storage.kv.put<AuthLease>(key, {

@@ -1,11 +1,40 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import type { SendStatusResponse } from "@kryptex/contracts/api";
 import { deriveSendManagementKeys, encodeBase64Url } from "@kryptex/crypto";
 import { useClient } from "../client-context";
 import { artifactUrl, checkedResponseExpiry, consumeBundle, shortenedExpiryRequest } from "../crypto-flow";
-import { describeSendState, formatExactTime, formatTimeLeft } from "../format";
+import { describeSendState, formatExactTime, formatFailedAttempts, formatOpened, formatTimeLeft } from "../format";
 import type { FragmentCapture } from "../fragment";
 import { BurnAction, FieldHint, FragmentNotice, OperationNotice, PageIntro, ShareSlip, StatusMessage, StatusSheet, useNowSeconds, type OperationState } from "../ui";
+
+interface StatusRow {
+  readonly label: string;
+  readonly value: ReactNode;
+}
+
+/** Release times and wrong-token attempts are the only access facts Kryptex holds; it never records who opened a secret. */
+function statusRows(status: SendStatusResponse, stateLabel: string, nowSeconds: number): readonly StatusRow[] {
+  return [
+    { label: "Status", value: stateLabel },
+    ...status.state === "active"
+      ? [{ label: "Opens left", value: <span className="mono">{status.remainingRetrievals}</span> }]
+      : [],
+    {
+      label: "Opened",
+      value: <>
+        <strong>{formatOpened(status.releasedAt.length)}</strong>
+        {status.releasedAt.map((releasedAt, index) => <span className="mono" key={`${String(releasedAt)}-${String(index)}`}>{formatExactTime(releasedAt)}</span>)}
+      </>
+    },
+    ...status.failedAccessAttempts > 0
+      ? [{ label: "Failed attempts", value: <span className="mono">{formatFailedAttempts(status.failedAccessAttempts)}</span> }]
+      : [],
+    {
+      label: "Expires",
+      value: <><strong>{formatTimeLeft(status.serverExpiresAt, nowSeconds)}</strong><span className="mono">{formatExactTime(status.serverExpiresAt)}</span></>
+    }
+  ];
+}
 
 export function ManagementPage({ capture }: { readonly capture: FragmentCapture }) {
   const client = useClient();
@@ -53,6 +82,7 @@ export function ManagementPage({ capture }: { readonly capture: FragmentCapture 
   }
 
   const description = status === null ? null : describeSendState(status.state);
+  const rows = status === null || description === null ? null : statusRows(status, description.label, now);
 
   return <div className="task-page task-page--narrow">
     <PageIntro title="Manage this secret">
@@ -63,18 +93,12 @@ export function ManagementPage({ capture }: { readonly capture: FragmentCapture 
     {status === null || description === null
       ? null
       : <>
-        <StatusSheet rows={status.state === "active"
-          ? [
-            { label: "Status", value: description.label },
-            { label: "Opens left", value: <span className="mono">{status.remainingRetrievals}</span> },
-            { label: "Expires", value: <><strong>{formatTimeLeft(status.serverExpiresAt, now)}</strong><span className="mono">{formatExactTime(status.serverExpiresAt)}</span></> }
-          ]
-          : [
-            { label: "Status", value: description.label },
-            { label: "Expires", value: <><strong>{formatTimeLeft(status.serverExpiresAt, now)}</strong><span className="mono">{formatExactTime(status.serverExpiresAt)}</span></> }
-          ]} />
+        <StatusSheet rows={rows ?? []} />
         <StatusMessage tone={description.tone}>{description.detail}</StatusMessage>
-        <FieldHint>An open is one released copy of the ciphertext. It does not tell you whether a person read it.</FieldHint>
+        {status.failedAccessAttempts > 0
+          ? <StatusMessage tone="warning">Someone tried to open this secret with a wrong link or key. If that was not the person you sent it to, revoke it.</StatusMessage>
+          : null}
+        <FieldHint>An open is one released copy of the ciphertext. It does not tell you whether a person read it, and Kryptex does not record who opened it.</FieldHint>
       </>}
 
     {status?.state === "active"

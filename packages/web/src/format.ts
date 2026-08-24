@@ -1,6 +1,6 @@
 import type { RequestState, SendState } from "@kryptex/contracts/api";
 import type { RequestFieldType, ValueFieldType } from "@kryptex/contracts/payloads";
-import type { TtlSeconds } from "@kryptex/contracts/protocol";
+import { FAILED_ACCESS_SATURATION, type TtlSeconds } from "@kryptex/contracts/protocol";
 
 export type StateTone = "quiet" | "success" | "warning" | "danger";
 
@@ -77,6 +77,18 @@ export function formatOpens(count: number): string {
   if (count <= 0) return "no opens left";
   if (count === 1) return "1 open left";
   return `${count} opens left`;
+}
+
+export function formatOpened(count: number): string {
+  if (count === 0) return "Not opened yet";
+  if (count === 1) return "Opened once";
+  if (count === 2) return "Opened twice";
+  return `Opened ${count} times`;
+}
+
+/** The stored counter saturates, so the top of the range reads as a floor rather than an exact count. */
+export function formatFailedAttempts(count: number): string {
+  return count >= FAILED_ACCESS_SATURATION ? `${FAILED_ACCESS_SATURATION}+` : String(count);
 }
 
 export function formatOpenAllowance(maximum: number): string {

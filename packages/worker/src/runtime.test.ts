@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import envelopeVectors from "../../../vectors/v1/envelopes.json";
 import serverVectors from "../../../vectors/v1/server-tags.json";
+import { parseSendStatusResponse } from "@kryptex/contracts/api";
 import { parseKxe1Envelope, parseKxr1Envelope } from "@kryptex/contracts/envelopes";
 import { env, exports } from "cloudflare:workers";
 import { derivePermitFromSeed, encodeBase64Url, unixSeconds } from "./core.js";
@@ -161,6 +162,70 @@ describe("send routes and release linearization", () => {
     }
     const exhausted = await exports.default.fetch(apiRequest("/api/v1/sends/retrieve", { locator, retrieveToken }));
     expect(exhausted.status).toBe(404);
+  });
+
+  test("reports release times and wrong-token attempts to the management capability", async () => {
+    const now = unixSeconds();
+    const locator = filledBase64Url(16, 51);
+    const retrieveToken = filledBase64Url(32, 52);
+    const manageToken = filledBase64Url(32, 53);
+    const created = await exports.default.fetch(apiRequest("/api/v1/sends", {
+      attemptId: filledBase64Url(16, 54),
+      clientNotAfter: now + 900,
+      envelope: envelopeAt(vectorById("send-passphrase"), now + 900, "kxe1"),
+      locator,
+      manageToken,
+      maxRetrievals: 2,
+      retrieveToken,
+      settleNotAfter: now + 30,
+      ttlSeconds: 900
+    }, await creationCookie(15)));
+    expect(created.status).toBe(200);
+
+    const released = await exports.default.fetch(apiRequest("/api/v1/sends/retrieve", { locator, retrieveToken }));
+    expect(released.status).toBe(200);
+    await released.arrayBuffer();
+
+    const wrongToken = await exports.default.fetch(apiRequest("/api/v1/sends/retrieve", {
+      locator,
+      retrieveToken: filledBase64Url(32, 55)
+    }));
+    expect(wrongToken.status).toBe(404);
+
+    const status = await exports.default.fetch(apiRequest("/api/v1/sends/status", { locator, manageToken }));
+    expect(status.status).toBe(200);
+    const body = await status.json();
+    expect(body).toMatchObject({ failedAccessAttempts: 1, remainingRetrievals: 1, state: "active" });
+    expect(parseSendStatusResponse(body).releasedAt).toHaveLength(1);
+  });
+
+  test("counts a wrong management token separately from recipient access", async () => {
+    const now = unixSeconds();
+    const locator = filledBase64Url(16, 61);
+    const retrieveToken = filledBase64Url(32, 62);
+    const manageToken = filledBase64Url(32, 63);
+    const created = await exports.default.fetch(apiRequest("/api/v1/sends", {
+      attemptId: filledBase64Url(16, 64),
+      clientNotAfter: now + 900,
+      envelope: envelopeAt(vectorById("send-none"), now + 900, "kxe1"),
+      locator,
+      manageToken,
+      maxRetrievals: 1,
+      retrieveToken,
+      settleNotAfter: now + 30,
+      ttlSeconds: 900
+    }, await creationCookie(16)));
+    expect(created.status).toBe(200);
+
+    const wrongManage = await exports.default.fetch(apiRequest("/api/v1/sends/status", {
+      locator,
+      manageToken: filledBase64Url(32, 65)
+    }));
+    expect(wrongManage.status).toBe(404);
+
+    await waitForAuthBackoff();
+    const status = await exports.default.fetch(apiRequest("/api/v1/sends/status", { locator, manageToken }));
+    expect(await status.json()).toMatchObject({ failedAccessAttempts: 0, releasedAt: [], state: "active" });
   });
 });
 

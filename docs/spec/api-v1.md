@@ -128,8 +128,10 @@ These values describe the state committed for this release. This is the only rec
 Response while the authenticated state still exists:
 
 ```json
-{"remainingRetrievals":1,"serverExpiresAt":1787230800,"state":"active"}
+{"failedAccessAttempts":0,"releasedAt":[1787227200],"remainingRetrievals":1,"serverExpiresAt":1787230800,"state":"active"}
 ```
+
+`releasedAt` holds one server timestamp per committed release, oldest first, and never more entries than the transfer's allowed opens. `failedAccessAttempts` counts presentations of a wrong retrieve token and saturates at 999. Neither field carries an address, a user agent, or any other recipient identifier; the service does not collect them.
 
 Both success and generic unavailable include `Kryptex-State-Checked-At`, captured inside the locator Durable Object transaction at the authoritative state read. The Worker must not synthesize this header later.
 

@@ -28,6 +28,7 @@ import {
   parseShortenResponse,
   parseStateCheckedMetadata
 } from "./api.js";
+import { FAILED_ACCESS_SATURATION } from "./protocol.js";
 
 interface ContractCase {
   readonly name: string;
@@ -126,7 +127,7 @@ const responseCases: readonly ContractCase[] = [
   {
     name: "send status",
     parse: parseSendStatusResponse,
-    value: { remainingRetrievals: 1, serverExpiresAt: 1800003600, state: "active" }
+    value: { failedAccessAttempts: 0, releasedAt: [1800000100], remainingRetrievals: 1, serverExpiresAt: 1800003600, state: "active" }
   },
   { name: "send revoke", parse: parseRevokeResponse, value: { state: "revoked" } },
   { name: "request revoke", parse: parseRevokeResponse, value: { state: "revoked" } },
@@ -186,8 +187,18 @@ describe("all API route bodies", () => {
       throw new Error("missing send create fixture");
     }
     expect(() => parseSendCreateRequest({ ...send.value, ttlSeconds: 42 })).toThrow();
-    expect(() => parseSendStatusResponse({ remainingRetrievals: 1, serverExpiresAt: 1, state: "missing" })).toThrow();
+    expect(() => parseSendStatusResponse({ failedAccessAttempts: 0, releasedAt: [], remainingRetrievals: 1, serverExpiresAt: 1, state: "missing" })).toThrow();
     expect(() => parseRequestStatusResponse({ serverExpiresAt: 1, state: "active" })).toThrow();
+  });
+
+  test("bounds the access facts a send status may report", () => {
+    const base = { failedAccessAttempts: 0, releasedAt: [], remainingRetrievals: 1, serverExpiresAt: 1800003600, state: "active" };
+    expect(parseSendStatusResponse({ ...base, failedAccessAttempts: FAILED_ACCESS_SATURATION }).failedAccessAttempts).toBe(FAILED_ACCESS_SATURATION);
+    expect(() => parseSendStatusResponse({ ...base, failedAccessAttempts: FAILED_ACCESS_SATURATION + 1 })).toThrow();
+    expect(() => parseSendStatusResponse({ ...base, failedAccessAttempts: -1 })).toThrow();
+    expect(() => parseSendStatusResponse({ ...base, releasedAt: Array.from({ length: 11 }, () => 1800000100) })).toThrow();
+    expect(() => parseSendStatusResponse({ ...base, releasedAt: [1800000100.5] })).toThrow();
+    expect(() => parseSendStatusResponse({ ...base, releasedAt: "1800000100" })).toThrow();
   });
 });
 
