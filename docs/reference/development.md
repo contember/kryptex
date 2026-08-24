@@ -1,7 +1,5 @@
 # Development and local operation
 
-Kryptex is experimental and not production-ready. Use only synthetic test data. An independent cryptographic review and a tested production deployment are still required.
-
 ## Local setup
 
 Install Bun 1.3.14 and OpenSSL. From the repository root, install the pinned workspace dependencies:

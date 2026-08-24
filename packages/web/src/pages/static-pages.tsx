@@ -48,10 +48,6 @@ export function HomePage() {
     </ol>
     <div className="home-footer">
       <Link className="quiet-link" to="/security">What Kryptex protects — and where it stops</Link>
-      <p className="notice notice--experimental">
-        <strong>Experimental — not production-ready.</strong>
-        <span>The protocol has had no independent cryptographic review and no tested production deployment. Use synthetic test data only.</span>
-      </p>
     </div>
   </div>;
 }
@@ -141,10 +137,6 @@ export function SecurityPage() {
     <PageIntro title="What Kryptex protects">
       <p>Plain answers to the questions worth asking before you trust a tool with a credential.</p>
     </PageIntro>
-    <p className="notice notice--experimental">
-      <strong>Experimental — not production-ready.</strong>
-      <span>The protocol has had no independent cryptographic review and no tested production deployment. Use synthetic test data only.</span>
-    </p>
     <InfoSection title="What stays in your browser">
       <p>The readable secret, your passphrase, the second key, and the encryption keys. The service receives an encrypted envelope and the derived permissions needed to store and release it.</p>
     </InfoSection>

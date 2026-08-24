@@ -10,7 +10,6 @@ Status: frozen for the version 1 MVP.
 - Use **management link** for sender status and revocation.
 - Use **pickup link** for the owner of a write-once request.
 - Never use **zero knowledge**, **unbreakable**, **guaranteed deletion**, or **cannot be copied**.
-- Every crypto page shows **Experimental — not production-ready** in the persistent header.
 
 The generated second key is the recommended protection. Its instruction says: **Send the second key through an independently secured channel. Two apps on the same compromised device or account may not be independent.** Link-only protection explicitly says that the link is a bearer credential. Passphrase protection says that weak passphrases can be guessed and that Argon2id raises cost but does not make a weak phrase safe.
 
@@ -27,7 +26,7 @@ The home screen has two primary actions:
 1. **Send a secret** — encrypt content and create a retrieval link.
 2. **Request a secret** — define fields and create a write-once link.
 
-It states that encryption and decryption happen in the browser and the service stores ciphertext. It links to the experimental security model without marketing claims.
+It states that encryption and decryption happen in the browser and the service stores ciphertext. It links to the security model without marketing claims.
 
 ## Isolated creation authorization
 

@@ -82,7 +82,7 @@ function RootLayout() {
       <div className="masthead__inner">
         <Link aria-label="Kryptex home" className="wordmark" to="/">Kryptex</Link>
         <span className="masthead__flow">{flowName}</span>
-        <Link className="experimental-marker" to="/security">Experimental — not production-ready</Link>
+        <Link className="masthead__security" to="/security">Security</Link>
       </div>
     </header>
     <main><Outlet /></main>

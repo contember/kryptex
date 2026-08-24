@@ -93,7 +93,7 @@ No remote fonts are permitted.
 
 ## Navigation
 
-The compact top line contains the wordmark, current task, and an **Experimental** marker. There is no account area, persistent route list, or lifecycle rail. The home page exposes only two primary actions: send a secret and request a secret. Security documentation is a quiet secondary link.
+The compact top line contains the wordmark, current task, and a quiet link to the security model. There is no account area, persistent route list, or lifecycle rail. The home page exposes only two primary actions: send a secret and request a secret. Security documentation is a quiet secondary link.
 
 Each task route shows one form or one current state. Do not expose protocol stages, state simulators, or terminal-state menus in the primary interface.
 

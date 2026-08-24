@@ -1,7 +1,5 @@
 # Production deployment
 
-Kryptex is experimental and not production-ready. Do not use real secrets until an independent cryptographic review is complete.
-
 The repository deploys through [`.github/workflows/deploy.yml`](../../.github/workflows/deploy.yml). Never run a production deploy from a workstation. A push to `main` or a manual workflow dispatch runs the same pipeline:
 
 1. Run protocol-vector, lint, type, test, and build gates.

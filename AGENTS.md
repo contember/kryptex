@@ -23,7 +23,3 @@ Kryptex is a capability-based, end-to-end encrypted secret transfer service.
 - Unit tests stay inside the package they exercise.
 - Run full builds through `cpu-lease`.
 - This is a public repository. Do not reference private projects, clients, URLs, or incidents.
-
-## Release status
-
-Until an independent cryptographic review is complete, user-facing documentation must describe the project as experimental and not production-ready.

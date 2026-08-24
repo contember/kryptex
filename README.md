@@ -2,8 +2,6 @@
 
 Kryptex is a capability-based, end-to-end encrypted service for sending or requesting short-lived secrets without an account. Encryption and decryption run in the browser. The service stores encrypted envelopes and protocol state, not readable secret content or decryption keys.
 
-> **Experimental — not production-ready.** The protocol and implementation have not completed an independent cryptographic review. The repository also has no tested production deployment. Do not use the current application for real secrets.
-
 ## Architecture
 
 - A React client creates keys, encrypts content, derives capabilities, and removes secret URL fragments from the address bar before rendering a secret page.
@@ -31,4 +29,4 @@ bun install --frozen-lockfile
 bun run dev
 ```
 
-Local development also needs the environment files described in that guide. Do not deploy from a workstation. The repository intentionally has no deployment workflow or production deploy script.
+Local development also needs the environment files described in that guide. Never deploy from a workstation. Production ships through the GitHub Actions pipeline in [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml).
