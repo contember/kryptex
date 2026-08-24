@@ -29,4 +29,4 @@ bun install --frozen-lockfile
 bun run dev
 ```
 
-Local development also needs the environment files described in that guide. Never deploy from a workstation. Production ships through the GitHub Actions pipeline in [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml).
+Local development also needs the environment files described in that guide. Never deploy from a workstation. Every push and pull request runs the verification gates in [`.github/workflows/ci.yml`](.github/workflows/ci.yml); production ships from a version tag through [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml).

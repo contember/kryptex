@@ -1,8 +1,12 @@
 # Production deployment
 
-The repository deploys through [`.github/workflows/deploy.yml`](../../.github/workflows/deploy.yml). Never run a production deploy from a workstation. A push to `main` or a manual workflow dispatch runs the same pipeline:
+Verification and deployment are separate workflows.
 
-1. Run protocol-vector, lint, type, test, and build gates.
+[`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) runs the protocol-vector, lint, type, test, and build gates on every push to `main` and on every pull request. It never touches Cloudflare and needs no secrets.
+
+[`.github/workflows/deploy.yml`](../../.github/workflows/deploy.yml) deploys. Never run a production deploy from a workstation. Pushing a tag that starts with `v` followed by a digit, or dispatching the workflow manually, runs the same pipeline:
+
+1. Run the CI workflow again against the tagged commit, because a tag can point at a commit that never passed those gates.
 2. Enter the protected `production` GitHub Environment.
 3. Validate all production variables and secrets.
 4. Build the web assets with the production Turnstile sitekey.
@@ -12,6 +16,17 @@ The repository deploys through [`.github/workflows/deploy.yml`](../../.github/wo
 8. Run read-only and non-consuming HTTP smoke checks.
 
 The pipeline does not perform an automatic rollback. A failed post-deploy smoke check leaves the new version visible and marks the workflow failed. Inspect the failure before rolling forward or using Cloudflare's version rollback controls.
+
+## Releasing
+
+Tag the commit that should reach production, then push the tag:
+
+```sh
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+A tag alone does not deploy anything unless the `production` environment is configured. An unconfigured environment fails the validation gate before Wrangler runs.
 
 ## GitHub Environment
 
