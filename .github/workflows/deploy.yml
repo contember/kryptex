@@ -81,7 +81,7 @@ jobs:
               RATE_LIMIT_KEY: env.RATE_LIMIT_KEY,
               TURNSTILE_SECRET_KEY: env.TURNSTILE_SECRET_KEY
             }' > "${secrets_file}"
-          bunx --bun wrangler deploy \
+          bunx wrangler deploy \
             --config packages/worker/wrangler.jsonc \
             --strict \
             --secrets-file "${secrets_file}" \
