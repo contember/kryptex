@@ -3,12 +3,16 @@ import type { RequestStatusResponse } from "@kryptex/contracts/api";
 import type { RequestResponsePayload } from "@kryptex/contracts/payloads";
 import { deriveRequestOwnerKeys, encodeBase64Url, equalBytes, openRequestResponse, parseKxr1Header, receiptDisplay } from "@kryptex/crypto";
 import { useClient } from "../client-context";
-import { artifactUrl, checkedResponseExpiry, consumeBundle, pickupRecoveryForStatus, shortenedExpiryRequest } from "../crypto-flow";
+import { artifactUrl, checkedResponseExpiry, consumeBundle, pickupRecoveryForStatus, shortenedExpiryRequest, shouldPollRequestStatus } from "../crypto-flow";
 import { describeRequestState, formatExactTime, formatTimeLeft, isSensitiveField } from "../format";
 import type { FragmentCapture } from "../fragment";
 import { AmbiguousNotice, BurnAction, FieldHint, FragmentNotice, OperationNotice, PageIntro, SecretField, ShareSlip, StatusMessage, StatusSheet, useNowSeconds, type OperationState } from "../ui";
 
 type PickupRecovery = "none" | "checking" | "retry" | "lost";
+
+const POLL_INTERVAL_MS = 10_000;
+/** A few failed reads are a network blip; a run of them means the record is gone, so stop asking. */
+const POLL_FAILURE_LIMIT = 5;
 
 export function OwnerPage({ capture }: { readonly capture: FragmentCapture }) {
   const client = useClient();
@@ -62,6 +66,30 @@ export function OwnerPage({ capture }: { readonly capture: FragmentCapture }) {
     })(); }, 0);
     return () => { window.clearTimeout(timeout); };
   }, [bundle, client]);
+
+  const polling = shouldPollRequestStatus(state === "done", pickupRecovery !== "none", status?.state ?? null);
+
+  useEffect(() => {
+    if (!polling || bundle?.kind !== 4) return;
+    let cancelled = false;
+    let failures = 0;
+    const timer = window.setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      void (async () => {
+        try {
+          const keys = await deriveRequestOwnerKeys(bundle.ownerSeed);
+          const next = await client.requestStatus({ locator: encodeBase64Url(bundle.requestLocator), ownerToken: encodeBase64Url(keys.ownerToken) });
+          checkedResponseExpiry(bundle.serverExpiresAt, next.serverExpiresAt);
+          failures = 0;
+          if (!cancelled) setStatus(next);
+        } catch {
+          failures += 1;
+          if (failures >= POLL_FAILURE_LIMIT) window.clearInterval(timer);
+        }
+      })();
+    }, POLL_INTERVAL_MS);
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, [bundle, client, polling]);
 
   async function reconcilePickup(): Promise<void> {
     setPickupRecovery("checking");
@@ -185,6 +213,7 @@ export function OwnerPage({ capture }: { readonly capture: FragmentCapture }) {
         {status.state === "picked_up" && pickupRecovery === "lost"
           ? <StatusMessage tone="danger">The answer was released, but this browser could not recover it. The service cannot release it a second time.</StatusMessage>
           : <StatusMessage tone={description.tone}>{description.detail}</StatusMessage>}
+        {polling ? <FieldHint>This page rechecks the status every few seconds while it stays open. Checking never releases the answer.</FieldHint> : null}
       </>}
 
     {pickupAction}

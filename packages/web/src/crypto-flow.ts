@@ -111,6 +111,18 @@ export function pickupRecoveryForStatus(state: RequestStatusResponse["state"]): 
   return "terminal";
 }
 
+/**
+ * Status reads never release the answer, so the pickup page may repeat them while it waits.
+ * Polling stops as soon as anything needs a decision from the owner.
+ */
+export function shouldPollRequestStatus(
+  settled: boolean,
+  recovering: boolean,
+  state: RequestStatusResponse["state"] | null
+): boolean {
+  return settled && !recovering && state === "waiting";
+}
+
 export async function exactEnvelopeForRetry(existing: string | null, create: () => Promise<string>): Promise<string> {
   if (existing !== null) return existing;
   return create();

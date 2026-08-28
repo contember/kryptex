@@ -224,7 +224,7 @@ input[type="radio"], input[type="checkbox"] { flex: 0 0 auto; width: 18px; heigh
 .share-row__channel { margin: 0; color: var(--secondary); font-size: 0.88rem; }
 .share-row__value { display: flex; align-items: flex-start; gap: 8px; }
 .share-row__value code { flex: 1 1 auto; min-width: 0; padding: 10px; border: 1px dashed var(--rule-strong); border-radius: 4px; background: var(--inset); color: var(--ink); font-size: 0.74rem; line-height: 1.6; overflow-wrap: anywhere; user-select: all; }
-.share-row__value button { flex: 0 0 auto; min-height: 38px; padding: 8px 14px; }
+.share-row__value button, .share-row__value a { flex: 0 0 auto; min-height: 38px; padding: 8px 14px; }
 .badge { padding: 2px 7px; border: 1px solid var(--rule-strong); border-radius: 3px; color: var(--muted); font: 700 0.62rem/1.5 var(--mono); letter-spacing: 0.08em; text-transform: uppercase; }
 .badge--required { border-color: var(--brass); background: var(--brass-soft); color: var(--brass); }
 .manual-copy { padding: 10px; border: 1px solid var(--brass); border-radius: 4px; }
@@ -290,7 +290,7 @@ input[type="radio"], input[type="checkbox"] { flex: 0 0 auto; width: 18px; heigh
   .compact-options label { flex: 1 1 calc(50% - 8px); }
   .inline-fields > div { grid-template-columns: 1fr; }
   .share-row__value { flex-wrap: wrap; }
-  .share-row__value button { width: 100%; }
+  .share-row__value button, .share-row__value a { width: 100%; }
   .confirm-dialog form > div, .confirm-dialog > div { flex-direction: column-reverse; }
   .confirm-dialog form > div button, .confirm-dialog > div button { width: 100%; }
 }

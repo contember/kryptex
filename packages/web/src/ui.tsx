@@ -13,6 +13,8 @@ export type Tone = "quiet" | "success" | "warning" | "danger";
 export interface ShareArtifact {
   readonly channel: string;
   readonly id: string;
+  /** Label for an action opening this artifact in a new tab. Only set it on links the owner keeps. */
+  readonly openLabel?: string;
   readonly required: boolean;
   readonly title: string;
   readonly value: string;
@@ -186,6 +188,9 @@ function ShareRow({ artifact, saved, onSaved }: { readonly artifact: ShareArtifa
     <div className="share-row__value">
       <code className="mono">{artifact.value}</code>
       <button className="secondary-button" onClick={() => { clipboard.copy(artifact.value); }} type="button">{clipboard.state === "copied" ? "Copied" : "Copy"}</button>
+      {artifact.openLabel === undefined
+        ? null
+        : <a className="secondary-button" href={artifact.value} rel="noopener noreferrer" target="_blank">{artifact.openLabel}</a>}
     </div>
     {clipboard.state === "manual"
       ? <label className="field-block manual-copy">

@@ -73,9 +73,9 @@ After an ambiguous revoke or shorten response, the page refreshes authenticated 
 ## Request creation
 
 1. The owner defines 1 through 32 fixed field types: short text, secret text, multiline text, or a label-only instruction.
-2. The owner selects lifetime and protection. The recommended default and alternatives match Send.
+2. The owner selects lifetime and protection. The alternatives match Send, but protection defaults to **Link only**. A write factor decides who may answer; it never protects the answer, which is HPKE-encrypted to the pickup key in every mode. The second key stays the recommended option and is the right choice when an unwanted first answer would be costly.
 3. After isolated creation authorization, the owner confirms creation.
-4. The receipt shows separate write-link, second-key when applicable, and pickup-link artifacts.
+4. The receipt shows separate write-link, second-key when applicable, and pickup-link artifacts. The pickup-link artifact carries an open action next to its copy action, because the owner keeps that link and waits on it while the write link travels.
 5. The owner confirms **Write link saved**, **Second key saved** when present, and **Pickup link saved** separately. The pickup link contains the only private-key seed and cannot be recovered.
 
 An ambiguous create response enters the same **Reconciling creation** phase using request status and the in-memory owner capability. Existing state supplies `serverExpiresAt`. Only unavailable observed after the server-enforced settlement deadline permits a new permit and entirely fresh seeds, HPKE key pair, nonce, and envelope. An unreachable encrypted candidate may remain until lifecycle cleanup.
@@ -91,13 +91,13 @@ An ambiguous create response enters the same **Reconciling creation** phase usin
 
 If submit loses its response, the page retains the exact `KXR1` bytes and shows **Outcome unknown**. It never retries automatically. The user may explicitly retry the identical envelope: a first accepted write cannot be overwritten, while a previously uncommitted write may succeed. Generic unavailable after retry remains ambiguous to the writer.
 
-A holder of the write capability can submit unwanted data first. Split-key or passphrase protection reduces this risk. The writer already knows the plaintext entered; write-only describes service access after submission.
+A holder of the write capability can submit unwanted data first, and the link-only default accepts that risk in exchange for a one-step hand-off. Split-key or passphrase protection reduces it. The writer already knows the plaintext entered; write-only describes service access after submission.
 
 ## Request owner screen and pickup
 
 The pickup link opens one owner screen:
 
-- `waiting`: non-consuming status, expiry, shorten, and revoke;
+- `waiting`: non-consuming status, expiry, shorten, and revoke. The screen repeats the non-consuming status read every 10 seconds while it stays open and visible, so an answer appears without a manual check. Polling stops on any other state, while a pickup or recovery decision is pending, and after five consecutive failed reads;
 - `submitted`: explicit **Retrieve response once**, expiry, shorten, and revoke;
 - `picked_up`, `revoked`, or `expired`: terminal explanation without response data;
 - generic unavailable: no claim beyond the missing server record.

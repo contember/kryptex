@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { RequestStatusResponse, SendStatusResponse, StateCheckedMetadata } from "@kryptex/contracts/api";
 import { ApiFailure } from "./api-client";
-import { checkedResponseExpiry, classifyConsumingFailure, classifyReadFailure, classifySubmitFailure, createFactor, exactEnvelopeForRetry, factorFromInput, pickupRecoveryForStatus, reconcileRequestCreation, reconcileSendCreation, shortenedExpiryRequest } from "./crypto-flow";
+import { checkedResponseExpiry, classifyConsumingFailure, classifyReadFailure, classifySubmitFailure, createFactor, exactEnvelopeForRetry, factorFromInput, pickupRecoveryForStatus, reconcileRequestCreation, reconcileSendCreation, shortenedExpiryRequest, shouldPollRequestStatus } from "./crypto-flow";
 
 describe("factor helpers", () => {
   it("round-trips all three factor modes", async () => {
@@ -50,6 +50,17 @@ describe("safe controller decisions", () => {
     expect(pickupRecoveryForStatus("submitted")).toBe("retry");
     expect(pickupRecoveryForStatus("picked_up")).toBe("lost");
     expect(pickupRecoveryForStatus("waiting")).toBe("terminal");
+  });
+
+  it("polls the pickup status only while an unanswered request needs nothing from the owner", () => {
+    expect(shouldPollRequestStatus(true, false, "waiting")).toBe(true);
+    expect(shouldPollRequestStatus(true, false, "submitted")).toBe(false);
+    expect(shouldPollRequestStatus(true, false, "picked_up")).toBe(false);
+    expect(shouldPollRequestStatus(true, false, "revoked")).toBe(false);
+    expect(shouldPollRequestStatus(true, false, "expired")).toBe(false);
+    expect(shouldPollRequestStatus(true, false, null)).toBe(false);
+    expect(shouldPollRequestStatus(false, false, "waiting")).toBe(false);
+    expect(shouldPollRequestStatus(true, true, "waiting")).toBe(false);
   });
 
   it("reuses the exact response envelope after its first creation", async () => {

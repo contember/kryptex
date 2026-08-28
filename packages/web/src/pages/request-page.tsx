@@ -26,7 +26,7 @@ export function RequestPage() {
   const [title, setTitle] = useState("");
   const [instructions, setInstructions] = useState("");
   const [fields, setFields] = useState<readonly DraftField[]>([{ help: "", label: "API key", required: true, type: "secret" }]);
-  const [protection, setProtection] = useState<Protection>("second-key");
+  const [protection, setProtection] = useState<Protection>("link-only");
   const [passphrase, setPassphrase] = useState("");
   const [confirmation, setConfirmation] = useState("");
   const [ttl, setTtl] = useState<TtlSeconds>(DEFAULT_TTL);
@@ -57,7 +57,7 @@ export function RequestPage() {
   function finishCreate(value: PendingRequest, serverExpiresAt: number): void {
     const next: ShareArtifact[] = [{ channel: "Send this to the person who should answer. They can fill it in once.", id: "write", required: true, title: "Write link", value: artifactUrl("/r", { factorMode: value.factor.mode, kind: 3, recipientPublicKey: value.publicKey, requestLocator: value.locator, salt: value.factor.salt, serverExpiresAt, writeSeed: value.writeSeed }) }];
     if (value.factor.secondKey !== null) next.push({ channel: "Send through a different channel than the write link — a call, a chat on another device, in person.", id: "factor", required: true, title: "Second key", value: value.factor.secondKey });
-    next.push({ channel: "Keep this for yourself. It is the only way to open the answer, and it works once.", id: "pickup", required: true, title: "Pickup link", value: artifactUrl("/i", { kind: 4, ownerSeed: value.ownerSeed, requestLocator: value.locator, serverExpiresAt }) });
+    next.push({ channel: "Keep this for yourself. Open it to watch for the answer — the page refreshes on its own and releasing the answer works once.", id: "pickup", openLabel: "Open", required: true, title: "Pickup link", value: artifactUrl("/i", { kind: 4, ownerSeed: value.ownerSeed, requestLocator: value.locator, serverExpiresAt }) });
     setReconciling(false); setPending(null); setArtifacts(next); setExpiresAt(serverExpiresAt); setState("done");
   }
 
