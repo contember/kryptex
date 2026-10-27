@@ -23,9 +23,10 @@ async function smoke(): Promise<void> {
   requireHeader(page, "Referrer-Policy", "no-referrer");
   requireHeader(page, "X-Content-Type-Options", "nosniff");
 
-  const forbidden = await fetch(`${origin}/api/v1/probe`, { method: "GET", redirect: "error" });
+  // A request without Origin is a native client request; a foreign Origin is what the gate must refuse.
+  const forbidden = await fetch(`${origin}/api/v1/probe`, { headers: { Origin: "https://other.invalid" }, method: "GET", redirect: "error" });
   if (forbidden.status !== 403) {
-    throw new Error(`Smoke check failed: origin-less API request returned ${forbidden.status}`);
+    throw new Error(`Smoke check failed: foreign-origin API request returned ${forbidden.status}`);
   }
   requireHeader(forbidden, "Cache-Control", "no-store");
   requireHeader(forbidden, "Referrer-Policy", "no-referrer");
