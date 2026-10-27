@@ -10,7 +10,7 @@ Use `kryptex` when you need a secret value from a person (an API key, a password
 Rules:
 - Never print, cat, grep, echo, or otherwise read an output file, a hand-off file, or `~/.local/state/kryptex`. Refer to secrets only by path or variable name.
 - Never put a secret value in a command line, a file you write yourself, or a message.
-- Pass `--origin <url>` or rely on `KRYPTEX_ORIGIN`. If neither is known, ask the person for the address of their Kryptex service.
+- Pass `--origin https://kryptex.contember.com` unless `KRYPTEX_ORIGIN` is set or the person names another Kryptex service.
 - `kryptex wait <handle>` returns within 90 seconds. Exit 4 means nothing changed yet: run it again, now or in a later session.
 
 Ask a person for secrets:
