@@ -1,6 +1,5 @@
 import setupArgon2id from "argon2id/lib/setup.js";
-import initArgon2idNoSimd from "argon2id/dist/no-simd.wasm?init";
-import initArgon2idSimd from "argon2id/dist/simd.wasm?init";
+import { initializeArgon2NoSimd, initializeArgon2Simd } from "#argon2-wasm";
 import type { FactorMode } from "@kryptex/contracts/protocol";
 import { requireLength, utf8 } from "./bytes.js";
 import { fail, opaqueFailure } from "./errors.js";
@@ -94,8 +93,8 @@ export async function derivePassphraseFactor(passphrase: string, salt: Uint8Arra
     return await opaqueFailure(async () => {
       // Per-call setup avoids retaining 65 MiB of WASM memory; JavaScript cannot control when GC releases it.
       const argon2id = await setupArgon2id(
-        (imports) => instantiateArgon2(wasmInitializer(initArgon2idSimd), imports),
-        (imports) => instantiateArgon2(wasmInitializer(initArgon2idNoSimd), imports)
+        (imports) => instantiateArgon2(wasmInitializer(initializeArgon2Simd), imports),
+        (imports) => instantiateArgon2(wasmInitializer(initializeArgon2NoSimd), imports)
       );
       const derived = argon2id({
         memorySize: 65536,
