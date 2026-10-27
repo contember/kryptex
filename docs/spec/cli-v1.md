@@ -28,7 +28,7 @@ The CLI runs on Bun. Every command that creates an operation takes `--origin <ur
 
 ## Commands
 
-All commands print exactly one JSON object followed by a newline on standard output and print nothing on standard error, except for redacted child output under `--exec`.
+All commands except `skill` print exactly one JSON object followed by a newline on standard output and print nothing on standard error, except for redacted child output under `--exec`.
 
 ### `kryptex request create`
 
@@ -63,7 +63,7 @@ kryptex send create --origin <url> --from-env-file <path> --env-dialect <expand|
   --handoff-file <path> [--ttl <seconds>] [--max-retrievals <1-10>]
 ```
 
-Reads each named key from the source dotenv file and builds one send-fields payload with `label` equal to the key name and `type` equal to `secret`. A missing key, a duplicate `--key`, or an empty value fails before any network call. The values are encrypted under a fresh second key. `--ttl` defaults to `604800` and `--max-retrievals` to `1`.
+Reads each named key from the source dotenv file and builds one send-fields payload with `label` equal to the key name and `type` equal to `secret`. A key matches `[A-Za-z_][A-Za-z0-9_]*` and is at most 120 bytes, the protocol label limit. A missing key, a duplicate `--key`, or an empty value fails before any network call. In the `expand` dialect, variables resolve only from the same file, never from the process environment. The values are encrypted under a fresh second key. `--ttl` defaults to `604800` and `--max-retrievals` to `1`.
 
 The command writes the operation state, starts browser pairing, and returns immediately with the pairing action. The values are read and encrypted when the operation creates the send, not at this point, so the source file must still hold them then.
 
@@ -73,11 +73,11 @@ Advances an operation until a person must act, the operation finishes, or the ti
 
 ### `kryptex list`
 
-Prints metadata for every recorded operation: handle, kind, state, origin, expiry, and output target path or command name. It never prints capabilities or values. It is how an agent recovers a handle after a lost command output.
+Prints metadata for every recorded operation: handle, kind, state, origin, expiry, and output target path or command name. It never prints capabilities or values. It is how an agent recovers a handle after a lost command output. A record that fails strict parsing is listed with state `invalid`.
 
 ### `kryptex discard <handle>`
 
-Revokes the server resource when the operation still holds a management or owner capability and the resource is not terminal, then deletes the local state. A failed revoke is reported, and the local state is kept unless `--force` is given.
+Revokes the server resource when the operation still holds a management or owner capability and the resource is not terminal, then deletes the local state. A failed revoke is reported, and the local state is kept unless `--force` is given. `--force` also removes a record that fails strict parsing. A send gives up its management capability when it reaches `created`; from then on only the person holding the hand-off file can revoke it.
 
 ### `kryptex skill`
 
@@ -98,12 +98,18 @@ Output shapes:
 ```json
 {"action":"pair","handle":"k7f3q2m9xd","kind":"request","pairingExpiresAt":1787227800,"pairUrl":"https://host/pair#ABCD-EFGH","state":"pairing","userCode":"ABCD-EFGH"}
 {"action":"hand_over_write_link","expiresAt":1787832000,"handle":"k7f3q2m9xd","kind":"request","state":"waiting","writeUrl":"https://host/r#…"}
-{"expiresAt":1787832000,"handle":"k7f3q2m9xd","kind":"request","state":"waiting"}
+{"expiresAt":1787832000,"handle":"k7f3q2m9xd","kind":"request","state":"waiting","writeUrl":"https://host/r#…"}
+{"handle":"k7f3q2m9xd","kind":"request","state":"creating"}
 {"delivered":{"keys":["OPENAI_API_KEY"],"path":".env"},"handle":"k7f3q2m9xd","kind":"request","receipt":"0A1B2C3D …","state":"delivered"}
 {"delivered":{"command":"wrangler","exitCode":0,"keys":["OPENAI_API_KEY"]},"handle":"k7f3q2m9xd","kind":"request","receipt":"…","state":"delivered"}
 {"action":"hand_over_recipient_link","expiresAt":1787832000,"handle":"p2c8…","handoffFile":"secrets/handoff.txt","kind":"send","recipientUrl":"https://host/s#…","state":"created"}
 {"error":"pickup_lost","handle":"k7f3q2m9xd","message":"The answer was released by the service but not received. It cannot be recovered.","retryable":false}
+{"operations":[{"expiresAt":1787832000,"handle":"k7f3q2m9xd","kind":"request","origin":"https://host","state":"waiting","target":".env"}]}
+{"discarded":true,"handle":"k7f3q2m9xd","revoked":true}
+{"error":"usage","message":"--spec is required."}
 ```
+
+A pending pairing reports the same `pair` output with exit 4. A waiting request repeats `writeUrl` with exit 4, so an agent that lost the first output can still hand the link over. `expiresAt` in `list` is `null` until the resource exists.
 
 `receipt` is the 64-digit display form of the `KXR1` receipt digest. Error codes are listed in [Errors](#errors).
 
@@ -126,11 +132,11 @@ pairing → creating → waiting → picking → received → delivered
 | State | Stored sensitive material | `wait` behaviour |
 | --- | --- | --- |
 | `pairing` | Poll token, user code. | Polls pairing redeem. On approval, stores the permit and moves to `creating`. An expired pairing starts a fresh one and returns the new pairing action. |
-| `creating` | Permit, `R`, `W`, `O`, schema bytes, envelope, attempt ID, `settleNotAfter`, `clientNotAfter`. | Written before the create POST. On success, moves to `waiting`. After an ambiguous or interrupted create, reconciles through owner status exactly as product flows require; definitive absence discards the permit and seeds and returns to `pairing`. A `creation_permit_required` response also returns to `pairing`. |
+| `creating` | Permit, `R`, `W`, `O`, schema bytes, envelope, attempt ID, `settleNotAfter`, `clientNotAfter`. | Written before the create POST. On success, moves to `waiting`. After an ambiguous or interrupted create, reconciles through owner status exactly as product flows require; definitive absence discards the seeds and creates again with the same permit. A timeout during reconciliation keeps the attempt and exits 4 with state `creating`. A `creation_permit_required` response, from permit status or creation, starts a fresh pairing. |
 | `waiting` | `R`, `W`, `O`, schema digest, `clientNotAfter`, `serverExpiresAt`, field mapping. | The first transition into `waiting` returns `hand_over_write_link` with exit 3. Later calls poll owner status with backoff from 2 to 15 seconds. `submitted` moves to `picking`. Terminal states end the operation. |
 | `picking` | As `waiting`. | Written before the pickup POST. First preflights the output target. A lost pickup response queries owner status: `submitted` permits one more pickup, `picked_up` ends with `pickup_lost`. |
 | `received` | `O`, `R`, exact `KXR1` bytes, schema digest, `clientNotAfter`, mapping. | Written after the full response is received and before decryption. Decrypts, verifies, and writes the output. An output failure keeps this state so that `wait` can retry after the cause is fixed. |
-| `delivered` | None. | Completion record: handle, kind, target metadata, keys, receipt, completion time. Repeated `wait` reprints the result. |
+| `delivered` | None. | Completion record: handle, kind, target metadata, keys, and receipt. Repeated `wait` reprints the result. |
 
 Before a completion record replaces a sensitive record, the output has been written and synced. An unavoidable window remains between the service committing `picked_up` and the CLI durably storing the `KXR1` bytes; a crash inside it loses the answer, and the CLI reports `pickup_lost`.
 
@@ -145,7 +151,7 @@ pairing → creating → handoff → created
 | State | Stored sensitive material | `wait` behaviour |
 | --- | --- | --- |
 | `pairing` | Poll token, user code. | As for requests. |
-| `creating` | Permit, `S`, `M`, second key, envelope, attempt ID, `settleNotAfter`, `clientNotAfter`. | Written before the create POST. The source values are read and encrypted when entering this state and then exist only inside the envelope. Reconciliation uses send status with the management capability. |
+| `creating` | Permit, `S`, `M`, second key, envelope, attempt ID, `settleNotAfter`, `clientNotAfter`. | Written before the create POST. The source values are read and encrypted when entering this state and then exist only inside the envelope. Reconciliation uses send status with the management capability, as for requests. |
 | `handoff` | `S`, `M`, second key, `serverExpiresAt`. | Writes the hand-off file, then moves to `created`. A write failure keeps this state for a retry. |
 | `created` | Recipient link only. | Returns `hand_over_recipient_link` with exit 3 the first time and exit 0 after that. |
 
@@ -176,7 +182,7 @@ Output files are opened with `O_NOFOLLOW` and written through an exclusive tempo
 Encoding of one value, in order:
 
 1. Reject a value containing NUL or CR.
-2. In `expand`, reject a value containing `\$`, which has no unambiguous encoding, and replace each `$` with `\$`.
+2. In `expand`, reject a value containing `\$`, which has no unambiguous encoding, and a value ending in a backslash, which Bun reads as escaping the closing quote. Replace each `$` with `\$`, except a final `$`: Bun keeps `\$` literally before the closing quote, and a final `$` is never expanded.
 3. If the value contains no `'`, write `'value'`.
 4. Else, if it contains no backtick, write `` `value` ``.
 5. Else, if it contains no `"` and no backslash and no line break, write `"value"`.
@@ -190,7 +196,7 @@ Upsert rules for an existing file:
 - A target that appears exactly once on a single-line assignment is replaced in place. A target that does not appear is appended at the end, after a newline if the file does not end with one.
 - A target that appears more than once, or whose existing value spans several lines, fails with `env_file_conflict` before pickup. The CLI never prints the conflicting line.
 
-A value rejected by the encoder fails with `env_value_unrepresentable` and keeps the `received` state. The person can edit the file or the agent can discard the operation; the CLI does not change the target of a recorded operation.
+An optional field left empty is not written, so an existing assignment stays. A value rejected by the encoder fails with `env_value_unrepresentable` and keeps the `received` state. The person can edit the file or the agent can discard the operation; the CLI does not change the target of a recorded operation.
 
 ### `--exec`
 
@@ -198,7 +204,7 @@ The command and its arguments are fixed at creation and recorded. After a verifi
 
 The child's standard output and standard error are both forwarded to the CLI's standard error after redaction: every exact byte occurrence of each non-empty answer value is replaced with `[redacted:<TARGET>]`. Redaction is streamed with a carry buffer one byte shorter than the longest value, so occurrences split across reads are caught. It does not catch transformed values, such as encodings, substrings, or values split by the child itself; a command that prints transformed secrets will leak them.
 
-A zero exit code completes the operation. A non-zero exit code or a failure to start reports `exec_failed` with the exit code and keeps the `received` state. `wait` runs the command again, so commands should be idempotent.
+A zero exit code completes the operation. A non-zero exit code or a failure to start reports `exec_failed` and keeps the `received` state. `wait` runs the command again, so commands should be idempotent.
 
 ## Network rules
 

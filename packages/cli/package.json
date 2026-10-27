@@ -1,0 +1,21 @@
+{
+  "name": "@kryptex/cli",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "kryptex": "./src/main.ts"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run --config vitest.config.ts",
+    "typecheck": "tsc -b"
+  },
+  "dependencies": {
+    "@kryptex/client": "workspace:*",
+    "@kryptex/contracts": "workspace:*",
+    "@kryptex/crypto": "workspace:*",
+    "dotenv": "16.4.7",
+    "dotenv-expand": "12.0.1"
+  }
+}

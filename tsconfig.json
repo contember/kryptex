@@ -3,6 +3,7 @@
   "references": [
     { "path": "./packages/contracts" },
     { "path": "./packages/client" },
+    { "path": "./packages/cli" },
     { "path": "./packages/crypto" },
     { "path": "./packages/worker" },
     { "path": "./packages/web" },
