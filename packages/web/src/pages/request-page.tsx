@@ -4,9 +4,9 @@ import type { RequestFieldType, RequestSchemaField, RequestSchemaPayload } from 
 import { isTtlSeconds, type TtlSeconds } from "@kryptex/contracts/protocol";
 import type { RequestCreateRequest } from "@kryptex/contracts/api";
 import { deriveHpkeKeyPair, deriveRequestOwnerKeys, deriveRequestWriteKeys, encodeBase64Url, encryptRequestSchemaEnvelope, randomBytes } from "@kryptex/crypto";
-import { ApiFailure } from "../api-client";
+import { ApiFailure, reconcileRequestCreation } from "@kryptex/client";
 import { useClient } from "../client-context";
-import { artifactUrl, createFactor, reconcileRequestCreation, requestFieldId, type FactorMaterial } from "../crypto-flow";
+import { artifactUrl, createFactor, requestFieldId, type FactorMaterial } from "../crypto-flow";
 import { DEFAULT_TTL, TTL_CHOICES, VALUE_FIELD_TYPES, formatFieldType, formatTtl, isValueFieldType } from "../format";
 import { AdvancedDisclosure, ExpiryNote, FieldHint, NavigationGuard, OperationNotice, PageIntro, PassphraseFields, PolicySummary, ProtectionOptions, ShareSlip, StatusMessage, type OperationState, type Protection, type ShareArtifact } from "../ui";
 import { validatePassphrase, validateRequestDraft } from "../validation";

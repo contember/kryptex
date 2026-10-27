@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { RequestStatusResponse, SendStatusResponse, StateCheckedMetadata } from "@kryptex/contracts/api";
-import { ApiFailure } from "./api-client";
-import { checkedResponseExpiry, classifyConsumingFailure, classifyReadFailure, classifySubmitFailure, createFactor, exactEnvelopeForRetry, factorFromInput, pickupRecoveryForStatus, reconcileRequestCreation, reconcileSendCreation, shortenedExpiryRequest, shouldPollRequestStatus } from "./crypto-flow";
+import { ApiFailure } from "@kryptex/client";
+import { checkedResponseExpiry, classifyConsumingFailure, classifyReadFailure, classifySubmitFailure, createFactor, exactEnvelopeForRetry, factorFromInput, shortenedExpiryRequest, shouldPollRequestStatus } from "./crypto-flow";
 
 describe("factor helpers", () => {
   it("round-trips all three factor modes", async () => {
@@ -47,9 +46,6 @@ describe("safe controller decisions", () => {
     expect(classifyReadFailure(new Error("decrypt"))).toBe("unavailable");
     expect(classifySubmitFailure(new ApiFailure("unavailable", false))).toBe("unknown");
     expect(classifySubmitFailure(new ApiFailure("invalid_request", false))).toBe("unavailable");
-    expect(pickupRecoveryForStatus("submitted")).toBe("retry");
-    expect(pickupRecoveryForStatus("picked_up")).toBe("lost");
-    expect(pickupRecoveryForStatus("waiting")).toBe("terminal");
   });
 
   it("polls the pickup status only while an unanswered request needs nothing from the owner", () => {
@@ -71,33 +67,5 @@ describe("safe controller decisions", () => {
     expect(first).toBe("exact-kxr1");
     expect(retry).toBe(first);
     expect(creations).toBe(1);
-  });
-});
-
-describe("creation settlement", () => {
-  it("keeps polling the exact send status after the 1/2/4 second prefix", async () => {
-    const waits: number[] = [];
-    let calls = 0;
-    const client = {
-      sendStatus(): Promise<SendStatusResponse & StateCheckedMetadata> {
-        calls += 1;
-        if (calls <= 4) return Promise.reject(new ApiFailure("network", false));
-        return Promise.resolve({ failedAccessAttempts: 0, releasedAt: [], remainingRetrievals: 1, serverExpiresAt: 1_800_003_600, state: "active", stateCheckedAt: 1_800_000_001 });
-      }
-    };
-    const result = await reconcileSendCreation(client, "locator", "manage-token", 1_800_000_060, (milliseconds) => { waits.push(milliseconds); return Promise.resolve(); });
-    expect(result).toEqual({ kind: "created", serverExpiresAt: 1_800_003_600 });
-    expect(waits).toEqual([1_000, 2_000, 4_000, 8_000, 8_000]);
-    expect(calls).toBe(5);
-  });
-
-  it("accepts absence only after a linearized state check past settlement", async () => {
-    const settleNotAfter = 1_800_000_060;
-    const client = {
-      requestStatus(): Promise<RequestStatusResponse & StateCheckedMetadata> {
-        return Promise.reject(new ApiFailure("unavailable", false, settleNotAfter + 1));
-      }
-    };
-    await expect(reconcileRequestCreation(client, "locator", "owner-token", settleNotAfter, () => Promise.resolve())).resolves.toEqual({ kind: "absent" });
   });
 });

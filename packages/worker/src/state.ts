@@ -67,6 +67,21 @@ export interface PermitIssuanceRecord {
   readonly retainUntil: number;
 }
 
+export interface PairingApproval {
+  readonly keyId: string;
+  readonly permitExpiresAt: number;
+  readonly requestId: string;
+}
+
+export interface PairingRecord {
+  readonly approval: PairingApproval | null;
+  readonly authKeyId: string;
+  readonly generation: number;
+  readonly kind: "pairing";
+  readonly pairingExpiresAt: number;
+  readonly tag: string;
+}
+
 export interface CapabilitySnapshot {
   readonly generation: number;
   readonly keyId: string;
@@ -79,7 +94,7 @@ export type AuthResult =
   | { readonly kind: "unavailable"; readonly stateCheckedAt: number };
 
 export const RECORD_KEY = "record";
-export function authKey(capabilityKind: 1 | 2 | 3): string {
+export function authKey(capabilityKind: 1 | 2 | 3 | 4): string {
   return `auth:${capabilityKind}`;
 }
 

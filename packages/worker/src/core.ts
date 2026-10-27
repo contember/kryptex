@@ -76,8 +76,8 @@ export async function hmacVerify(key: Uint8Array, tag: Uint8Array, message: Uint
 }
 
 export function capabilityMessage(
-  resourceKind: 1 | 2 | 3,
-  capabilityKind: 1 | 2 | 3,
+  resourceKind: 1 | 2 | 3 | 4,
+  capabilityKind: 1 | 2 | 3 | 4,
   locator: Uint8Array,
   token: Uint8Array
 ): Uint8Array {
@@ -86,8 +86,8 @@ export function capabilityMessage(
 
 export async function capabilityTag(
   key: Uint8Array,
-  resourceKind: 1 | 2 | 3,
-  capabilityKind: 1 | 2 | 3,
+  resourceKind: 1 | 2 | 3 | 4,
+  capabilityKind: 1 | 2 | 3 | 4,
   locator: Uint8Array,
   token: Uint8Array
 ): Promise<string> {
@@ -97,8 +97,8 @@ export async function capabilityTag(
 export async function verifyCapabilityTag(
   key: Uint8Array,
   tag: string,
-  resourceKind: 1 | 2 | 3,
-  capabilityKind: 1 | 2 | 3,
+  resourceKind: 1 | 2 | 3 | 4,
+  capabilityKind: 1 | 2 | 3 | 4,
   locator: Uint8Array,
   token: Uint8Array
 ): Promise<boolean> {
@@ -108,7 +108,7 @@ export async function verifyCapabilityTag(
 
 export async function blindedLocator(
   key: Uint8Array,
-  resourceKind: 1 | 2 | 3,
+  resourceKind: 1 | 2 | 3 | 4,
   locator: Uint8Array
 ): Promise<string> {
   const message = concatenate([RATE_LIMIT_PREFIX, new Uint8Array([0, resourceKind]), locator]);
@@ -151,6 +151,13 @@ export async function derivePermitFromSeed(seed: Uint8Array): Promise<{ readonly
     locator: await hkdfExpand(prk, PERMIT_LOCATOR_LABEL, 16),
     token: await hkdfExpand(prk, PERMIT_TOKEN_LABEL, 32)
   };
+}
+
+/** The pairing capability-tag locator: the 5 user-code bytes followed by 11 zero bytes. */
+export function pairingLocator(codeBytes: Uint8Array): Uint8Array {
+  const locator = new Uint8Array(16);
+  locator.set(codeBytes);
+  return locator;
 }
 
 export function decodeUuid(uuid: string): Uint8Array {

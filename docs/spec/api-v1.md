@@ -164,7 +164,7 @@ An approved pairing returns the recorded request ID and key ID to the Worker, wh
 {"permit":"v2.<base64url(P)>","permitExpiresAt":1787229000,"serverTime":1787227300,"state":"approved"}
 ```
 
-Redemption does not consume the permit; repeating it after a lost response returns the same permit until the permit is consumed or expires. Missing, expired, and unauthorized pairings return the generic unavailable response.
+Redemption does not consume the permit. Repeating it after a lost response returns the same permit until the permit expires; a permit that was already consumed then fails at creation with `creation_permit_required`. Missing, expired, and unauthorized pairings return the generic unavailable response.
 
 ### Phishing
 

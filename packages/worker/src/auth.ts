@@ -8,6 +8,7 @@ import {
   type AuthLease,
   type AuthResult,
   type CapabilitySnapshot,
+  type PairingRecord,
   type PermitRecord,
   type RequestRecord,
   type SendRecord
@@ -15,12 +16,12 @@ import {
 import { randomBase64Url, unixSeconds, verifyCapabilityTag, ZERO_TAG } from "./core.js";
 import type { CheckedWorkerEnvironment } from "./env.js";
 
-type StoredRecord = SendRecord | RequestRecord | PermitRecord;
+type StoredRecord = SendRecord | RequestRecord | PermitRecord | PairingRecord;
 
 interface AuthenticationInput {
-  readonly capabilityKind: 1 | 2 | 3;
+  readonly capabilityKind: 1 | 2 | 3 | 4;
   readonly locator: Uint8Array;
-  readonly resourceKind: 1 | 2 | 3;
+  readonly resourceKind: 1 | 2 | 3 | 4;
   readonly token: Uint8Array;
 }
 
@@ -34,7 +35,7 @@ export type ReservationResult =
   | { readonly kind: "rate_limited" }
   | { readonly kind: "reserved"; readonly reservation: AuthenticationReservation };
 
-function snapshotFor(record: StoredRecord | undefined, capabilityKind: 1 | 2 | 3, activeKeyId: string): CapabilitySnapshot {
+function snapshotFor(record: StoredRecord | undefined, capabilityKind: 1 | 2 | 3 | 4, activeKeyId: string): CapabilitySnapshot {
   if (record === undefined) {
     return { generation: -1, keyId: activeKeyId, tag: ZERO_TAG };
   }
@@ -57,18 +58,18 @@ function snapshotFor(record: StoredRecord | undefined, capabilityKind: 1 | 2 | 3
 
 /** Counts only a wrong access token, so a lost race never reads to the owner as someone probing the link. */
 function withFailedAccess(record: StoredRecord): StoredRecord | null {
-  if (record.kind === "permit" || record.failedAccessAttempts >= FAILED_ACCESS_SATURATION) {
+  if (record.kind === "permit" || record.kind === "pairing" || record.failedAccessAttempts >= FAILED_ACCESS_SATURATION) {
     return null;
   }
   return { ...record, failedAccessAttempts: record.failedAccessAttempts + 1 };
 }
 
 /** Only a passphrase-derived retrieve or write token can be guessed online; every other token is 128 bits or more of randomness. */
-function guessableCapability(record: StoredRecord | undefined, capabilityKind: 1 | 2 | 3): boolean {
+function guessableCapability(record: StoredRecord | undefined, capabilityKind: 1 | 2 | 3 | 4): boolean {
   return capabilityKind === 1 && (record?.kind === "send" || record?.kind === "request") && record.factorMode === 1;
 }
 
-function currentTag(record: StoredRecord | undefined, capabilityKind: 1 | 2 | 3): string | null | undefined {
+function currentTag(record: StoredRecord | undefined, capabilityKind: 1 | 2 | 3 | 4): string | null | undefined {
   if (record === undefined) {
     return undefined;
   }
@@ -121,7 +122,7 @@ export async function authenticate(
 
 export function reserveAuthentication(
   storage: DurableObjectStorage,
-  capabilityKind: 1 | 2 | 3,
+  capabilityKind: 1 | 2 | 3 | 4,
   activeKeyId: string,
   attemptId: string,
   clock: () => number
@@ -154,7 +155,7 @@ export function reserveAuthentication(
 
 export function finishAuthentication(
   storage: DurableObjectStorage,
-  capabilityKind: 1 | 2 | 3,
+  capabilityKind: 1 | 2 | 3 | 4,
   reservation: AuthenticationReservation,
   verified: boolean,
   clock: () => number

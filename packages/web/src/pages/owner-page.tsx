@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import type { RequestStatusResponse } from "@kryptex/contracts/api";
 import type { RequestResponsePayload } from "@kryptex/contracts/payloads";
+import { pickupRecoveryForStatus } from "@kryptex/client";
 import { deriveRequestOwnerKeys, encodeBase64Url, equalBytes, openRequestResponse, parseKxr1Header, receiptDisplay } from "@kryptex/crypto";
 import { useClient } from "../client-context";
-import { artifactUrl, checkedResponseExpiry, consumeBundle, pickupRecoveryForStatus, shortenedExpiryRequest, shouldPollRequestStatus } from "../crypto-flow";
+import { artifactUrl, checkedResponseExpiry, consumeBundle, shortenedExpiryRequest, shouldPollRequestStatus } from "../crypto-flow";
 import { describeRequestState, formatExactTime, formatTimeLeft, isSensitiveField } from "../format";
 import type { FragmentCapture } from "../fragment";
 import { AmbiguousNotice, BurnAction, FieldHint, FragmentNotice, OperationNotice, PageIntro, SecretField, ShareSlip, StatusMessage, StatusSheet, useNowSeconds, type OperationState } from "../ui";

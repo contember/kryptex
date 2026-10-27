@@ -1,6 +1,11 @@
 import {
+  decodeUserCode,
+  encodeUserCode,
   parseCreatePermitRequestJson,
   parseEmptyRequestJson,
+  parsePairingApproveRequestJson,
+  parsePairingRedeemRequestJson,
+  parsePairingStartRequestJson,
   parseRequestCreateRequestJson,
   parseRequestOwnerRequestJson,
   parseRequestShortenRequestJson,
@@ -11,7 +16,8 @@ import {
   parseSendRetrieveRequestJson,
   parseSendShortenRequestJson
 } from "@kryptex/contracts/api";
-import { API_ROUTES } from "@kryptex/contracts/protocol";
+import { API_ROUTES, CREATE_PERMIT_HEADER } from "@kryptex/contracts/protocol";
+import { PairingDurableObject } from "./pairing-object.js";
 import { CreatePermitDurableObject } from "./permit-object.js";
 import { RequestDurableObject } from "./request-object.js";
 import { SendDurableObject } from "./send-object.js";
@@ -22,6 +28,7 @@ import {
   derivePermitFromSeed,
   derivePermitMaterial,
   encodeBase64Url,
+  pairingLocator,
   randomBase64Url,
   unixSeconds
 } from "./core.js";
@@ -30,6 +37,7 @@ import {
   apiError,
   expiredPermitCookie,
   finalizeApiResponse,
+  jsonResponse,
   normalizeBindingResponse,
   permitCookie,
   rateLimited,
@@ -37,13 +45,14 @@ import {
 } from "./http.js";
 import { decodeCanonicalBase64Url, parseJson, property } from "./strict.js";
 
-export { CreatePermitDurableObject, RequestDurableObject, SendDurableObject };
+export { CreatePermitDurableObject, PairingDurableObject, RequestDurableObject, SendDurableObject };
 
 const MAX_SMALL_BODY_BYTES = 8_192;
 const MAX_ENVELOPE_BODY_BYTES = 1_500_000;
 export const LOCAL_TURNSTILE_DUMMY_TOKEN = "XXXX.DUMMY.TOKEN.XXXX";
 const MUTATING_ROUTES: ReadonlySet<string> = new Set([
   API_ROUTES.createPermit,
+  API_ROUTES.pairingApprove,
   API_ROUTES.sendCreate,
   API_ROUTES.sendRetrieve,
   API_ROUTES.sendRevoke,
@@ -54,6 +63,11 @@ const MUTATING_ROUTES: ReadonlySet<string> = new Set([
   API_ROUTES.requestRevoke,
   API_ROUTES.requestShorten
 ]);
+
+const BROWSER_ONLY_ROUTES: ReadonlySet<string> = new Set([API_ROUTES.createPermit, API_ROUTES.pairingApprove]);
+const NATIVE_ONLY_ROUTES: ReadonlySet<string> = new Set([API_ROUTES.pairingStart, API_ROUTES.pairingRedeem]);
+
+type RequestMode = "browser" | "native";
 
 type TurnstileResult =
   | { readonly kind: "accepted"; readonly permitExpiresAt: number }
@@ -105,7 +119,10 @@ async function readBody(request: Request, maximumBytes: number): Promise<string>
   }
 }
 
-function permitSeedFromCookie(request: Request): string | null {
+function permitValue(request: Request, mode: RequestMode): string | null {
+  if (mode === "native") {
+    return request.headers.get(CREATE_PERMIT_HEADER);
+  }
   const cookie = request.headers.get("Cookie");
   if (cookie === null) {
     return null;
@@ -115,10 +132,12 @@ function permitSeedFromCookie(request: Request): string | null {
     .map((part) => part.trim())
     .filter((part) => part.startsWith("kx_create_v2="))
     .map((part) => part.slice("kx_create_v2=".length));
-  if (values.length !== 1) {
-    return null;
-  }
-  const value = values[0];
+  return values.length === 1 ? values[0] ?? null : null;
+}
+
+/** A browser presents the permit only as its cookie, a native client only in its header. */
+function permitSeed(request: Request, mode: RequestMode): string | null {
+  const value = permitValue(request, mode);
   if (!value?.startsWith("v2.")) {
     return null;
   }
@@ -249,7 +268,13 @@ async function passEdgeLimit(environment: WorkerEnv, request: Request, route: st
   return edgeLimitAllows(environment.EDGE_RATE_LIMITER, edgeLimitKey(route, request.headers.get("CF-Connecting-IP")));
 }
 
-function bearerLocator(route: string, text: string): { readonly locator: string; readonly resourceKind: 1 | 2 } | null {
+function bearerLocator(route: string, text: string): { readonly locator: string; readonly resourceKind: 1 | 2 | 4 } | null {
+  if (route === API_ROUTES.pairingApprove || route === API_ROUTES.pairingRedeem) {
+    const userCode = route === API_ROUTES.pairingApprove
+      ? parsePairingApproveRequestJson(text).userCode
+      : parsePairingRedeemRequestJson(text).userCode;
+    return { locator: encodeBase64Url(pairingLocator(decodeUserCode(userCode))), resourceKind: 4 };
+  }
   if (route === API_ROUTES.sendRetrieve) {
     return { locator: parseSendRetrieveRequestJson(text).locator, resourceKind: 1 };
   }
@@ -276,7 +301,7 @@ function bearerLocator(route: string, text: string): { readonly locator: string;
 
 export async function locatorLimitKey(
   rateLimitKey: Uint8Array,
-  resourceKind: 1 | 2,
+  resourceKind: 1 | 2 | 4,
   locator: string
 ): Promise<string> {
   return blindedLocator(rateLimitKey, resourceKind, decodeCanonicalBase64Url(locator, 16, "locator"));
@@ -285,7 +310,7 @@ export async function locatorLimitKey(
 export async function locatorLimitAllows(
   limiter: EdgeRateLimiter,
   rateLimitKey: Uint8Array,
-  resourceKind: 1 | 2,
+  resourceKind: 1 | 2 | 4,
   locator: string
 ): Promise<boolean> {
   return edgeLimitAllows(limiter, await locatorLimitKey(rateLimitKey, resourceKind, locator));
@@ -388,8 +413,8 @@ export function normalizeClientNetwork(value: string | null): string {
   return `ipv6:${groups.slice(0, 4).map((group) => group.toString(16).padStart(4, "0")).join(":")}::/64`;
 }
 
-async function consumePermit(request: Request, environment: WorkerEnv): Promise<Response | null> {
-  const seed = permitSeedFromCookie(request);
+async function consumePermit(request: Request, mode: RequestMode, environment: WorkerEnv): Promise<Response | null> {
+  const seed = permitSeed(request, mode);
   if (seed === null) {
     return apiError("creation_permit_required", 403);
   }
@@ -403,6 +428,12 @@ function validateRouteBody(route: string, text: string): boolean {
     parseCreatePermitRequestJson(text);
   } else if (route === API_ROUTES.createPermitStatus) {
     parseEmptyRequestJson(text);
+  } else if (route === API_ROUTES.pairingStart) {
+    parsePairingStartRequestJson(text);
+  } else if (route === API_ROUTES.pairingApprove) {
+    parsePairingApproveRequestJson(text);
+  } else if (route === API_ROUTES.pairingRedeem) {
+    parsePairingRedeemRequestJson(text);
   } else if (route === API_ROUTES.sendCreate) {
     parseSendCreateRequestJson(text);
   } else if (route === API_ROUTES.sendRetrieve) {
@@ -427,46 +458,54 @@ function validateRouteBody(route: string, text: string): boolean {
   return true;
 }
 
-async function handleCreatePermit(
-  text: string,
+type PermitIssuance =
+  | { readonly kind: "failed"; readonly response: Response }
+  | { readonly kind: "initialized"; readonly keyId: string; readonly permitExpiresAt: number; readonly permitSeed: Uint8Array; readonly response: Response }
+  | { readonly kind: "rejected"; readonly response: Response };
+
+/** Verifies one Turnstile solve and initializes the single permit it may mint. */
+async function issuePermit(
+  requestId: string,
+  turnstileResponse: string,
   environment: WorkerEnv,
   checked: CheckedWorkerEnvironment,
   siteverifyFetch: typeof fetch
-): Promise<{ readonly response: Response; readonly cookie?: string }> {
-  const input = parseCreatePermitRequestJson(text);
-  const gate = await verifyTurnstile(checked, input.requestId, input.turnstileResponse, siteverifyFetch);
+): Promise<PermitIssuance> {
+  const gate = await verifyTurnstile(checked, requestId, turnstileResponse, siteverifyFetch);
   if (gate.kind === "failed") {
-    return { response: apiError("gate_failed", 403) };
+    return { kind: "failed", response: apiError("gate_failed", 403) };
   }
   if (gate.kind === "unavailable") {
-    return { response: apiError("gate_unavailable", 503) };
+    return { kind: "failed", response: apiError("gate_unavailable", 503) };
   }
   const selection = await invokeWithRetry(
-    stubFor(environment.CREATE_PERMIT_OBJECTS, `issuance:${input.requestId}`),
+    stubFor(environment.CREATE_PERMIT_OBJECTS, `issuance:${requestId}`),
     "resolve-issuance-key",
     { keyId: checked.activePermitIssuanceKeyId, retainUntil: gate.permitExpiresAt }
   );
   if (!selection.ok) {
-    return { response: apiError("gate_unavailable", 503) };
+    return { kind: "failed", response: apiError("gate_unavailable", 503) };
   }
+  let keyId: string;
   let issuanceKey: Uint8Array | undefined;
   try {
     const value = parseJson(await selection.text());
     if (typeof value !== "object" || value === null || Array.isArray(value)) {
-      return { response: apiError("gate_unavailable", 503) };
+      return { kind: "failed", response: apiError("gate_unavailable", 503) };
     }
-    const keyId = property(value, "keyId", "permit issuance key selection");
-    if (typeof keyId !== "string") {
-      return { response: apiError("gate_unavailable", 503) };
+    const selected = property(value, "keyId", "permit issuance key selection");
+    if (typeof selected !== "string") {
+      return { kind: "failed", response: apiError("gate_unavailable", 503) };
     }
+    keyId = selected;
     issuanceKey = checked.permitIssuanceKeys.get(keyId);
   } catch {
-    return { response: apiError("gate_unavailable", 503) };
+    return { kind: "failed", response: apiError("gate_unavailable", 503) };
   }
   if (issuanceKey === undefined) {
-    return { response: apiError("gate_unavailable", 503) };
+    return { kind: "failed", response: apiError("gate_unavailable", 503) };
   }
-  const material = await derivePermitMaterial(issuanceKey, decodeUuid(input.requestId));
+  const material = await derivePermitMaterial(issuanceKey, decodeUuid(requestId));
   const body = {
     locator: encodeBase64Url(material.locator),
     permitExpiresAt: gate.permitExpiresAt,
@@ -474,14 +513,97 @@ async function handleCreatePermit(
   };
   const response = await invokeWithRetry(stubFor(environment.CREATE_PERMIT_OBJECTS, body.locator), "init", body);
   if (!response.ok) {
-    return { cookie: expiredPermitCookie(), response };
+    return { kind: "rejected", response };
   }
-  return { cookie: permitCookie(encodeBase64Url(material.permitSeed)), response };
+  return { keyId, kind: "initialized", permitExpiresAt: gate.permitExpiresAt, permitSeed: material.permitSeed, response };
 }
 
-async function handlePermitStatus(request: Request, text: string, environment: WorkerEnv): Promise<Response> {
+async function handleCreatePermit(
+  text: string,
+  environment: WorkerEnv,
+  checked: CheckedWorkerEnvironment,
+  siteverifyFetch: typeof fetch
+): Promise<{ readonly response: Response; readonly cookie?: string }> {
+  const input = parseCreatePermitRequestJson(text);
+  const issuance = await issuePermit(input.requestId, input.turnstileResponse, environment, checked, siteverifyFetch);
+  if (issuance.kind === "failed") {
+    return { response: issuance.response };
+  }
+  if (issuance.kind === "rejected") {
+    return { cookie: expiredPermitCookie(), response: issuance.response };
+  }
+  return { cookie: permitCookie(encodeBase64Url(issuance.permitSeed)), response: issuance.response };
+}
+
+function pairingStub(environment: WorkerEnv, userCode: string): DurableObjectStub {
+  return stubFor(environment.PAIRING_OBJECTS, `pairing:${userCode.replace("-", "")}`);
+}
+
+async function handlePairingStart(text: string, environment: WorkerEnv): Promise<Response> {
+  const input = parsePairingStartRequestJson(text);
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const codeBytes = new Uint8Array(5);
+    crypto.getRandomValues(codeBytes);
+    const userCode = encodeUserCode(codeBytes);
+    const response = await invoke(pairingStub(environment, userCode), "init", { pollToken: input.pollToken, userCode });
+    if (response.status !== 409) {
+      return response;
+    }
+  }
+  return apiError("internal_error", 500);
+}
+
+async function handlePairingApprove(
+  text: string,
+  environment: WorkerEnv,
+  checked: CheckedWorkerEnvironment,
+  siteverifyFetch: typeof fetch
+): Promise<Response> {
+  const input = parsePairingApproveRequestJson(text);
+  const issuance = await issuePermit(input.requestId, input.turnstileResponse, environment, checked, siteverifyFetch);
+  if (issuance.kind !== "initialized") {
+    return issuance.response;
+  }
+  return invokeWithRetry(pairingStub(environment, input.userCode), "approve", {
+    keyId: issuance.keyId,
+    permitExpiresAt: issuance.permitExpiresAt,
+    requestId: input.requestId
+  });
+}
+
+async function handlePairingRedeem(text: string, environment: WorkerEnv, checked: CheckedWorkerEnvironment): Promise<Response> {
+  const input = parsePairingRedeemRequestJson(text);
+  const response = await invoke(pairingStub(environment, input.userCode), "redeem", input);
+  if (!response.ok) {
+    return response;
+  }
+  const value = parseJson(await response.text());
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return apiError("internal_error", 500);
+  }
+  const state = property(value, "state", "pairing redemption");
+  if (state === "pending") {
+    return jsonResponse({ pairingExpiresAt: property(value, "pairingExpiresAt", "pairing redemption"), state });
+  }
+  const keyId = property(value, "keyId", "pairing redemption");
+  const requestId = property(value, "requestId", "pairing redemption");
+  const permitExpiresAt = property(value, "permitExpiresAt", "pairing redemption");
+  const issuanceKey = typeof keyId === "string" ? checked.permitIssuanceKeys.get(keyId) : undefined;
+  if (state !== "approved" || typeof requestId !== "string" || issuanceKey === undefined) {
+    return apiError("internal_error", 500);
+  }
+  const material = await derivePermitMaterial(issuanceKey, decodeUuid(requestId));
+  return jsonResponse({
+    permit: `v2.${encodeBase64Url(material.permitSeed)}`,
+    permitExpiresAt,
+    serverTime: unixSeconds(),
+    state
+  });
+}
+
+async function handlePermitStatus(request: Request, mode: RequestMode, text: string, environment: WorkerEnv): Promise<Response> {
   parseEmptyRequestJson(text);
-  const seed = permitSeedFromCookie(request);
+  const seed = permitSeed(request, mode);
   if (seed === null) {
     return apiError("creation_permit_required", 403);
   }
@@ -492,6 +614,7 @@ async function handlePermitStatus(request: Request, text: string, environment: W
 async function handleSend(
   route: string,
   request: Request,
+  mode: RequestMode,
   text: string,
   environment: WorkerEnv
 ): Promise<{ readonly consumedPermit: boolean; readonly response: Response }> {
@@ -502,15 +625,15 @@ async function handleSend(
     }
     let permitFailure: Response | null;
     try {
-      permitFailure = await consumePermit(request, environment);
+      permitFailure = await consumePermit(request, mode, environment);
     } catch {
       return {
-        consumedPermit: permitSeedFromCookie(request) !== null,
+        consumedPermit: permitSeed(request, mode) !== null,
         response: apiError("internal_error", 500)
       };
     }
     if (permitFailure !== null) {
-      return { consumedPermit: permitSeedFromCookie(request) !== null, response: permitFailure };
+      return { consumedPermit: permitSeed(request, mode) !== null, response: permitFailure };
     }
     try {
       const response = await invokeWithRetry(stubFor(environment.SEND_OBJECTS, input.locator), "init", input);
@@ -550,6 +673,7 @@ async function handleSend(
 async function handleRequest(
   route: string,
   request: Request,
+  mode: RequestMode,
   text: string,
   environment: WorkerEnv
 ): Promise<{ readonly consumedPermit: boolean; readonly response: Response }> {
@@ -560,15 +684,15 @@ async function handleRequest(
     }
     let permitFailure: Response | null;
     try {
-      permitFailure = await consumePermit(request, environment);
+      permitFailure = await consumePermit(request, mode, environment);
     } catch {
       return {
-        consumedPermit: permitSeedFromCookie(request) !== null,
+        consumedPermit: permitSeed(request, mode) !== null,
         response: apiError("internal_error", 500)
       };
     }
     if (permitFailure !== null) {
-      return { consumedPermit: permitSeedFromCookie(request) !== null, response: permitFailure };
+      return { consumedPermit: permitSeed(request, mode) !== null, response: permitFailure };
     }
     try {
       const response = await invokeWithRetry(stubFor(environment.REQUEST_OBJECTS, input.locator), "init", input);
@@ -630,7 +754,10 @@ export async function handleApiRequest(
     return finalizeApiResponse(apiError("forbidden", 403), checked.expectedOrigin);
   }
   const origin = request.headers.get("Origin");
-  if (origin !== checked.expectedOrigin) {
+  const mode: RequestMode = origin === null && !request.headers.has("Cookie") && !request.headers.has("Sec-Fetch-Site")
+    ? "native"
+    : "browser";
+  if (mode === "browser" && (origin !== checked.expectedOrigin || request.headers.has(CREATE_PERMIT_HEADER))) {
     return finalizeApiResponse(apiError("forbidden", 403), checked.expectedOrigin);
   }
   if (request.method === "OPTIONS") {
@@ -646,6 +773,9 @@ export async function handleApiRequest(
     return finalizeApiResponse(apiError("invalid_request", 400), checked.expectedOrigin);
   }
   const route = requestUrl.pathname;
+  if ((mode === "native" && BROWSER_ONLY_ROUTES.has(route)) || (mode === "browser" && NATIVE_ONLY_ROUTES.has(route))) {
+    return finalizeApiResponse(apiError("forbidden", 403), checked.expectedOrigin);
+  }
   if (MUTATING_ROUTES.has(route)) {
     const fetchSite = request.headers.get("Sec-Fetch-Site");
     if (fetchSite !== null && fetchSite !== "same-origin") {
@@ -676,7 +806,16 @@ export async function handleApiRequest(
       return finalizeApiResponse(result.response, checked.expectedOrigin, result.cookie);
     }
     if (route === API_ROUTES.createPermitStatus) {
-      return finalizeApiResponse(await handlePermitStatus(request, text, environment), checked.expectedOrigin);
+      return finalizeApiResponse(await handlePermitStatus(request, mode, text, environment), checked.expectedOrigin);
+    }
+    if (route === API_ROUTES.pairingStart) {
+      return finalizeApiResponse(await handlePairingStart(text, environment), checked.expectedOrigin);
+    }
+    if (route === API_ROUTES.pairingApprove) {
+      return finalizeApiResponse(await handlePairingApprove(text, environment, checked, siteverifyFetch), checked.expectedOrigin);
+    }
+    if (route === API_ROUTES.pairingRedeem) {
+      return finalizeApiResponse(await handlePairingRedeem(text, environment, checked), checked.expectedOrigin);
     }
     if (
       route === API_ROUTES.sendCreate ||
@@ -685,11 +824,11 @@ export async function handleApiRequest(
       route === API_ROUTES.sendRevoke ||
       route === API_ROUTES.sendShorten
     ) {
-      const result = await handleSend(route, request, text, environment);
+      const result = await handleSend(route, request, mode, text, environment);
       return finalizeApiResponse(
         result.response,
         checked.expectedOrigin,
-        result.consumedPermit ? expiredPermitCookie() : undefined
+        result.consumedPermit && mode === "browser" ? expiredPermitCookie() : undefined
       );
     }
     if (
@@ -701,11 +840,11 @@ export async function handleApiRequest(
       route === API_ROUTES.requestRevoke ||
       route === API_ROUTES.requestShorten
     ) {
-      const result = await handleRequest(route, request, text, environment);
+      const result = await handleRequest(route, request, mode, text, environment);
       return finalizeApiResponse(
         result.response,
         checked.expectedOrigin,
-        result.consumedPermit ? expiredPermitCookie() : undefined
+        result.consumedPermit && mode === "browser" ? expiredPermitCookie() : undefined
       );
     }
     return finalizeApiResponse(apiError("invalid_request", 400), checked.expectedOrigin);
@@ -720,6 +859,6 @@ export default {
     if (pathname.startsWith("/api/")) {
       return handleApiRequest(request, environment, fetch);
     }
-    return secureAssetResponse(await environment.ASSETS.fetch(request), pathname === "/gate");
+    return secureAssetResponse(await environment.ASSETS.fetch(request), pathname === "/gate" || pathname === "/pair");
   }
 } satisfies ExportedHandler<WorkerEnv>;

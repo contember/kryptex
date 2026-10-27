@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { API_ROUTES } from "@kryptex/contracts/protocol";
-import { ApiFailure, KryptexClient } from "./api-client";
+import { ApiFailure, KryptexClient } from "./api-client.js";
 
 const locator = "AAAAAAAAAAAAAAAAAAAAAA";
 const token = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
@@ -33,6 +33,9 @@ async function apiFailure(operation: Promise<unknown>): Promise<ApiFailure> {
 function successResponse(pathname: string): Response {
   if (pathname === API_ROUTES.createPermit) return new Response(`{"permitExpiresAt":${now + 1800},"serverTime":${now}}`, { headers: headers() });
   if (pathname === API_ROUTES.createPermitStatus) return new Response(`{"permitExpiresAt":${now + 1800},"serverTime":${now},"state":"unused"}`, { headers: headers() });
+  if (pathname === API_ROUTES.pairingStart) return new Response(`{"pairingExpiresAt":${now + 600},"serverTime":${now},"userCode":"ABCD-EFGH"}`, { headers: headers() });
+  if (pathname === API_ROUTES.pairingApprove) return new Response('{"state":"approved"}', { headers: headers() });
+  if (pathname === API_ROUTES.pairingRedeem) return new Response(`{"permit":"v2.${token}","permitExpiresAt":${now + 1800},"serverTime":${now},"state":"approved"}`, { headers: headers() });
   if (pathname === API_ROUTES.sendCreate || pathname === API_ROUTES.requestCreate) return new Response(`{"serverExpiresAt":${expiresAt}}`, { headers: headers() });
   if (pathname === API_ROUTES.sendRetrieve) return new Response(Uint8Array.of(1, 2, 3), { headers: headers({ "Content-Type": "application/octet-stream", "Kryptex-Remaining-Releases": "2", "Kryptex-Server-Expires-At": String(expiresAt) }) });
   if (pathname === API_ROUTES.sendStatus) return new Response(`{"failedAccessAttempts":0,"releasedAt":[],"remainingRetrievals":2,"serverExpiresAt":${expiresAt},"state":"active"}`, { headers: headers({ "Kryptex-State-Checked-At": String(now + 1) }) });
@@ -59,19 +62,23 @@ describe("same-origin API adapter", () => {
     await new KryptexClient().permitStatus();
   });
 
-  it("posts and parses all fourteen public operations", async () => {
+  it("posts and parses every public operation", async () => {
     const calls: string[] = [];
     const fetchStub: typeof fetch = (input, init) => {
       const pathname = inputUrl(input).pathname;
       calls.push(pathname);
       expect(init?.method).toBe("POST");
       expect(init?.credentials).toBe("include");
+      expect(init?.redirect).toBe("error");
       expect(new Headers(init?.headers).get("Content-Type")).toBe("application/json");
       return Promise.resolve(successResponse(pathname));
     };
     const client = new KryptexClient(fetchStub, "https://secrets.example");
     await expect(client.createPermit({ requestId: "00000000-0000-4000-8000-000000000001", turnstileResponse: "token" })).resolves.toEqual({ permitExpiresAt: now + 1800, serverTime: now });
     await expect(client.permitStatus()).resolves.toEqual({ permitExpiresAt: now + 1800, serverTime: now, state: "unused" });
+    await expect(client.startPairing({ pollToken: token })).resolves.toEqual({ pairingExpiresAt: now + 600, serverTime: now, userCode: "ABCD-EFGH" });
+    await expect(client.approvePairing({ requestId: "00000000-0000-4000-8000-000000000001", turnstileResponse: "token", userCode: "ABCD-EFGH" })).resolves.toEqual({ state: "approved" });
+    await expect(client.redeemPairing({ pollToken: token, userCode: "ABCD-EFGH" })).resolves.toMatchObject({ permit: `v2.${token}`, state: "approved" });
     await expect(client.createSend({ attemptId, clientNotAfter: expiresAt, envelope: "send-envelope", locator, manageToken: token, maxRetrievals: 2, retrieveToken: token, settleNotAfter: now + 60, ttlSeconds: 3600 })).resolves.toEqual({ serverExpiresAt: expiresAt });
     await expect(client.retrieveSend({ locator, retrieveToken: token })).resolves.toMatchObject({ metadata: { remainingReleases: 2, serverExpiresAt: expiresAt } });
     await expect(client.sendStatus({ locator, manageToken: token })).resolves.toEqual({ failedAccessAttempts: 0, releasedAt: [], remainingRetrievals: 2, serverExpiresAt: expiresAt, state: "active", stateCheckedAt: now + 1 });
@@ -84,7 +91,7 @@ describe("same-origin API adapter", () => {
     await expect(client.pickupRequest({ locator, ownerToken: token })).resolves.toMatchObject({ metadata: { receipt: token, serverExpiresAt: expiresAt } });
     await expect(client.shortenRequest({ locator, ownerToken: token, serverExpiresAt: now + 900 })).resolves.toEqual({ serverExpiresAt: now + 900 });
     await expect(client.revokeRequest({ locator, ownerToken: token })).resolves.toEqual({ state: "revoked" });
-    expect(calls).toHaveLength(14);
+    expect(calls).toHaveLength(Object.values(API_ROUTES).length);
     expect(new Set(calls)).toEqual(new Set(Object.values(API_ROUTES)));
   });
 
@@ -142,5 +149,35 @@ describe("same-origin API adapter", () => {
     expect(await apiFailure(client.createPermit(input))).toMatchObject({ ambiguous: true, code: "gate_unavailable" });
     await expect(client.createPermit(input)).resolves.toBeDefined();
     expect(bodies).toEqual([JSON.stringify(input), JSON.stringify(input)]);
+  });
+});
+
+describe("native API adapter", () => {
+  it("sends no ambient credential and presents a permit only in its header", async () => {
+    const seen: { readonly credentials: RequestCredentials | undefined; readonly permit: string | null; readonly signal: boolean }[] = [];
+    const fetchStub: typeof fetch = (input, init) => {
+      seen.push({ credentials: init?.credentials, permit: new Headers(init?.headers).get("Kryptex-Create-Permit"), signal: init?.signal instanceof AbortSignal });
+      return Promise.resolve(successResponse(inputUrl(input).pathname));
+    };
+    const client = new KryptexClient(fetchStub, "https://secrets.example", "native");
+    await client.permitStatus(`v2.${token}`);
+    await client.createRequest({ attemptId, clientNotAfter: expiresAt, envelope: "schema-envelope", locator, ownerToken: token, settleNotAfter: now + 60, ttlSeconds: 3600, writeToken: token }, `v2.${token}`);
+    await client.requestStatus({ locator, ownerToken: token });
+    expect(seen).toEqual([
+      { credentials: "omit", permit: `v2.${token}`, signal: true },
+      { credentials: "omit", permit: `v2.${token}`, signal: true },
+      { credentials: "omit", permit: null, signal: true }
+    ]);
+  });
+
+  it("refuses a header permit in browser mode", async () => {
+    const client = new KryptexClient(() => Promise.resolve(successResponse(API_ROUTES.createPermitStatus)), "https://secrets.example");
+    expect(await apiFailure(client.permitStatus(`v2.${token}`))).toMatchObject({ code: "invalid_response" });
+  });
+
+  it("rejects oversized responses before parsing them", async () => {
+    const oversized: typeof fetch = () => Promise.resolve(new Response("x".repeat(70_000), { headers: headers() }));
+    const client = new KryptexClient(oversized, "https://secrets.example", "native");
+    expect(await apiFailure(client.redeemPairing({ pollToken: token, userCode: "ABCD-EFGH" }))).toMatchObject({ code: "invalid_response" });
   });
 });

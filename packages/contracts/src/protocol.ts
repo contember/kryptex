@@ -1,8 +1,8 @@
 export type FactorMode = 0 | 1 | 2;
 export type ContentMode = 1 | 2;
 export type BundleKind = 1 | 2 | 3 | 4;
-export type ResourceKind = 1 | 2 | 3;
-export type CapabilityKind = 1 | 2 | 3;
+export type ResourceKind = 1 | 2 | 3 | 4;
+export type CapabilityKind = 1 | 2 | 3 | 4;
 export type TtlSeconds = 900 | 3600 | 28800 | 86400 | 259200 | 604800 | 1209600 | 2592000;
 
 export const PROTOCOL_VERSION = 1;
@@ -70,6 +70,9 @@ export const MAX_VALUE_UTF8_BYTES = 262144;
 export const API_ROUTES = Object.freeze({
   createPermit: "/api/v2/create-permits",
   createPermitStatus: "/api/v2/create-permits/status",
+  pairingApprove: "/api/v2/create-permits/pairings/approve",
+  pairingRedeem: "/api/v2/create-permits/pairings/redeem",
+  pairingStart: "/api/v2/create-permits/pairings",
   requestCreate: "/api/v1/requests",
   requestPickup: "/api/v1/requests/pickup",
   requestRevoke: "/api/v1/requests/revoke",
@@ -94,6 +97,10 @@ export const RESPONSE_HEADERS = Object.freeze({
   serverTime: "Kryptex-Server-Time",
   stateCheckedAt: "Kryptex-State-Checked-At"
 });
+
+/** Native clients present a creation permit in this request header; browsers use the HttpOnly cookie. */
+export const CREATE_PERMIT_HEADER = "Kryptex-Create-Permit";
+export const PAIRING_TTL_SECONDS = 600;
 
 export function isTtlSeconds(value: number): value is TtlSeconds {
   return value === 900 || value === 3600 || value === 28800 || value === 86400 || value === 259200 || value === 604800 || value === 1209600 || value === 2592000;

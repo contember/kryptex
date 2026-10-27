@@ -44,6 +44,7 @@ describe("fragment lifecycle", () => {
     expect(isSecretRoute("/r/")).toBe(true);
     expect(isSecretRoute("/i")).toBe(true);
     expect(isSecretRoute("/i/")).toBe(true);
+    expect(isSecretRoute("/pair")).toBe(true);
     expect(canonicalSecretRoute("/s/")).toBe("/s");
   });
 

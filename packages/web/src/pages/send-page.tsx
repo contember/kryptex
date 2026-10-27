@@ -4,9 +4,9 @@ import type { SendField, SendPayload, ValueFieldType } from "@kryptex/contracts/
 import { isTtlSeconds, type TtlSeconds } from "@kryptex/contracts/protocol";
 import type { SendCreateRequest } from "@kryptex/contracts/api";
 import { deriveSendKeys, encodeBase64Url, encryptSendEnvelope, randomBytes } from "@kryptex/crypto";
-import { ApiFailure } from "../api-client";
+import { ApiFailure, reconcileSendCreation } from "@kryptex/client";
 import { useClient } from "../client-context";
-import { artifactUrl, createFactor, reconcileSendCreation, type FactorMaterial } from "../crypto-flow";
+import { artifactUrl, createFactor, type FactorMaterial } from "../crypto-flow";
 import { DEFAULT_TTL, TTL_CHOICES, VALUE_FIELD_TYPES, formatFieldType, formatOpenAllowance, formatTtl, isMultilineField, isSensitiveField, isValueFieldType } from "../format";
 import { AdvancedDisclosure, ExpiryNote, FieldHint, NavigationGuard, OperationNotice, PageIntro, PassphraseFields, PolicySummary, ProtectionOptions, ShareSlip, StatusMessage, type OperationState, type Protection, type ShareArtifact } from "../ui";
 import { validatePassphrase, validateSendDraft } from "../validation";

@@ -8,7 +8,8 @@
     "tools/*"
   ],
   "scripts": {
-    "build": "bun run build:contracts && bun run build:crypto && bun run build:web && bun run build:worker",
+    "build": "bun run build:contracts && bun run build:client && bun run build:crypto && bun run build:web && bun run build:worker",
+    "build:client": "bun run --cwd packages/client build",
     "build:contracts": "bun run --cwd packages/contracts build",
     "build:crypto": "bun run --cwd packages/crypto build",
     "build:web": "bun run --cwd packages/web build",

@@ -124,6 +124,35 @@ export interface RequestStatusResponse {
   readonly state: RequestState;
 }
 
+export interface PairingStartRequest {
+  readonly pollToken: string;
+}
+
+export interface PairingStartResponse {
+  readonly pairingExpiresAt: number;
+  readonly serverTime: number;
+  readonly userCode: string;
+}
+
+export interface PairingApproveRequest {
+  readonly requestId: string;
+  readonly turnstileResponse: string;
+  readonly userCode: string;
+}
+
+export interface PairingApproveResponse {
+  readonly state: "approved";
+}
+
+export interface PairingRedeemRequest {
+  readonly pollToken: string;
+  readonly userCode: string;
+}
+
+export type PairingRedeemResponse =
+  | { readonly pairingExpiresAt: number; readonly state: "pending" }
+  | { readonly permit: string; readonly permitExpiresAt: number; readonly serverTime: number; readonly state: "approved" };
+
 export interface ApiErrorResponse {
   readonly error: ApiErrorCode;
 }
@@ -212,25 +241,170 @@ function parseAttempt(value: unknown, context: string): string {
   return expectCanonicalBase64UrlLength(value, 16, context);
 }
 
-export function parseCreatePermitRequest(value: unknown): CreatePermitRequest {
-  const object = expectExactObject(value, ["requestId", "turnstileResponse"], "create permit request");
-  const requestId = expectString(readProperty(object, "requestId", "create permit request"), "requestId");
+function parseRequestId(value: unknown): string {
+  const requestId = expectString(value, "requestId");
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(requestId)) {
     throw new ContractValidationError("requestId must be a canonical lowercase UUID v4");
   }
+  return requestId;
+}
+
+function parseTurnstileResponse(value: unknown): string {
+  return expectUtf8Length(value, 1, 2048, "turnstileResponse");
+}
+
+export function parseCreatePermitRequest(value: unknown): CreatePermitRequest {
+  const object = expectExactObject(value, ["requestId", "turnstileResponse"], "create permit request");
   return {
-    requestId,
-    turnstileResponse: expectUtf8Length(
-      readProperty(object, "turnstileResponse", "create permit request"),
-      1,
-      2048,
-      "turnstileResponse"
-    )
+    requestId: parseRequestId(readProperty(object, "requestId", "create permit request")),
+    turnstileResponse: parseTurnstileResponse(readProperty(object, "turnstileResponse", "create permit request"))
   };
 }
 
 export function parseCreatePermitRequestJson(text: string): CreatePermitRequest {
   return parseApiJsonText(text, parseCreatePermitRequest);
+}
+
+const USER_CODE_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+
+/** Encodes the 5 random pairing-code bytes as the canonical `XXXX-XXXX` display form. */
+export function encodeUserCode(bytes: Uint8Array): string {
+  if (bytes.byteLength !== 5) {
+    throw new ContractValidationError("user code must encode 5 bytes");
+  }
+  let accumulator = 0n;
+  for (const byte of bytes) {
+    accumulator = (accumulator << 8n) | BigInt(byte);
+  }
+  let compact = "";
+  for (let shift = 35n; shift >= 0n; shift -= 5n) {
+    compact += USER_CODE_ALPHABET[Number((accumulator >> shift) & 31n)] ?? "";
+  }
+  return `${compact.slice(0, 4)}-${compact.slice(4)}`;
+}
+
+export function decodeUserCode(code: string): Uint8Array<ArrayBuffer> {
+  if (!/^[0-9A-HJKMNP-TV-Z]{4}-[0-9A-HJKMNP-TV-Z]{4}$/.test(code)) {
+    throw new ContractValidationError("user code is not canonical");
+  }
+  let accumulator = 0n;
+  for (const character of code.replace("-", "")) {
+    accumulator = (accumulator << 5n) | BigInt(USER_CODE_ALPHABET.indexOf(character));
+  }
+  const bytes = new Uint8Array(5);
+  for (let index = 4; index >= 0; index -= 1) {
+    bytes[index] = Number(accumulator & 0xffn);
+    accumulator >>= 8n;
+  }
+  return bytes;
+}
+
+/** Applies the second-key input rules to a typed or pasted code; returns the canonical form or null. */
+export function normalizeUserCodeInput(input: string): string | null {
+  if (!input.isWellFormed() || /\s/u.test(input)) {
+    return null;
+  }
+  const upper = input.toUpperCase();
+  const compact = upper.length === 9 && upper[4] === "-" ? upper.slice(0, 4) + upper.slice(5) : upper;
+  const mapped = compact.replaceAll("O", "0").replaceAll("I", "1").replaceAll("L", "1");
+  if (!/^[0-9A-HJKMNP-TV-Z]{8}$/.test(mapped)) {
+    return null;
+  }
+  return `${mapped.slice(0, 4)}-${mapped.slice(4)}`;
+}
+
+function parseUserCode(value: unknown, context: string): string {
+  const code = expectString(value, context);
+  decodeUserCode(code);
+  return code;
+}
+
+function parsePermitValue(value: unknown, context: string): string {
+  const permit = expectString(value, context);
+  if (!permit.startsWith("v2.")) {
+    throw new ContractValidationError(`${context} is not a version 2 permit`);
+  }
+  expectCanonicalBase64UrlLength(permit.slice(3), 32, context);
+  return permit;
+}
+
+export function parsePairingStartRequest(value: unknown): PairingStartRequest {
+  const context = "pairing start request";
+  const object = expectExactObject(value, ["pollToken"], context);
+  return { pollToken: parseToken(readProperty(object, "pollToken", context), `${context}.pollToken`) };
+}
+
+export function parsePairingStartRequestJson(text: string): PairingStartRequest {
+  return parseApiJsonText(text, parsePairingStartRequest);
+}
+
+export function parsePairingApproveRequest(value: unknown): PairingApproveRequest {
+  const context = "pairing approve request";
+  const object = expectExactObject(value, ["requestId", "turnstileResponse", "userCode"], context);
+  return {
+    requestId: parseRequestId(readProperty(object, "requestId", context)),
+    turnstileResponse: parseTurnstileResponse(readProperty(object, "turnstileResponse", context)),
+    userCode: parseUserCode(readProperty(object, "userCode", context), `${context}.userCode`)
+  };
+}
+
+export function parsePairingApproveRequestJson(text: string): PairingApproveRequest {
+  return parseApiJsonText(text, parsePairingApproveRequest);
+}
+
+export function parsePairingRedeemRequest(value: unknown): PairingRedeemRequest {
+  const context = "pairing redeem request";
+  const object = expectExactObject(value, ["pollToken", "userCode"], context);
+  return {
+    pollToken: parseToken(readProperty(object, "pollToken", context), `${context}.pollToken`),
+    userCode: parseUserCode(readProperty(object, "userCode", context), `${context}.userCode`)
+  };
+}
+
+export function parsePairingRedeemRequestJson(text: string): PairingRedeemRequest {
+  return parseApiJsonText(text, parsePairingRedeemRequest);
+}
+
+export function parsePairingStartResponse(value: unknown): PairingStartResponse {
+  const context = "pairing start response";
+  const object = expectExactObject(value, ["pairingExpiresAt", "serverTime", "userCode"], context);
+  return {
+    pairingExpiresAt: parseTimestamp(readProperty(object, "pairingExpiresAt", context), `${context}.pairingExpiresAt`),
+    serverTime: parseTimestamp(readProperty(object, "serverTime", context), `${context}.serverTime`),
+    userCode: parseUserCode(readProperty(object, "userCode", context), `${context}.userCode`)
+  };
+}
+
+export function parsePairingApproveResponse(value: unknown): PairingApproveResponse {
+  const object = expectExactObject(value, ["state"], "pairing approve response");
+  if (readProperty(object, "state", "pairing approve response") !== "approved") {
+    throw new ContractValidationError("pairing approve response.state is invalid");
+  }
+  return { state: "approved" };
+}
+
+export function parsePairingRedeemResponse(value: unknown): PairingRedeemResponse {
+  const context = "pairing redeem response";
+  if (typeof value === "object" && value !== null && !Array.isArray(value) && Object.keys(value).length === 2) {
+    const object = expectExactObject(value, ["pairingExpiresAt", "state"], context);
+    if (readProperty(object, "state", context) !== "pending") {
+      throw new ContractValidationError(`${context}.state is invalid`);
+    }
+    return {
+      pairingExpiresAt: parseTimestamp(readProperty(object, "pairingExpiresAt", context), `${context}.pairingExpiresAt`),
+      state: "pending"
+    };
+  }
+  const object = expectExactObject(value, ["permit", "permitExpiresAt", "serverTime", "state"], context);
+  if (readProperty(object, "state", context) !== "approved") {
+    throw new ContractValidationError(`${context}.state is invalid`);
+  }
+  return {
+    permit: parsePermitValue(readProperty(object, "permit", context), `${context}.permit`),
+    permitExpiresAt: parseTimestamp(readProperty(object, "permitExpiresAt", context), `${context}.permitExpiresAt`),
+    serverTime: parseTimestamp(readProperty(object, "serverTime", context), `${context}.serverTime`),
+    state: "approved"
+  };
 }
 
 export function parseEmptyRequest(value: unknown): Record<string, never> {

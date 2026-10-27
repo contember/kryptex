@@ -18,6 +18,7 @@ export interface WorkerEnv extends WorkerSecurityEnvironment {
   readonly CREATE_PERMIT_OBJECTS: DurableObjectNamespace;
   readonly EDGE_RATE_LIMITER: RateLimit;
   readonly LOCATOR_RATE_LIMITER: RateLimit;
+  readonly PAIRING_OBJECTS: DurableObjectNamespace;
   readonly REQUEST_OBJECTS: DurableObjectNamespace;
   readonly SEND_OBJECTS: DurableObjectNamespace;
 }

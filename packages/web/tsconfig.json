@@ -9,6 +9,7 @@
   "include": ["src/**/*.ts", "src/**/*.tsx"],
   "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx"],
   "references": [
+    { "path": "../client" },
     { "path": "../contracts" },
     { "path": "../crypto" }
   ]

@@ -1,8 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState, type RefObject } from "react";
 import { Link, useLocation } from "react-router";
-import { ApiFailure } from "../api-client";
+import { normalizeUserCodeInput } from "@kryptex/contracts/api";
+import { ApiFailure } from "@kryptex/client";
 import { useClient } from "../client-context";
-import { InfoSection, PageIntro, StatusMessage } from "../ui";
+import type { FragmentCapture } from "../fragment";
+import { FieldHint, InfoSection, PageIntro, StatusMessage } from "../ui";
 import { creationPath, gatePath, parseCreationIntent } from "../verification";
 
 const DEVELOPMENT_SITE_KEY = "1x00000000000000000000AA";
@@ -18,6 +20,35 @@ declare global {
   }
   interface ImportMeta { readonly env: ImportMetaEnv; }
   interface Window { readonly turnstile?: { render(container: HTMLElement, options: { readonly action: "create_permit"; readonly callback: (token: string) => void; readonly sitekey: string }): string; }; }
+}
+
+/** Loads Turnstile into `container` while `active`; the script never loads into a document that holds secret material. */
+function useTurnstileWidget(
+  container: RefObject<HTMLDivElement | null>,
+  siteKey: string | null,
+  active: boolean,
+  onToken: (token: string) => void,
+  onFailure: () => void
+): void {
+  const tokenReceived = useEffectEvent(onToken);
+  const loadFailed = useEffectEvent(onFailure);
+  useEffect(() => {
+    if (siteKey === null || !active) return;
+    const activeSiteKey = siteKey;
+    let cancelled = false;
+    function render(): void {
+      if (cancelled || container.current === null || window.turnstile === undefined) return;
+      window.turnstile.render(container.current, { action: "create_permit", callback(responseToken) { tokenReceived(responseToken); }, sitekey: activeSiteKey });
+    }
+    if (window.turnstile !== undefined) { render(); return () => { cancelled = true; }; }
+    const script = document.createElement("script");
+    script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+    script.async = true; script.defer = true;
+    script.addEventListener("load", render);
+    script.addEventListener("error", () => { if (!cancelled) loadFailed(); });
+    document.head.appendChild(script);
+    return () => { cancelled = true; script.removeEventListener("load", render); script.remove(); };
+  }, [container, siteKey, active]);
 }
 
 export function HomePage() {
@@ -92,23 +123,9 @@ export function GatePage() {
     return () => { cancelled = true; };
   }, [client, destination, requestId, token, verificationAttempt]);
 
-  useEffect(() => {
-    if (siteKey === null || state !== "loading") return;
-    const activeSiteKey = siteKey;
-    let cancelled = false;
-    function render(): void {
-      if (cancelled || container.current === null || window.turnstile === undefined) return;
-      window.turnstile.render(container.current, { action: "create_permit", callback(responseToken) { setState("working"); setToken(responseToken); setVerificationAttempt((attempt) => attempt + 1); }, sitekey: activeSiteKey });
-    }
-    if (window.turnstile !== undefined) { render(); return () => { cancelled = true; }; }
-    const script = document.createElement("script");
-    script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
-    script.async = true; script.defer = true;
-    script.addEventListener("load", render);
-    script.addEventListener("error", () => { if (!cancelled) setState("failed"); });
-    document.head.appendChild(script);
-    return () => { cancelled = true; script.removeEventListener("load", render); script.remove(); };
-  }, [siteKey, state]);
+  useTurnstileWidget(container, siteKey, state === "loading", (responseToken) => {
+    setState("working"); setToken(responseToken); setVerificationAttempt((attempt) => attempt + 1);
+  }, () => { setState("failed"); });
 
   return <div className="task-page task-page--narrow">
     <PageIntro title="One quick check">
@@ -128,6 +145,75 @@ export function GatePage() {
         <StatusMessage tone="danger">The check is unavailable right now, so no form was opened. Nothing was created.</StatusMessage>
         <Link className="quiet-link" reloadDocument to="/">Back to the start</Link>
       </>
+      : null}
+  </div>;
+}
+
+function initialUserCode(capture: FragmentCapture): string {
+  const fragment = capture.fragmentBytes;
+  if (fragment === null) return "";
+  try {
+    return normalizeUserCodeInput(new TextDecoder("utf-8", { fatal: true }).decode(fragment)) ?? "";
+  } catch {
+    return "";
+  } finally {
+    fragment.fill(0);
+  }
+}
+
+export function PairPage({ capture }: { readonly capture: FragmentCapture }) {
+  const client = useClient();
+  const container = useRef<HTMLDivElement>(null);
+  const [requestId] = useState(() => crypto.randomUUID().toLowerCase());
+  const [code, setCode] = useState(() => initialUserCode(capture));
+  const [token, setToken] = useState<string | null>(null);
+  const siteKey = resolveTurnstileSiteKey(import.meta.env.VITE_TURNSTILE_SITE_KEY, import.meta.env.PROD);
+  const [state, setState] = useState<"ready" | "working" | "retry" | "approved" | "unavailable" | "failed">(siteKey === null ? "failed" : "ready");
+  const userCode = normalizeUserCodeInput(code);
+
+  useTurnstileWidget(container, siteKey, state !== "failed" && state !== "approved", setToken, () => { setState("failed"); });
+
+  function approve(): void {
+    if (userCode === null || token === null) return;
+    setState("working");
+    void client.approvePairing({ requestId, turnstileResponse: token, userCode }).then(() => {
+      setState("approved");
+    }).catch((error: unknown) => {
+      if (error instanceof ApiFailure && error.ambiguous) setState("retry");
+      else setState(error instanceof ApiFailure && error.code === "unavailable" ? "unavailable" : "failed");
+    });
+  }
+
+  if (state === "approved") {
+    return <div className="task-page task-page--narrow">
+      <PageIntro title="Approved">
+        <p>Return to your terminal. It can now create one transfer.</p>
+      </PageIntro>
+    </div>;
+  }
+
+  return <div className="task-page task-page--narrow">
+    <PageIntro title="Approve a terminal">
+      <p>A command-line client asked for permission to create one transfer. Approve only a code that your own terminal shows. Approving gives that terminal one permission to create a transfer.</p>
+    </PageIntro>
+    <div className="field-block">
+      <label><span>Code shown in your terminal</span><input autoComplete="off" className="mono" onChange={(event) => { setCode(event.currentTarget.value); }} placeholder="XXXX-XXXX" spellCheck={false} type="text" value={code} /></label>
+      {code.length > 0 && userCode === null ? <FieldHint>A code is 8 characters, usually written as two groups of four.</FieldHint> : null}
+    </div>
+    <div ref={container} />
+    {state === "ready" || state === "retry"
+      ? <button className="primary-button full-button" disabled={userCode === null || token === null} onClick={approve} type="button">
+        {state === "retry" ? "Try the same approval again" : "Approve this terminal"}
+      </button>
+      : null}
+    {state === "ready" && token === null ? <StatusMessage>Waiting for the check…</StatusMessage> : null}
+    {state === "working" ? <StatusMessage>Approving…</StatusMessage> : null}
+    {state === "retry" ? <StatusMessage tone="warning">The approval could not be confirmed.</StatusMessage> : null}
+    {state === "unavailable"
+      ? <StatusMessage tone="danger">This code is wrong, expired, or already used. Your terminal can start a new pairing.</StatusMessage>
+      : null}
+    {state === "failed"
+      ? <StatusMessage tone="danger">The check is unavailable right now. Nothing was approved.</StatusMessage>
       : null}
   </div>;
 }

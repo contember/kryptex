@@ -28,13 +28,18 @@
     "bindings": [
       { "name": "SEND_OBJECTS", "class_name": "SendDurableObject" },
       { "name": "REQUEST_OBJECTS", "class_name": "RequestDurableObject" },
-      { "name": "CREATE_PERMIT_OBJECTS", "class_name": "CreatePermitDurableObject" }
+      { "name": "CREATE_PERMIT_OBJECTS", "class_name": "CreatePermitDurableObject" },
+      { "name": "PAIRING_OBJECTS", "class_name": "PairingDurableObject" }
     ]
   },
   "migrations": [
     {
       "tag": "v1",
       "new_sqlite_classes": ["SendDurableObject", "RequestDurableObject", "CreatePermitDurableObject"]
+    },
+    {
+      "tag": "v2",
+      "new_sqlite_classes": ["PairingDurableObject"]
     }
   ],
   "r2_buckets": [

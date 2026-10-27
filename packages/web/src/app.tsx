@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, Outlet, createBrowserRouter, useLocation } from "react-router";
 
-import { ApiFailure } from "./api-client";
+import { ApiFailure } from "@kryptex/client";
 import { useClient } from "./client-context";
 import type { FragmentCapture } from "./fragment";
 import { ManagementPage } from "./pages/management-page";
@@ -9,12 +9,12 @@ import { OwnerPage } from "./pages/owner-page";
 import { RequestPage } from "./pages/request-page";
 import { RetrievePage } from "./pages/retrieve-page";
 import { SendPage } from "./pages/send-page";
-import { GatePage, HomePage, SecurityPage } from "./pages/static-pages";
+import { GatePage, HomePage, PairPage, SecurityPage } from "./pages/static-pages";
 import { WriterPage } from "./pages/writer-page";
 import { PageIntro } from "./ui";
 import { gatePath, type CreationIntent } from "./verification";
 
-export const APP_ROUTES: readonly string[] = ["/", "/send", "/request", "/s", "/m", "/r", "/i", "/gate", "/security"];
+export const APP_ROUTES: readonly string[] = ["/", "/send", "/request", "/s", "/m", "/r", "/i", "/gate", "/pair", "/security"];
 
 const FLOW_NAMES: Readonly<Record<string, string>> = {
   "/": "Home",
@@ -25,6 +25,7 @@ const FLOW_NAMES: Readonly<Record<string, string>> = {
   "/r": "Answer a request",
   "/i": "Your request",
   "/gate": "Quick check",
+  "/pair": "Approve a terminal",
   "/security": "Security"
 };
 
@@ -41,6 +42,7 @@ export function createAppRouter(fragmentCapture: FragmentCapture) {
       { path: "r", element: <WriterPage capture={fragmentCapture} /> },
       { path: "i", element: <OwnerPage capture={fragmentCapture} /> },
       { path: "gate", element: <GatePage /> },
+      { path: "pair", element: <PairPage capture={fragmentCapture} /> },
       { path: "security", element: <SecurityPage /> }
     ]
   }]);

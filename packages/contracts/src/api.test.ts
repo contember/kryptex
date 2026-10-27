@@ -7,7 +7,16 @@ import {
   parseCreatePermitResponse,
   parseCreatePermitStatusResponse,
   parseCreateResourceResponse,
+  decodeUserCode,
+  encodeUserCode,
+  normalizeUserCodeInput,
   parseEmptyRequest,
+  parsePairingApproveRequest,
+  parsePairingApproveResponse,
+  parsePairingRedeemRequest,
+  parsePairingRedeemResponse,
+  parsePairingStartRequest,
+  parsePairingStartResponse,
   parseRequestCreateRequest,
   parseRequestOwnerRequest,
   parseRequestPickupMetadata,
@@ -54,6 +63,13 @@ const requestCases: readonly ContractCase[] = [
     }
   },
   { name: "POST /api/v2/create-permits/status", parse: parseEmptyRequest, value: {} },
+  { name: "POST /api/v2/create-permits/pairings", parse: parsePairingStartRequest, value: { pollToken: token } },
+  {
+    name: "POST /api/v2/create-permits/pairings/approve",
+    parse: parsePairingApproveRequest,
+    value: { requestId: "550e8400-e29b-41d4-a716-446655440000", turnstileResponse: "turnstile-token", userCode: "ABCD-EFGH" }
+  },
+  { name: "POST /api/v2/create-permits/pairings/redeem", parse: parsePairingRedeemRequest, value: { pollToken: token, userCode: "ABCD-EFGH" } },
   {
     name: "POST /api/v1/sends",
     parse: parseSendCreateRequest,
@@ -121,6 +137,18 @@ const responseCases: readonly ContractCase[] = [
     name: "create permit status",
     parse: parseCreatePermitStatusResponse,
     value: { permitExpiresAt: 1800000300, serverTime: 1800000000, state: "unused" }
+  },
+  {
+    name: "pairing start",
+    parse: parsePairingStartResponse,
+    value: { pairingExpiresAt: 1800000600, serverTime: 1800000000, userCode: "ABCD-EFGH" }
+  },
+  { name: "pairing approve", parse: parsePairingApproveResponse, value: { state: "approved" } },
+  { name: "pending pairing redeem", parse: parsePairingRedeemResponse, value: { pairingExpiresAt: 1800000600, state: "pending" } },
+  {
+    name: "approved pairing redeem",
+    parse: parsePairingRedeemResponse,
+    value: { permit: `v2.${token}`, permitExpiresAt: 1800001800, serverTime: 1800000000, state: "approved" }
   },
   { name: "send create", parse: parseCreateResourceResponse, value: { serverExpiresAt: 1800003600 } },
   { name: "request create", parse: parseCreateResourceResponse, value: { serverExpiresAt: 1800003600 } },
@@ -199,6 +227,35 @@ describe("all API route bodies", () => {
     expect(() => parseSendStatusResponse({ ...base, releasedAt: Array.from({ length: 11 }, () => 1800000100) })).toThrow();
     expect(() => parseSendStatusResponse({ ...base, releasedAt: [1800000100.5] })).toThrow();
     expect(() => parseSendStatusResponse({ ...base, releasedAt: "1800000100" })).toThrow();
+  });
+});
+
+describe("pairing user codes", () => {
+  test("round-trips every byte value through the canonical form", () => {
+    for (let value = 0; value < 256; value += 1) {
+      const bytes = Uint8Array.of(value, 255 - value, value ^ 0x5a, 0, 255);
+      expect(decodeUserCode(encodeUserCode(bytes))).toEqual(bytes);
+    }
+    expect(encodeUserCode(new Uint8Array(5))).toBe("0000-0000");
+    expect(encodeUserCode(Uint8Array.of(255, 255, 255, 255, 255))).toBe("ZZZZ-ZZZZ");
+  });
+
+  test("normalizes typed input with the second-key rules", () => {
+    expect(normalizeUserCodeInput("abcd-efgh")).toBe("ABCD-EFGH");
+    expect(normalizeUserCodeInput("ABCDEFGH")).toBe("ABCD-EFGH");
+    expect(normalizeUserCodeInput("oIL0-1234")).toBe("0110-1234");
+    expect(normalizeUserCodeInput("ABCD-EFGU")).toBeNull();
+    expect(normalizeUserCodeInput("ABC-DEFGH")).toBeNull();
+    expect(normalizeUserCodeInput("ABCD EFGH")).toBeNull();
+    expect(normalizeUserCodeInput("ABCD-EFG")).toBeNull();
+  });
+
+  test("accepts only canonical codes and version 2 permits on the wire", () => {
+    expect(() => parsePairingRedeemRequest({ pollToken: token, userCode: "abcd-efgh" })).toThrow();
+    expect(() => parsePairingRedeemRequest({ pollToken: token, userCode: "ABCDEFGH" })).toThrow();
+    expect(() => parsePairingRedeemRequest({ pollToken: token, userCode: "ABCD-EFGI" })).toThrow();
+    expect(() => parsePairingRedeemResponse({ permit: `v1.${token}`, permitExpiresAt: 1, serverTime: 1, state: "approved" })).toThrow();
+    expect(() => parsePairingRedeemResponse({ pairingExpiresAt: 1, state: "approved" })).toThrow();
   });
 });
 
