@@ -55,6 +55,13 @@ describe("kryptex skill", () => {
     expect(AGENT_INSTRUCTIONS).toBe(specification.slice(start, specification.indexOf("\n```\n", start) + 1));
   });
 
+  it("ships the same instructions as the repository skill", () => {
+    const skill = readFileSync(join(import.meta.dirname, "../../../skills/kryptex/SKILL.md"), "utf8");
+    const body = /^---\nname: kryptex\ndescription: [^\n]+\n---\n\n/u.exec(skill);
+    expect(body).not.toBeNull();
+    expect(skill.slice(body?.[0].length)).toBe(AGENT_INSTRUCTIONS);
+  });
+
   it("runs under Bun and prints the instructions", () => {
     const result = spawnSync("bun", [main, "skill"], { encoding: "utf8" });
     expect(result.status).toBe(0);
