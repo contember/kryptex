@@ -1,6 +1,6 @@
 # Kryptex HTTP API
 
-Status: frozen resource boundary for version 1 with creation-permit version 2.
+Status: frozen resource boundary for version 1 with creation-permit version 2, native-client requests, and browser pairing.
 
 ## Encoding and common responses
 
@@ -27,7 +27,13 @@ Content-Type: application/json
 
 Rate limiting returns `429` and `{"error":"rate_limited"}` before existence-dependent work. Malformed, oversized, or unsupported input returns `400` and `{"error":"invalid_request"}` before resource lookup. An invalid browser origin returns `403` and `{"error":"forbidden"}`. A missing, expired, or consumed create cookie returns `403` and `{"error":"creation_permit_required"}`. Unexpected failures return `500` and `{"error":"internal_error"}`. Raw exception text is never returned.
 
-Every request must match the configured exact `Origin`. API URLs with a query string are rejected before the body is read. Requests that mutate state must have `Sec-Fetch-Site: same-origin` when Fetch Metadata headers are present. The service does not enable credentialed cross-origin requests.
+A request is a **browser request** when it carries an `Origin` header and a **native request** when it carries none of `Origin`, `Cookie`, and `Sec-Fetch-Site`. Any other combination is rejected with `403` and `{"error":"forbidden"}`.
+
+A browser request must match the configured exact `Origin`; `Origin: null` never matches. Browser requests that mutate state must have `Sec-Fetch-Site: same-origin` when Fetch Metadata headers are present. A browser request carrying `Kryptex-Create-Permit` is rejected with `403` and `{"error":"forbidden"}`.
+
+Native requests serve non-browser clients such as the [CLI](cli-v1.md). They carry no ambient credential: every capability is in the body, and a creation permit is presented only in the `Kryptex-Create-Permit` header. Because a native request can carry neither a cookie nor an origin a browser would attach, it cannot be used to spend a browser's permit cookie. Native requests are accepted on every route except `POST /api/v2/create-permits` and `POST /api/v2/create-permits/pairings/approve`, which only browsers may call.
+
+API URLs with a query string are rejected before the body is read. The service does not enable credentialed cross-origin requests.
 
 ## Creation permit version 2
 
@@ -85,6 +91,84 @@ Request body is `{}` and the permit cookie is ambient. The route snapshots the p
 ```
 
 Missing, expired, or consumed permits return `403` and `{"error":"creation_permit_required"}`. A crypto route checks this endpoint before rendering its form and again immediately before generating fresh seeds, nonce, padding, and `clientNotAfter`.
+
+### Permit presentation
+
+A browser presents the permit only through the `kx_create_v2` cookie. A native client presents it only through this request header on permit status, send creation, and request creation:
+
+```text
+Kryptex-Create-Permit: v2.<base64url(P)>
+```
+
+The value grammar, derivation, single use, and expiry are identical to the cookie. Creation routes never set or expire a cookie in response to a native request.
+
+## Browser pairing for native clients
+
+A native client cannot run Turnstile. Browser pairing lets a person pass Turnstile in a browser and hand the resulting single-use permit to one native client. One Turnstile solve still mints at most one permit. The flow follows the OAuth device authorization grant: a short user code that the person sees and approves, separated from a high-entropy poll token that only the native client holds.
+
+### User code
+
+A user code is 5 random bytes encoded as 8 Crockford Base32 characters with the second-key alphabet and input rules, displayed as two groups of four separated by a hyphen. It identifies a pairing and authorizes only its approval. The pairing Durable Object is named `pairing:` followed by the 8 canonical characters. Its capability-tag locator is the 5 code bytes followed by 11 zero bytes, with resource kind `4` and capability kind `4`.
+
+### `POST /api/v2/create-permits/pairings`
+
+Native requests only.
+
+```json
+{"pollToken":"<base64url-32>"}
+```
+
+The client generates the 32-byte poll token randomly and keeps it private. The Worker generates a user code and initializes the pairing Durable Object if it is empty, storing the poll-token capability tag, key ID, creation time, and expiry. It retries with a fresh code when the object already exists. A pairing expires 600 seconds after creation.
+
+Response:
+
+```json
+{"pairingExpiresAt":1787227800,"serverTime":1787227200,"userCode":"ABCD-EFGH"}
+```
+
+### `POST /api/v2/create-permits/pairings/approve`
+
+Browser requests only. The pairing page sends:
+
+```json
+{"requestId":"550e8400-e29b-41d4-a716-446655440000","turnstileResponse":"...","userCode":"ABCD-EFGH"}
+```
+
+The Worker verifies Turnstile exactly as permit issuance does, selects the issuance key through the request-ID Durable Object, derives `P`, and initializes the permit Durable Object. It sets no cookie. It then asks the pairing Durable Object to record the approval, storing only the request ID, issuance key ID, and permit expiry, never `P`. A pending, unexpired pairing records the approval. A pairing already approved with the same request ID repeats the success. Every other state returns the generic unavailable response. An approved pairing is retained until its permit expires so that redemption stays repeatable.
+
+Response:
+
+```json
+{"state":"approved"}
+```
+
+Gate failures use the permit-issuance error codes.
+
+### `POST /api/v2/create-permits/pairings/redeem`
+
+Native requests only.
+
+```json
+{"pollToken":"<base64url-32>","userCode":"ABCD-EFGH"}
+```
+
+The pairing Durable Object verifies the poll-token tag under the per-resource authorization lease and backoff, with the 30-second cap of non-guessable capabilities. A pending pairing returns:
+
+```json
+{"pairingExpiresAt":1787227800,"state":"pending"}
+```
+
+An approved pairing returns the recorded request ID and key ID to the Worker, which derives `P` again from the issuance keyring and returns:
+
+```json
+{"permit":"v2.<base64url(P)>","permitExpiresAt":1787229000,"serverTime":1787227300,"state":"approved"}
+```
+
+Redemption does not consume the permit; repeating it after a lost response returns the same permit until the permit is consumed or expires. Missing, expired, and unauthorized pairings return the generic unavailable response.
+
+### Phishing
+
+Anyone can start a pairing and send its link to someone else. Approving it grants the starter one creation permit, which is worth one Turnstile solve. The pairing page therefore tells the person to approve only a code that their own terminal shows.
 
 ## Send routes
 

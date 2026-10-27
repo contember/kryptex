@@ -4,7 +4,8 @@ Kryptex is a capability-based, end-to-end encrypted secret transfer service.
 
 ## Security invariants
 
-- Plaintext, link seeds, factors, passphrases, and content keys must never leave the browser.
+- Plaintext, link seeds, factors, passphrases, and content keys stay in the client that created or received them: the browser or the CLI. They never reach the service, which receives only derived capabilities, encrypted envelopes, and policy metadata.
+- The CLI never prints secret values, pickup or owner material, second keys, or management links. Its output is allowlisted JSON with fixed error codes. See `docs/spec/cli-v1.md`.
 - URL paths and queries must never contain share locators, capabilities, or key material.
 - API routes must return `Cache-Control: no-store` and must not log request bodies, capabilities, or locators.
 - A retrieval counter counts ciphertext releases, not human views.

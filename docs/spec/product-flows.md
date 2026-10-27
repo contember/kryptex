@@ -34,6 +34,17 @@ The home actions perform a full-page navigation to `/gate` before opening a secr
 
 The crypto route checks the permit before rendering the form. Immediately before creation, it checks status again, uses the returned server time, and generates fresh seeds, nonce, padding, and `clientNotAfter`. If the permit expires while the form is open, the page keeps the draft in current-document memory and tells the user to copy it before a new full-page verification. It does not load Turnstile into the crypto document or persist the draft.
 
+## Pairing a native client
+
+A native client such as the [CLI](cli-v1.md) cannot run Turnstile. It starts a [browser pairing](api-v1.md#browser-pairing-for-native-clients) and shows a link of the form `/pair#ABCD-EFGH`.
+
+1. The `/pair` page copies the fragment into memory and removes it with `history.replaceState` before rendering, as the shared fragment lifecycle requires. The code is not key material, but it does not belong in history or a referrer either.
+2. The page shows the code in an editable field and says: **Approve only a code that your own terminal shows. Approving gives that terminal one permission to create a transfer.** The page contains no secret fields.
+3. Turnstile runs in this document, as on `/gate`. After the check, the page sends the approval.
+4. Success says: **Approved. Return to your terminal.** A generic unavailable response says that the code is wrong, expired, or already used, and that the terminal can start a new pairing.
+
+The page never receives a permit and never sets a cookie.
+
 ## Send creation
 
 1. The user enters plain text or structured name/value fields.

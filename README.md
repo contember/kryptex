@@ -20,6 +20,10 @@ Compromise of the served browser code can expose secrets used after that comprom
 
 The detailed state and retry rules are in [product flows](docs/spec/product-flows.md). The wire format is frozen in [protocol version 1](docs/spec/protocol-v1.md).
 
+## CLI for AI agents
+
+The `kryptex` CLI lets an AI coding agent request secrets from a person, or send secrets to one, without the values entering the agent's transcript. Answers are written to an ignored dotenv file or passed to a command. The CLI obtains creation permits by browser pairing. See the [CLI specification](docs/spec/cli-v1.md).
+
 ## Development
 
 Install Bun 1.3.14, then follow [development and local-operation setup](docs/reference/development.md). The short path is:

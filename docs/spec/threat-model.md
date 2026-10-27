@@ -23,6 +23,8 @@ Kryptex transports short-lived secrets without exposing plaintext or decryption 
 5. A private R2 bucket stores encrypted envelopes.
 6. Cloudflare Turnstile executes only in an isolated gate document with no fragment or secret fields. Full-page navigation unloads it before a crypto document opens. The only state carried forward is the HttpOnly permit cookie. Turnstile never executes in a document that holds plaintext or key material.
 
+7. A native client, such as the CLI, plays the browser's role on a user's machine. It creates keys, encrypts and decrypts content, and writes results to local files or a child process. It obtains a creation permit through browser pairing, in which a person passes Turnstile on the `/pair` page.
+
 ## Adversaries and expected outcome
 
 | Adversary | Expected outcome |
@@ -39,6 +41,9 @@ Kryptex transports short-lived secrets without exposing plaintext or decryption 
 | Controls a sender or recipient device | Can read plaintext and keys used on that device. |
 | Compromises only API or stored state while the reviewed client remains intact | Cannot decrypt ciphertext without separately captured link material or factors. |
 | Actively changes the served web client | Can steal future plaintext or keys when a user loads the modified client. |
+| Reads an AI agent's transcript of CLI use | Learns write links, recipient links, and pairing codes. Can submit the one answer to a link-only request first, or approve a pending pairing. Cannot read request answers, and cannot open a send without the second key in the hand-off file. |
+| Starts a pairing and persuades someone to approve it | Obtains one creation permit, worth one Turnstile solve. Learns nothing about any transfer. |
+| Runs as the same OS user as the CLI, such as the agent itself | Can read the CLI state, output files, and child environments. The CLI does not defend this boundary. |
 | Operates a malicious API behind an intact reviewed client | Can deny service, lie about state, retain or replay ciphertext, or release it too many times, but cannot decrypt without link material or a factor channel. A malicious web origin can instead change JavaScript and steal future data. Historical ciphertext remains protected only if the origin did not capture its link material or factors earlier. |
 
 ## Explicit non-goals
