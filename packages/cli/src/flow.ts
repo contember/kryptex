@@ -150,19 +150,30 @@ async function redeem(client: NativeClient, pairing: Pairing): Promise<PairingPo
   return { kind: "pending" };
 }
 
-/** Polls redemption until the person approves, the pairing expires, or the deadline passes. */
+/**
+ * Polls redemption until the person approves, the pairing expires, or the deadline passes.
+ * The local clock never ends a pairing: the service keeps an approved pairing redeemable past `pairingExpiresAt`.
+ */
 async function pollPairing(context: FlowContext, pairing: Pairing): Promise<PairingPoll> {
   for (;;) {
-    if (nowSeconds(context) >= pairing.pairingExpiresAt) return { kind: "expired" };
     try {
       const polled = await redeem(context.client, pairing);
       if (polled.kind !== "pending") return polled;
     } catch (error) {
-      if (error instanceof ApiFailure && error.code === "unavailable") return { kind: "expired" };
+      if (error instanceof ApiFailure && error.code === "unavailable" && !error.ambiguous) return { kind: "expired" };
     }
     const remaining = context.deadline - context.now();
     if (remaining <= 0) return { kind: "pending" };
     await context.sleep(Math.min(3_000, remaining));
+  }
+}
+
+/** Best effort: a grant this CLI will never store can only be revoked now; if the revoke fails, it still expires. */
+async function revokeUnusedGrant(client: NativeClient, pairing: DevicePairing): Promise<void> {
+  try {
+    await client.revokeDevice({ deviceLocator: pairing.deviceLocator, deviceToken: pairing.deviceToken });
+  } catch {
+    // Not fatal: the operation continues with the stored grant.
   }
 }
 
@@ -209,8 +220,13 @@ export async function authorize<T extends OperationRecord>(
       }
       const pairing = phase.pairing;
       if (!isDevicePairing(pairing)) throw new CliError("internal");
-      withDeviceLock(context.store, record.origin, () => {
-        if (readDeviceFile(context.store, record.origin).state === "invalid") throw new CliError("state_invalid");
+      const keptExisting = withDeviceLock(context.store, record.origin, () => {
+        const existing = readDeviceFile(context.store, record.origin);
+        if (existing.state === "invalid") throw new CliError("state_invalid");
+        // A concurrent pairing already stored a usable grant: keep it, so operations minting with it are not disturbed.
+        if (existing.state === "present" && nowSeconds(context) < existing.grant.deviceExpiresAt && existing.grant.deviceLocator !== pairing.deviceLocator) {
+          return true;
+        }
         writeDeviceFile(context.store, {
           deviceExpiresAt: polled.deviceExpiresAt,
           deviceLocator: pairing.deviceLocator,
@@ -218,7 +234,9 @@ export async function authorize<T extends OperationRecord>(
           origin: record.origin,
           version: DEVICE_FILE_VERSION
         });
+        return false;
       });
+      if (keptExisting) await revokeUnusedGrant(context.client, pairing);
       mintAgain();
       continue;
     }

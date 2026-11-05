@@ -78,9 +78,10 @@ interface StoredGrant {
   readonly token: string;
 }
 
-type StoredPairing =
-  | { readonly kind: "device"; readonly deviceLocator: string; readonly deviceToken: string; readonly maxDays: number; readonly userCode: string }
-  | { readonly kind: "legacy"; readonly pollToken: string; readonly userCode: string };
+type StoredPairing = { readonly expiresAt: number; readonly userCode: string } & (
+  | { readonly deviceLocator: string; readonly deviceToken: string; readonly kind: "device"; readonly maxDays: number }
+  | { readonly kind: "legacy"; readonly pollToken: string }
+);
 
 /** An in-memory service that follows the API contract closely enough to drive the CLI state machines. */
 class FakeService implements NativeClient {
@@ -92,6 +93,7 @@ class FakeService implements NativeClient {
   deviceRoutes = true;
   devicePairingsStarted = 0;
   mintFault: Fault = null;
+  rejectNextMint = false;
   rejectNextPermitStatus = false;
   permitUsed = false;
   createFault: Fault = null;
@@ -101,28 +103,34 @@ class FakeService implements NativeClient {
   readonly sends = new Map<string, StoredSend>();
   readonly #mintedPermits = new Map<string, { readonly expiresAt: number; used: boolean }>();
   #permit = `v2.${encodeBase64Url(randomBytes(32))}`;
-  #pairing: StoredPairing | null = null;
+  /** Keyed by the poll credential: the poll token, or the device token of a device pairing. */
+  readonly #pairings = new Map<string, StoredPairing>();
 
   get seconds(): number {
     return Math.floor(this.clock / 1_000);
   }
 
-  #newPairing(pairing: StoredPairing): PairingStartResponse {
-    this.#pairing = pairing;
+  #newPairing(credential: string, pairing: StoredPairing): PairingStartResponse {
+    this.#pairings.set(credential, pairing);
     this.#permit = `v2.${encodeBase64Url(randomBytes(32))}`;
     this.approved = false;
     this.permitUsed = false;
-    return { pairingExpiresAt: this.seconds + 600, serverTime: this.seconds, userCode: pairing.userCode };
+    return { pairingExpiresAt: pairing.expiresAt, serverTime: this.seconds, userCode: pairing.userCode };
+  }
+
+  /** An unapproved pairing ends at its expiry; an approved one stays redeemable, as the service retains it past expiry. */
+  #pairing(credential: string, userCode: string): StoredPairing {
+    const pairing = this.#pairings.get(credential);
+    if (pairing?.userCode !== userCode || (!this.approved && this.seconds >= pairing.expiresAt)) throw new ApiFailure("unavailable", false);
+    return pairing;
   }
 
   startPairing(input: PairingStartRequest): Promise<PairingStartResponse> {
-    return Promise.resolve(this.#newPairing({ kind: "legacy", pollToken: input.pollToken, userCode: "ABCD-EFGH" }));
+    return Promise.resolve(this.#newPairing(input.pollToken, { expiresAt: this.seconds + 600, kind: "legacy", pollToken: input.pollToken, userCode: "ABCD-EFGH" }));
   }
 
   redeemPairing(input: PairingRedeemRequest): Promise<PairingRedeemResponse> {
-    if (this.#pairing?.kind !== "legacy" || this.#pairing.pollToken !== input.pollToken || this.#pairing.userCode !== input.userCode) {
-      return Promise.reject(new ApiFailure("unavailable", false));
-    }
+    if (this.#pairing(input.pollToken, input.userCode).kind !== "legacy") throw new ApiFailure("unavailable", false);
     if (!this.approved) return Promise.resolve({ pairingExpiresAt: this.seconds + 600, state: "pending" });
     return Promise.resolve({ permit: this.#permit, permitExpiresAt: this.seconds + 600, serverTime: this.seconds, state: "approved" });
   }
@@ -130,15 +138,13 @@ class FakeService implements NativeClient {
   startDevicePairing(input: DevicePairingStartRequest): Promise<DevicePairingStartResponse> {
     if (!this.deviceRoutes) return Promise.reject(new ApiFailure("invalid_request", false));
     this.devicePairingsStarted += 1;
-    return Promise.resolve(this.#newPairing({ ...input, kind: "device", userCode: "WXYZ-2345" }));
+    return Promise.resolve(this.#newPairing(input.deviceToken, { ...input, expiresAt: this.seconds + 600, kind: "device", userCode: "WXYZ-2345" }));
   }
 
   redeemDevicePairing(input: DevicePairingRedeemRequest): Promise<DevicePairingRedeemResponse> {
-    const pairing = this.#pairing;
-    if (pairing?.kind !== "device" || pairing.deviceToken !== input.deviceToken || pairing.userCode !== input.userCode) {
-      return Promise.reject(new ApiFailure("unavailable", false));
-    }
-    if (!this.approved) return Promise.resolve({ pairingExpiresAt: this.seconds + 600, state: "pending" });
+    const pairing = this.#pairing(input.deviceToken, input.userCode);
+    if (pairing.kind !== "device") throw new ApiFailure("unavailable", false);
+    if (!this.approved) return Promise.resolve({ pairingExpiresAt: pairing.expiresAt, state: "pending" });
     if (this.approvalScope === "transfer") {
       return Promise.resolve({ permit: this.#permit, permitExpiresAt: this.seconds + 600, serverTime: this.seconds, state: "transfer" });
     }
@@ -158,9 +164,13 @@ class FakeService implements NativeClient {
   mintDevicePermit(input: DevicePermitRequest): Promise<DevicePermitResponse> {
     const grant = this.#grant(input);
     if (grant.revoked) throw new ApiFailure("unavailable", false);
+    if (this.rejectNextMint) {
+      this.rejectNextMint = false;
+      throw new ApiFailure("creation_permit_required", false);
+    }
     const known = grant.mints.get(input.requestId);
     if (known !== undefined) {
-      if (this.seconds - known.mintedAt > 120) throw new ApiFailure("unavailable", false);
+      if (this.seconds - known.mintedAt > 120) throw new ApiFailure("creation_permit_required", false);
       if (this.#mintedPermits.get(known.permit)?.used === true) throw new ApiFailure("creation_permit_required", false);
       return Promise.resolve({ permit: known.permit, permitExpiresAt: known.mintedAt + 120, serverTime: this.seconds });
     }
@@ -755,6 +765,62 @@ describe("device grants", () => {
     expect(await kryptex("device", "status")).toEqual({ exitCode: 0, output: { device: { state: "none" }, origin: ORIGIN } });
     expect(await kryptex("device", "forget")).toEqual({ exitCode: 0, output: { forgotten: false, origin: ORIGIN, revoked: false } });
     expectNoDeviceSecrets();
+  });
+
+  const approvals: readonly (readonly [string, "device" | "transfer", boolean])[] = [
+    ["for this machine", "device", true],
+    ["for one transfer", "transfer", false]
+  ];
+
+  it.each(approvals)("redeems a pairing approved %s after its local expiry", async (_name, scope, stored) => {
+    const handle = await createRequest(...ENV_SINK);
+    service.approvalScope = scope;
+    service.approved = true;
+    service.clock += 601_000;
+    expect(await kryptex("wait", handle)).toMatchObject({ exitCode: 3, output: { action: "hand_over_write_link", handle } });
+    expect(service.devicePairingsStarted).toBe(1);
+    expect(existsSync(devicePath())).toBe(stored);
+  });
+
+  it("redeems an approved legacy pairing after its local expiry", async () => {
+    service.deviceRoutes = false;
+    const handle = text((await kryptex("request", "create", "--spec", "form.json", ...ENV_SINK)).output, "handle");
+    service.approved = true;
+    service.clock += 601_000;
+    expect(await kryptex("wait", handle)).toMatchObject({ exitCode: 3, output: { action: "hand_over_write_link", handle } });
+  });
+
+  it.each([
+    ["revoked", true],
+    ["left to expire when the revoke fails", false]
+  ])("keeps the stored grant when a concurrent pairing is also approved for this machine; the new grant is %s", async (_name, revokes) => {
+    const first = await createRequest(...ENV_SINK);
+    const second = await createRequest(...ENV_SINK);
+    service.approvalScope = "device";
+    service.approved = true;
+    expect(await kryptex("wait", first)).toMatchObject({ exitCode: 3, output: { action: "hand_over_write_link" } });
+    const stored = readFileSync(devicePath(), "utf8");
+    if (!revokes) service.revokeDevice = () => Promise.reject(new ApiFailure("network", true));
+
+    expect(await kryptex("wait", second)).toMatchObject({ exitCode: 3, output: { action: "hand_over_write_link", handle: second } });
+    expect(readFileSync(devicePath(), "utf8")).toBe(stored);
+    const parsed: unknown = JSON.parse(stored);
+    const kept: unknown = typeof parsed === "object" && parsed !== null ? Reflect.get(parsed, "deviceLocator") : undefined;
+    const grants = [...service.grants];
+    expect(grants).toHaveLength(2);
+    for (const [locator, grant] of grants) {
+      expect(grant.revoked).toBe(locator === kept ? false : revokes);
+      expect(grant.minted).toBe(locator === kept ? 2 : 0);
+    }
+  });
+
+  it("mints a fresh request ID and keeps the device file when the mint answers creation_permit_required", async () => {
+    await pairDevice();
+    service.rejectNextMint = true;
+    expect(await kryptex("request", "create", "--spec", "form.json", ...ENV_SINK)).toMatchObject({ exitCode: 3, output: { action: "hand_over_write_link" } });
+    expect(existsSync(devicePath())).toBe(true);
+    expect(onlyGrant().minted).toBe(2);
+    expect(service.devicePairingsStarted).toBe(1);
   });
 
   it("keeps the device file when the revoke fails, unless forced", async () => {
