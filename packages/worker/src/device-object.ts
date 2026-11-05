@@ -43,6 +43,7 @@ interface DeviceMintInput {
 type MintResult =
   | { readonly kind: "minted"; readonly keyId: string; readonly mintedAt: number }
   | { readonly kind: "quota_exhausted" }
+  | { readonly kind: "spent" }
   | { readonly kind: "unavailable" };
 
 function keyIdProperty(object: object, key: string, context: string): string {
@@ -270,7 +271,7 @@ export class DeviceDurableObject {
         return { keyId: replay.keyId, kind: "minted", mintedAt: replay.mintedAt };
       }
       if (await transaction.get(spentRequestKey(input.requestId)) !== undefined) {
-        return { kind: "unavailable" };
+        return { kind: "spent" };
       }
       if (windowTotal(record.hourlyMints, now) >= DEVICE_QUOTA_PER_DAY) {
         return { kind: "quota_exhausted" };
@@ -290,6 +291,10 @@ export class DeviceDurableObject {
     }
     if (result.kind === "unavailable") {
       return unavailable();
+    }
+    if (result.kind === "spent") {
+      // The caller already proved the device token, so this reveals nothing; it mints again with a fresh ID.
+      return apiError("creation_permit_required", 403);
     }
     return jsonResponse({ keyId: result.keyId, mintedAt: result.mintedAt });
   }

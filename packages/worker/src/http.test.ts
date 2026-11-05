@@ -22,7 +22,7 @@ describe("asset security policies", () => {
       status: 206,
       statusText: "Partial Content"
     });
-    const response = secureAssetResponse(source, false);
+    const response = secureAssetResponse(source, { kind: "application" });
     expect(response.status).toBe(206);
     expect(response.statusText).toBe("Partial Content");
     expect(await response.text()).toBe("asset");
@@ -40,7 +40,7 @@ describe("asset security policies", () => {
   });
 
   test("scopes Turnstile origins to the gate policy", () => {
-    const response = secureAssetResponse(new Response("gate"), true);
+    const response = secureAssetResponse(new Response("gate"), { connectSource: "'self'", kind: "gate" });
     const policy = response.headers.get("Content-Security-Policy");
     expect(policy).toContain("script-src 'self' https://challenges.cloudflare.com");
     expect(policy).toContain("frame-src https://challenges.cloudflare.com");

@@ -47,7 +47,12 @@ import {
   randomBase64Url,
   unixSeconds
 } from "./core.js";
-import { checkWorkerEnvironment, type CheckedWorkerEnvironment, type WorkerEnv } from "./env.js";
+import {
+  checkWorkerEnvironment,
+  type CheckedWorkerEnvironment,
+  type WorkerEnv,
+  type WorkerSecurityEnvironment
+} from "./env.js";
 import {
   apiError,
   deviceClaimCookie,
@@ -59,7 +64,8 @@ import {
   permitCookie,
   rateLimited,
   secureAssetResponse,
-  unavailable
+  unavailable,
+  type PagePolicy
 } from "./http.js";
 import {
   decodeCanonicalBase64Url,
@@ -1187,9 +1193,18 @@ export async function handleApiRequest(
   }
 }
 
-/** Turnstile runs only on these pages, so none of them may ever hold a protected capability. */
-export function usesGatePolicy(pathname: string): boolean {
-  return pathname === "/gate" || pathname === "/pair" || pathname === "/pair/device";
+/**
+ * Turnstile runs only on these pages, so none of them may ever hold a protected capability.
+ * The device pairing page reaches only its approve route, so no script there can call the claim routes.
+ */
+export function pagePolicy(pathname: string, environment: WorkerSecurityEnvironment): PagePolicy {
+  if (pathname === "/pair/device") {
+    return { connectSource: `${checkWorkerEnvironment(environment).expectedOrigin}${API_ROUTES.devicePairingApprove}`, kind: "gate" };
+  }
+  if (pathname === "/gate" || pathname === "/pair") {
+    return { connectSource: "'self'", kind: "gate" };
+  }
+  return { kind: "application" };
 }
 
 export default {
@@ -1198,6 +1213,6 @@ export default {
     if (pathname.startsWith("/api/")) {
       return handleApiRequest(request, environment, fetch);
     }
-    return secureAssetResponse(await environment.ASSETS.fetch(request), usesGatePolicy(pathname));
+    return secureAssetResponse(await environment.ASSETS.fetch(request), pagePolicy(pathname, environment));
   }
 } satisfies ExportedHandler<WorkerEnv>;

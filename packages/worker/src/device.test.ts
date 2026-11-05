@@ -8,11 +8,12 @@ import {
   parsePairingStartResponse
 } from "@kryptex/contracts/api";
 import { parseKxe1Envelope } from "@kryptex/contracts/envelopes";
-import { env } from "cloudflare:workers";
+import { env, exports } from "cloudflare:workers";
 import { reset, runDurableObjectAlarm, runInDurableObject } from "cloudflare:test";
 import { encodeBase64Url, unixSeconds } from "./core.js";
 import { LOCAL_TURNSTILE_DUMMY_SECRET, type WorkerEnv } from "./env.js";
-import { handleApiRequest, LOCAL_TURNSTILE_DUMMY_TOKEN, usesGatePolicy } from "./index.js";
+import { secureAssetResponse } from "./http.js";
+import { handleApiRequest, LOCAL_TURNSTILE_DUMMY_TOKEN, pagePolicy } from "./index.js";
 import { RECORD_KEY, spentRequestKey, type DeviceRecord } from "./state.js";
 
 const ORIGIN = "http://localhost:5173";
@@ -336,6 +337,43 @@ describe("device permits", () => {
     expect(status.quotaRemaining).toBe(49);
   });
 
+  test("refuses to replay a consumed permit and charges nothing for the attempt", async () => {
+    const device = await pairDevice(66);
+    const permit = await mintedPermit(await mint(device.deviceLocator, device.deviceToken, requestId(660)));
+    const created = await call(nativeRequest("/api/v1/requests", requestCreateBody(50), { "Kryptex-Create-Permit": permit }));
+    expect(created.status).toBe(200);
+
+    const replay = await mint(device.deviceLocator, device.deviceToken, requestId(660));
+    expect(replay.status).toBe(403);
+    expect(await replay.json()).toEqual({ error: "creation_permit_required" });
+    const status = parseDeviceStatusResponse(await (await call(nativeRequest("/api/v3/devices/status", {
+      deviceLocator: device.deviceLocator,
+      deviceToken: device.deviceToken
+    }))).json());
+    expect(status.quotaRemaining).toBe(49);
+    expect(status.hourlyMints.reduce((total, count) => total + count, 0)).toBe(1);
+  });
+
+  test("refuses a management token as a device token", async () => {
+    const device = await pairDevice(67);
+    const minted = await mint(device.deviceLocator, device.manageToken, requestId(670));
+    expect(minted.status).toBe(404);
+    expect(await minted.json()).toEqual({ error: "unavailable" });
+  });
+
+  test("refuses one grant's device token on another grant's locator", async () => {
+    const first = await pairDevice(68);
+    const second = await pairDevice(72);
+    const crossed = await mint(second.deviceLocator, first.deviceToken, requestId(680));
+    expect(crossed.status).toBe(404);
+    expect(await crossed.json()).toEqual({ error: "unavailable" });
+    const crossedStatus = await call(nativeRequest("/api/v3/devices/status", {
+      deviceLocator: first.deviceLocator,
+      manageToken: second.manageToken
+    }));
+    expect(crossedStatus.status).toBe(404);
+  });
+
   test("rejects a known request ID after the permit lifetime and keeps it only as a spent ID", async () => {
     const device = await pairDevice(71);
     await mintedPermit(await mint(device.deviceLocator, device.deviceToken, requestId(700)));
@@ -349,8 +387,8 @@ describe("device permits", () => {
     });
 
     const late = await mint(device.deviceLocator, device.deviceToken, requestId(700));
-    expect(late.status).toBe(404);
-    expect(await late.json()).toEqual({ error: "unavailable" });
+    expect(late.status).toBe(403);
+    expect(await late.json()).toEqual({ error: "creation_permit_required" });
     await mintedPermit(await mint(device.deviceLocator, device.deviceToken, requestId(701)));
 
     await runInDurableObject(deviceObject(device.deviceLocator), async (_instance, state) => {
@@ -494,9 +532,25 @@ describe("device request modes", () => {
     expect(await response.json()).toEqual({ error: "invalid_request" });
   });
 
-  test("runs Turnstile only on the device pairing page, not on confirmation or management", () => {
-    expect(usesGatePolicy("/pair/device")).toBe(true);
-    expect(usesGatePolicy("/pair/device/confirm")).toBe(false);
-    expect(usesGatePolicy("/d")).toBe(false);
+  test("lets the device pairing page reach only its approve route and Turnstile", async () => {
+    const policyFor = (pathname: string): string =>
+      secureAssetResponse(new Response(""), pagePolicy(pathname, localEnvironment())).headers.get("Content-Security-Policy") ?? "";
+    const devicePolicy = policyFor("/pair/device");
+    expect(devicePolicy).toContain(
+      `connect-src ${ORIGIN}/api/v3/devices/pairings/approve https://challenges.cloudflare.com;`
+    );
+    expect(devicePolicy).not.toContain("connect-src 'self'");
+    expect(devicePolicy).not.toContain("/claim");
+    expect(devicePolicy).toContain("script-src 'self' https://challenges.cloudflare.com");
+    for (const pathname of ["/pair", "/gate"]) {
+      expect(policyFor(pathname)).toContain("connect-src 'self' https://challenges.cloudflare.com;");
+    }
+    for (const pathname of ["/pair/device/confirm", "/d"]) {
+      expect(policyFor(pathname)).not.toContain("challenges.cloudflare.com");
+      expect(policyFor(pathname)).toContain("connect-src 'self';");
+    }
+
+    const served = await exports.default.fetch(new Request(`${ORIGIN}/pair/device`));
+    expect(served.headers.get("Content-Security-Policy")).toBe(devicePolicy);
   });
 });

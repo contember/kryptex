@@ -76,24 +76,34 @@ const APPLICATION_CSP = [
   "worker-src 'none'"
 ].join("; ");
 
-const GATE_CSP = [
-  "base-uri 'none'",
-  "connect-src 'self' https://challenges.cloudflare.com",
-  "default-src 'none'",
-  "font-src 'self'",
-  "form-action 'none'",
-  "frame-ancestors 'none'",
-  "frame-src https://challenges.cloudflare.com",
-  "img-src 'self' data: https://challenges.cloudflare.com",
-  "object-src 'none'",
-  "script-src 'self' https://challenges.cloudflare.com",
-  "style-src 'self'",
-  "worker-src 'none'"
-].join("; ");
+const TURNSTILE_ORIGIN = "https://challenges.cloudflare.com";
 
-export function secureAssetResponse(response: Response, gate: boolean): Response {
+/** A Turnstile page names the only first-party URLs its scripts may reach; it never gets the application policy. */
+export type PagePolicy =
+  | { readonly kind: "application" }
+  | { readonly connectSource: string; readonly kind: "gate" };
+
+function gateCsp(connectSource: string): string {
+  return [
+    "base-uri 'none'",
+    `connect-src ${connectSource} ${TURNSTILE_ORIGIN}`,
+    "default-src 'none'",
+    "font-src 'self'",
+    "form-action 'none'",
+    "frame-ancestors 'none'",
+    `frame-src ${TURNSTILE_ORIGIN}`,
+    `img-src 'self' data: ${TURNSTILE_ORIGIN}`,
+    "object-src 'none'",
+    `script-src 'self' ${TURNSTILE_ORIGIN}`,
+    "style-src 'self'",
+    "worker-src 'none'"
+  ].join("; ");
+}
+
+export function secureAssetResponse(response: Response, policy: PagePolicy): Response {
+  const gate = policy.kind === "gate";
   const headers = new Headers(response.headers);
-  headers.set("Content-Security-Policy", gate ? GATE_CSP : APPLICATION_CSP);
+  headers.set("Content-Security-Policy", policy.kind === "gate" ? gateCsp(policy.connectSource) : APPLICATION_CSP);
   headers.set("Cross-Origin-Opener-Policy", "same-origin");
   headers.set("Cross-Origin-Resource-Policy", "same-origin");
   headers.set(
