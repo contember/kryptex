@@ -1,12 +1,22 @@
 import { readFileSync } from "node:fs";
 import { basename, resolve } from "node:path";
 import { parseArgs } from "node:util";
+import { ApiFailure } from "@kryptex/client";
 import { parseRequestSchemaPayload } from "@kryptex/contracts/payloads";
-import { isTtlSeconds, MAX_FIELDS, MAX_LABEL_UTF8_BYTES, type TtlSeconds } from "@kryptex/contracts/protocol";
+import {
+  DEFAULT_DEVICE_GRANT_DAYS,
+  isDeviceGrantDays,
+  isTtlSeconds,
+  MAX_FIELDS,
+  MAX_LABEL_UTF8_BYTES,
+  type DeviceGrantDays,
+  type TtlSeconds
+} from "@kryptex/contracts/protocol";
 import { encodeBase64Url } from "@kryptex/crypto";
+import { acquireDeviceLock, deleteDeviceFile, readDeviceFile } from "./device.js";
 import { checkDotenvTargets, readDotenvKeys } from "./dotenv.js";
 import { CliError, UsageError } from "./errors.js";
-import { errorOutcome, nowSeconds, pairingOutcome, startPairing, type FlowContext, type NativeClient, type Outcome } from "./flow.js";
+import { errorOutcome, nextAuthorization, nowSeconds, pairingOutcome, transientError, type FlowContext, type NativeClient, type Outcome } from "./flow.js";
 import { checkProjectPath, projectPath, projectRoot, readProjectFile } from "./project.js";
 import { RECORD_VERSION, type Dialect, type OperationRecord, type RequestRecord, type RequestSink, type SendRecord, type StoredField } from "./record.js";
 import { advanceRequest, revokeRequest } from "./request-flow.js";
@@ -26,9 +36,10 @@ export interface Runtime {
 
 export type CommandResult = Outcome | { readonly exitCode: 0; readonly text: string };
 
-const USAGE = "Usage: kryptex request create | send create | wait <handle> | list | discard <handle> | skill. Run kryptex skill for instructions.";
+const USAGE = "Usage: kryptex request create | send create | wait <handle> | list | discard <handle> | device status | device forget | skill. Run kryptex skill for instructions.";
 const TARGET_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/u;
 const DEFAULT_TTL: TtlSeconds = 604800;
+const DEFAULT_TIMEOUT_SECONDS = 90;
 const MAX_SPEC_BYTES = 65536;
 
 function utf8Length(value: string): number {
@@ -55,6 +66,13 @@ function parseTtl(input: string | undefined): TtlSeconds {
   const seconds = /^[0-9]{1,8}$/u.test(input) ? Number(input) : Number.NaN;
   if (!isTtlSeconds(seconds)) throw new UsageError("--ttl must be one of the protocol TTL values.");
   return seconds;
+}
+
+function parseDeviceDays(input: string | undefined): DeviceGrantDays {
+  if (input === undefined) return DEFAULT_DEVICE_GRANT_DAYS;
+  const days = /^[0-9]{1,2}$/u.test(input) ? Number(input) : Number.NaN;
+  if (!isDeviceGrantDays(days)) throw new UsageError("--device-days must be 1, 7, 30, or 90.");
+  return days;
 }
 
 function parseIntegerOption(input: string | undefined, fallback: number, minimum: number, maximum: number, message: string): number {
@@ -157,9 +175,34 @@ function positional(args: readonly string[]): { readonly handle: string; readonl
   return { handle, rest };
 }
 
+function flowContext(runtime: Runtime, store: string, origin: string, timeoutSeconds: number): FlowContext {
+  return {
+    client: runtime.clientFor(origin),
+    deadline: runtime.now() + timeoutSeconds * 1_000,
+    now: runtime.now,
+    sleep: runtime.sleep,
+    stderr: runtime.stderr,
+    store
+  };
+}
+
+/** Records a new operation and, with a device grant, advances it at once; after the record exists, every failure names its handle. */
+async function begin(context: FlowContext, record: OperationRecord): Promise<Outcome> {
+  return withOperationLock(context.store, record.handle, async () => {
+    writeRecord(context.store, record);
+    if (record.phase.name === "pairing") return pairingOutcome(record, record.phase.pairing, 3);
+    try {
+      return record.kind === "request" ? await advanceRequest(context, record) : await advanceSend(context, record);
+    } catch (error) {
+      return errorOutcome(record.handle, error instanceof CliError ? error.code : "internal");
+    }
+  });
+}
+
 async function requestCreate(args: readonly string[], runtime: Runtime): Promise<Outcome> {
   const { command, options } = splitCommand(args);
   const values = parseOptions(options, {
+    "device-days": { type: "string" },
     "env-dialect": { type: "string" },
     "env-file": { type: "string" },
     exec: { type: "boolean" },
@@ -171,6 +214,7 @@ async function requestCreate(args: readonly string[], runtime: Runtime): Promise
   if (values.spec === undefined) throw new UsageError("--spec is required.");
   const spec = parseFormSpec(readSpecFile(runtime.cwd, values.spec));
   const ttl = parseTtl(values.ttl);
+  const deviceDays = parseDeviceDays(values["device-days"]);
   const exec = values.exec === true;
   if (exec === (values["env-file"] !== undefined)) throw new UsageError("Pass exactly one of --env-file or --exec.");
   if (exec !== (command !== null && command.length > 0)) throw new UsageError("--exec needs a command after --, and only --exec takes one.");
@@ -186,28 +230,28 @@ async function requestCreate(args: readonly string[], runtime: Runtime): Promise
   } else {
     sink = { argv: command ?? [], kind: "exec" };
   }
-  const store = openStore(stateDirectory(runtime.environment));
-  const pairing = await startPairing(runtime.clientFor(origin));
+  const context = flowContext(runtime, openStore(stateDirectory(runtime.environment)), origin, DEFAULT_TIMEOUT_SECONDS);
   const record: RequestRecord = {
     createdAt: nowSeconds(runtime),
     cwd: runtime.cwd,
+    deviceDays,
     fields: spec.fields,
     handle: newHandle(),
     kind: "request",
     origin,
-    phase: { name: "pairing", pairing },
+    phase: await nextAuthorization(context, { deviceDays, origin }),
     projectRoot: root,
     sink,
     title: spec.title,
     ttl,
     version: RECORD_VERSION
   };
-  writeRecord(store, record);
-  return pairingOutcome(record, pairing, 3);
+  return begin(context, record);
 }
 
 async function sendCreate(args: readonly string[], runtime: Runtime): Promise<Outcome> {
   const values = parseOptions(args, {
+    "device-days": { type: "string" },
     "env-dialect": { type: "string" },
     "from-env-file": { type: "string" },
     "handoff-file": { type: "string" },
@@ -229,6 +273,7 @@ async function sendCreate(args: readonly string[], runtime: Runtime): Promise<Ou
   }
   const ttl = parseTtl(values.ttl);
   const maxRetrievals = parseIntegerOption(values["max-retrievals"], 1, 1, 10, "--max-retrievals must be 1 through 10.");
+  const deviceDays = parseDeviceDays(values["device-days"]);
   const root = projectRoot(runtime.cwd);
   const sourcePath = projectPath(root, runtime.cwd, values["from-env-file"]);
   const handoffPath = projectPath(root, runtime.cwd, values["handoff-file"]);
@@ -237,24 +282,23 @@ async function sendCreate(args: readonly string[], runtime: Runtime): Promise<Ou
   if (content === null) throw new CliError("source_invalid");
   readDotenvKeys(content, dialect, keys);
   checkProjectPath(root, handoffPath, { existence: "absent", output: true });
-  const store = openStore(stateDirectory(runtime.environment));
-  const pairing = await startPairing(runtime.clientFor(origin));
+  const context = flowContext(runtime, openStore(stateDirectory(runtime.environment)), origin, DEFAULT_TIMEOUT_SECONDS);
   const record: SendRecord = {
     createdAt: nowSeconds(runtime),
     cwd: runtime.cwd,
+    deviceDays,
     handle: newHandle(),
     handoffPath,
     kind: "send",
     maxRetrievals,
     origin,
-    phase: { name: "pairing", pairing },
+    phase: await nextAuthorization(context, { deviceDays, origin }),
     projectRoot: root,
     source: { dialect, keys, path: sourcePath },
     ttl,
     version: RECORD_VERSION
   };
-  writeRecord(store, record);
-  return pairingOutcome(record, pairing, 3);
+  return begin(context, record);
 }
 
 function withOperationLock<T>(store: string, handle: string, action: () => Promise<T>): Promise<T> {
@@ -265,18 +309,11 @@ function withOperationLock<T>(store: string, handle: string, action: () => Promi
 async function wait(args: readonly string[], runtime: Runtime): Promise<Outcome> {
   const { handle, rest } = positional(args);
   const values = parseOptions(rest, { timeout: { type: "string" } });
-  const timeout = parseIntegerOption(values.timeout, 90, 1, 3600, "--timeout must be 1 through 3600 seconds.");
+  const timeout = parseIntegerOption(values.timeout, DEFAULT_TIMEOUT_SECONDS, 1, 3600, "--timeout must be 1 through 3600 seconds.");
   const store = openStore(stateDirectory(runtime.environment));
   return withOperationLock(store, handle, async () => {
     const record = readRecord(store, handle);
-    const context: FlowContext = {
-      client: runtime.clientFor(record.origin),
-      deadline: runtime.now() + timeout * 1_000,
-      now: runtime.now,
-      sleep: runtime.sleep,
-      stderr: runtime.stderr,
-      store
-    };
+    const context = flowContext(runtime, store, record.origin, timeout);
     return record.kind === "request" ? advanceRequest(context, record) : advanceSend(context, record);
   });
 }
@@ -331,6 +368,54 @@ async function discard(args: readonly string[], runtime: Runtime): Promise<Outco
   });
 }
 
+/** Reports the grant without the device token, locator, or management link. */
+async function deviceStatus(args: readonly string[], runtime: Runtime): Promise<Outcome> {
+  const values = parseOptions(args, { origin: { type: "string" } });
+  const origin = parseOrigin(values.origin ?? runtime.environment["KRYPTEX_ORIGIN"]);
+  const file = readDeviceFile(openStore(stateDirectory(runtime.environment)), origin);
+  const none: Outcome = { exitCode: 0, output: { device: { state: "none" }, origin } };
+  if (file.state === "invalid") return { exitCode: 0, output: { device: { state: "invalid" }, origin } };
+  if (file.state === "absent" || nowSeconds(runtime) >= file.grant.deviceExpiresAt) return none;
+  let status: Awaited<ReturnType<NativeClient["deviceStatus"]>>;
+  try {
+    status = await runtime.clientFor(origin).deviceStatus({ deviceLocator: file.grant.deviceLocator, deviceToken: file.grant.deviceToken });
+  } catch (error) {
+    // The service deletes an expired grant; nothing is left to report.
+    if (error instanceof ApiFailure && error.code === "unavailable" && !error.ambiguous) return none;
+    throw transientError(error);
+  }
+  const device = { expiresAt: status.expiresAt, hourlyMints: status.hourlyMints, quotaRemaining: status.quotaRemaining, state: status.state };
+  return { exitCode: 0, output: { device, origin } };
+}
+
+/** Revokes the grant with the device token, then deletes the device file; a failed revoke keeps the file unless forced. */
+async function deviceForget(args: readonly string[], runtime: Runtime): Promise<Outcome> {
+  const values = parseOptions(args, { force: { type: "boolean" }, origin: { type: "string" } });
+  const origin = parseOrigin(values.origin ?? runtime.environment["KRYPTEX_ORIGIN"]);
+  const force = values.force === true;
+  const store = openStore(stateDirectory(runtime.environment));
+  const release = acquireDeviceLock(store, origin);
+  try {
+    const file = readDeviceFile(store, origin);
+    if (file.state === "absent") return { exitCode: 0, output: { forgotten: false, origin, revoked: false } };
+    if (file.state === "invalid" && !force) throw new CliError("state_invalid");
+    let revoked = false;
+    if (file.state === "present") {
+      try {
+        await runtime.clientFor(origin).revokeDevice({ deviceLocator: file.grant.deviceLocator, deviceToken: file.grant.deviceToken });
+        revoked = true;
+      } catch (error) {
+        const gone = error instanceof ApiFailure && error.code === "unavailable" && !error.ambiguous;
+        if (!gone && !force) throw transientError(error);
+      }
+    }
+    deleteDeviceFile(store, origin);
+    return { exitCode: 0, output: { forgotten: true, origin, revoked } };
+  } finally {
+    release();
+  }
+}
+
 async function dispatch(argv: readonly string[], runtime: Runtime): Promise<CommandResult> {
   const [command, subcommand, ...rest] = argv;
   if (command === "request" && subcommand === "create") return requestCreate(rest, runtime);
@@ -339,6 +424,8 @@ async function dispatch(argv: readonly string[], runtime: Runtime): Promise<Comm
   if (command === "wait") return wait(args, runtime);
   if (command === "list") return list(args, runtime);
   if (command === "discard") return discard(args, runtime);
+  if (command === "device" && subcommand === "status") return deviceStatus(rest, runtime);
+  if (command === "device" && subcommand === "forget") return deviceForget(rest, runtime);
   if (command === "skill" && args.length === 0) return { exitCode: 0, text: AGENT_INSTRUCTIONS };
   throw new UsageError(USAGE);
 }

@@ -14,13 +14,14 @@ import {
 import { readDotenvKeys } from "./dotenv.js";
 import { CliError, type ErrorCode } from "./errors.js";
 import {
+  authorize,
   boundedSleep,
   DeadlineReached,
   errorOutcome,
+  MAX_REJECTED_PERMITS,
+  nextAuthorization,
   pairingOutcome,
-  pollPairing,
   save,
-  startPairing,
   stillWaitingOutcome,
   transientError,
   type FlowContext,
@@ -36,12 +37,6 @@ function withPhase(record: SendRecord, phase: SendPhase): SendRecord {
 function failed(context: FlowContext, record: SendRecord, error: ErrorCode): Outcome {
   save(context, withPhase(record, { error, name: "failed" }));
   return errorOutcome(record.handle, error);
-}
-
-async function restartPairing(context: FlowContext, record: SendRecord): Promise<Outcome> {
-  const pairing = await startPairing(context.client);
-  const next = save(context, withPhase(record, { name: "pairing", pairing }));
-  return pairingOutcome(next, pairing, 3);
 }
 
 async function manageToken(send: Pick<CreatedSend, "manageSeed">): Promise<string> {
@@ -166,14 +161,23 @@ function createdOutcome(record: SendRecord, url: string, serverExpiresAt: number
 /** Advances a send until a person must act, it finishes, or the deadline passes. See "Send lifecycle" in docs/spec/cli-v1.md. */
 export async function advanceSend(context: FlowContext, initial: SendRecord): Promise<Outcome> {
   let record = initial;
+  let rejectedPermits = 0;
+  /** After a rejected permit: mints again with the device grant, or reports a fresh device pairing. */
+  const permitRejected = async (): Promise<Outcome | null> => {
+    rejectedPermits += 1;
+    if (rejectedPermits > MAX_REJECTED_PERMITS) throw new CliError("network");
+    record = save(context, withPhase(record, await nextAuthorization(context, record)));
+    return record.phase.name === "pairing" ? pairingOutcome(record, record.phase.pairing, 3) : null;
+  };
   for (;;) {
     const phase = record.phase;
     switch (phase.name) {
-      case "pairing": {
-        const polled = await pollPairing(context, phase.pairing);
-        if (polled.kind === "expired") return restartPairing(context, record);
-        if (polled.kind === "pending") return pairingOutcome(record, phase.pairing, 4);
-        record = save(context, withPhase(record, { attempt: null, name: "creating", permit: polled.permit }));
+      case "pairing":
+      case "minting": {
+        const current = record;
+        const authorized = await authorize(context, current, (next) => withPhase(current, next));
+        if (authorized.kind === "outcome") return authorized.outcome;
+        record = save(context, withPhase(record, { attempt: null, name: "creating", permit: authorized.permit }));
         break;
       }
       case "creating": {
@@ -195,8 +199,10 @@ export async function advanceSend(context: FlowContext, initial: SendRecord): Pr
         try {
           serverTime = (await context.client.permitStatus(phase.permit)).serverTime;
         } catch (error) {
-          if (error instanceof ApiFailure && error.code === "creation_permit_required") return restartPairing(context, record);
-          throw transientError(error);
+          if (!(error instanceof ApiFailure && error.code === "creation_permit_required")) throw transientError(error);
+          const outcome = await permitRejected();
+          if (outcome !== null) return outcome;
+          break;
         }
         const built = await buildAttempt(record, serverTime);
         const attempt = built.attempt;
@@ -216,7 +222,11 @@ export async function advanceSend(context: FlowContext, initial: SendRecord): Pr
           record = save(context, withPhase(record, { name: "handoff", send: createdFromAttempt(attempt, created.serverExpiresAt) }));
         } catch (error) {
           if (error instanceof ApiFailure && error.ambiguous) break;
-          if (error instanceof ApiFailure && error.code === "creation_permit_required") return restartPairing(context, record);
+          if (error instanceof ApiFailure && error.code === "creation_permit_required") {
+            const outcome = await permitRejected();
+            if (outcome !== null) return outcome;
+            break;
+          }
           const transient = transientError(error);
           if (transient.code === "unavailable") return failed(context, record, "unavailable");
           save(context, withPhase(record, { attempt: null, name: "creating", permit: phase.permit }));
