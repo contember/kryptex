@@ -4,7 +4,7 @@ Status: draft specification for the first CLI release.
 
 The CLI lets an AI coding agent obtain secrets from a person, or send secrets to a person, through a deployed Kryptex service without the secret values entering the agent's context. The agent runs shell commands. Anything a command prints becomes part of the agent's transcript, which may reach the model provider and its logs.
 
-The CLI is a native Kryptex client. It uses protocol version 1 unchanged: the same key schedules, bundles, envelopes, payloads, and test vectors as the web client. It talks to the service through the native-client mode of the HTTP API and obtains creation permits through browser pairing; both are defined in the [HTTP API](api-v1.md).
+The CLI is a native Kryptex client. It uses protocol version 1 unchanged: the same key schedules, bundles, envelopes, payloads, and test vectors as the web client. It talks to the service through the native-client mode of the HTTP API and obtains creation permits through a device grant, created once per machine and origin by a device pairing in the browser; both are defined in the [HTTP API](api-v1.md).
 
 ## Security boundary
 
@@ -20,7 +20,7 @@ What the agent does see, by design:
 
 - A **write link** (`/r#…`). It lets its holder read the form and submit the one winning answer, but not read any answer. A party holding the transcript can submit unwanted data first. The CLI's request protection is link-only, as in the web default, because a second key would travel through the same transcript. A successful pickup does not authenticate the writer.
 - A **recipient link** (`/s#…`) for a send. Sends always use the generated second key, and the second key is written only to a hand-off file for the person. The transcript alone cannot open the secret.
-- A **pairing link and code**. They let their holder approve this one pairing, which grants a single creation permit to this CLI and nothing else.
+- A **pairing link and code**. They let their holder approve this one pairing, which grants this CLI either a single creation permit or a device grant, and nothing else. A holder who approves first also receives the grant's management link; `kryptex device forget` revokes such a grant.
 
 ## Installation and service origin
 
@@ -33,11 +33,11 @@ All commands except `skill` print exactly one JSON object followed by a newline 
 ### `kryptex request create`
 
 ```text
-kryptex request create --origin <url> --spec <form.json> [--ttl <seconds>]
+kryptex request create --origin <url> --spec <form.json> [--ttl <seconds>] [--device-days <1|7|30|90>]
   (--env-file <path> --env-dialect <expand|literal> | --exec -- <command> [args…])
 ```
 
-Validates the form and the output target, writes the operation state, starts browser pairing, and returns immediately with the pairing action. It never blocks on a person.
+Validates the form and the output target and writes the operation state. With a valid device grant for the origin, it mints a permit, creates the request, and returns the write-link action. Without one, it starts a device pairing and returns immediately with the pairing action. It never blocks on a person.
 
 The form spec is a JSON file:
 
@@ -54,18 +54,18 @@ The form spec is a JSON file:
 
 Additional keys are rejected. The CLI generates protocol field IDs `field001`, `field002`, … in spec order and stores the ID-to-target mapping locally; target names never become protocol IDs.
 
-`--ttl` is one of the protocol TTL values and defaults to `604800`.
+`--ttl` is one of the protocol TTL values and defaults to `604800`. `--device-days` is the longest device grant a pairing started by this operation may ask for and defaults to `30`; the person may choose a shorter one, or a single permit.
 
 ### `kryptex send create`
 
 ```text
 kryptex send create --origin <url> --from-env-file <path> --env-dialect <expand|literal> --key <NAME> [--key <NAME> …]
-  --handoff-file <path> [--ttl <seconds>] [--max-retrievals <1-10>]
+  --handoff-file <path> [--ttl <seconds>] [--max-retrievals <1-10>] [--device-days <1|7|30|90>]
 ```
 
 Reads each named key from the source dotenv file and builds one send-fields payload with `label` equal to the key name and `type` equal to `secret`. A key matches `[A-Za-z_][A-Za-z0-9_]*` and is at most 120 bytes, the protocol label limit. A missing key, a duplicate `--key`, or an empty value fails before any network call. In the `expand` dialect, variables resolve only from the same file, never from the process environment. The values are encrypted under a fresh second key. `--ttl` defaults to `604800` and `--max-retrievals` to `1`.
 
-The command writes the operation state, starts browser pairing, and returns immediately with the pairing action. The values are read and encrypted when the operation creates the send, not at this point, so the source file must still hold them then.
+The command writes the operation state and then proceeds as `request create` does: with a device grant it creates the send, otherwise it returns the pairing action. The values are read and encrypted when the operation creates the send, not at this point, so the source file must still hold them then.
 
 ### `kryptex wait <handle> [--timeout <seconds>]`
 
@@ -78,6 +78,14 @@ Prints metadata for every recorded operation: handle, kind, state, origin, expir
 ### `kryptex discard <handle>`
 
 Revokes the server resource when the operation still holds a management or owner capability and the resource is not terminal, then deletes the local state. A failed revoke is reported, and the local state is kept unless `--force` is given. `--force` also removes a record that fails strict parsing. A send gives up its management capability when it reaches `created`; from then on only the person holding the hand-off file can revoke it.
+
+### `kryptex device status [--origin <url>]`
+
+Reports the device grant for the origin: `active`, `revoked`, or `none`, with its expiry, remaining quota, and hourly mint counts from the service. It never prints the device token or the management link. A device file that fails strict parsing reports `invalid`.
+
+### `kryptex device forget [--origin <url>] [--force]`
+
+Revokes the device grant with the device token, then deletes the device file. A failed revoke is reported, and the file is kept unless `--force` is given. `--force` also removes a device file that fails strict parsing. The next operation for that origin pairs again.
 
 ### `kryptex skill`
 
@@ -96,7 +104,7 @@ Prints the agent instructions in [CLI agent instructions](#agent-instructions).
 Output shapes:
 
 ```json
-{"action":"pair","handle":"k7f3q2m9xd","kind":"request","pairingExpiresAt":1787227800,"pairUrl":"https://host/pair#ABCD-EFGH","state":"pairing","userCode":"ABCD-EFGH"}
+{"action":"pair","handle":"k7f3q2m9xd","kind":"request","pairingExpiresAt":1787227800,"pairUrl":"https://host/pair/device","state":"pairing","userCode":"ABCD-EFGH"}
 {"action":"hand_over_write_link","expiresAt":1787832000,"handle":"k7f3q2m9xd","kind":"request","state":"waiting","writeUrl":"https://host/r#…"}
 {"expiresAt":1787832000,"handle":"k7f3q2m9xd","kind":"request","state":"waiting","writeUrl":"https://host/r#…"}
 {"handle":"k7f3q2m9xd","kind":"request","state":"creating"}
@@ -106,10 +114,13 @@ Output shapes:
 {"error":"pickup_lost","handle":"k7f3q2m9xd","message":"The answer was released by the service but not received. It cannot be recovered.","retryable":false}
 {"operations":[{"expiresAt":1787832000,"handle":"k7f3q2m9xd","kind":"request","origin":"https://host","state":"waiting","target":".env"}]}
 {"discarded":true,"handle":"k7f3q2m9xd","revoked":true}
+{"device":{"expiresAt":1789819200,"hourlyMints":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,3],"quotaRemaining":46,"state":"active"},"origin":"https://host"}
+{"device":{"state":"none"},"origin":"https://host"}
+{"forgotten":true,"origin":"https://host","revoked":true}
 {"error":"usage","message":"--spec is required."}
 ```
 
-A pending pairing reports the same `pair` output with exit 4. A waiting request repeats `writeUrl` with exit 4, so an agent that lost the first output can still hand the link over. `expiresAt` in `list` is `null` until the resource exists.
+A pending pairing reports the same `pair` output with exit 4. The pairing link carries no code: the person types `userCode` on the page. A waiting request repeats `writeUrl` with exit 4, so an agent that lost the first output can still hand the link over. `expiresAt` in `list` is `null` until the resource exists.
 
 `receipt` is the 64-digit display form of the `KXR1` receipt digest. Error codes are listed in [Errors](#errors).
 
@@ -119,20 +130,31 @@ A pending pairing reports the same `pair` output with exit 4. A waiting request 
 
 The state directory is `$KRYPTEX_STATE_DIR`, else `$XDG_STATE_HOME/kryptex`, else `~/.local/state/kryptex`. The CLI creates it with mode `0700` and refuses to use it unless it is a directory owned by the current user with no group or other permission bits. Each operation is one file `<handle>.json` with mode `0600`, replaced atomically through an exclusive temporary file, `fsync`, and `rename`. A handle is 10 random lowercase Crockford Base32 characters and must match `[0-9a-hjkmnp-tv-z]{10}` before it is used in a path. A record that fails strict parsing is never acted on.
 
+### Device file
+
+The device grant for an origin is `devices/<hex SHA-256 of the canonical origin>.json` in the state directory. The `devices` directory has mode `0700` and the file mode `0600`, under the same ownership checks, atomic replacement, and strict parsing as operation records:
+
+```json
+{"deviceExpiresAt":1789819200,"deviceLocator":"<base64url-16>","deviceToken":"<base64url-32>","origin":"https://host","version":1}
+```
+
+`origin` must equal the origin the file name was derived from. A file past `deviceExpiresAt` by the local clock is treated as absent. A file that fails strict parsing is never used: operations for that origin fail with `state_invalid` until `kryptex device forget --force` removes it. The device token is the only long-lived credential the CLI stores. It authorizes minting permits, never reading a transfer.
+
 ### Locks
 
-Every command that changes an operation holds an exclusive lock on that handle for its whole run. Every write to an output file additionally holds a lock keyed by the SHA-256 of the canonical destination path. Locks are files created with `O_EXCL` that contain the holder's process ID; a lock whose process no longer exists is stale and may be taken over. A command that cannot take a lock fails with `busy` and changes nothing.
+Every command that changes an operation holds an exclusive lock on that handle for its whole run. Every write to an output file additionally holds a lock keyed by the SHA-256 of the canonical destination path. Writing or deleting a device file holds a lock keyed by its name. Locks are files created with `O_EXCL` that contain the holder's process ID; a lock whose process no longer exists is stale and may be taken over. A command that cannot take a lock fails with `busy` and changes nothing.
 
 ### Request lifecycle
 
 ```text
-pairing → creating → waiting → picking → received → delivered
+pairing → minting → creating → waiting → picking → received → delivered
 ```
 
 | State | Stored sensitive material | `wait` behaviour |
 | --- | --- | --- |
-| `pairing` | Poll token, user code. | Polls pairing redeem. On approval, stores the permit and moves to `creating`. An expired pairing starts a fresh one and returns the new pairing action. |
-| `creating` | Permit, `R`, `W`, `O`, schema bytes, envelope, attempt ID, `settleNotAfter`, `clientNotAfter`. | Written before the create POST. On success, moves to `waiting`. After an ambiguous or interrupted create, reconciles through owner status exactly as product flows require; definitive absence discards the seeds and creates again with the same permit. A timeout during reconciliation keeps the attempt and exits 4 with state `creating`. A `creation_permit_required` response, from permit status or creation, starts a fresh pairing. |
+| `pairing` | Device pairing: device locator, device token, user code, requested lifetime. Legacy one-permit pairing: poll token, user code. | Polls redeem. A single-permit approval stores the permit and moves to `creating`. A device approval writes the device file and moves to `minting`. An expired pairing starts a fresh device pairing and returns the new pairing action. Records written by an earlier CLI finish through the legacy pairing. |
+| `minting` | Request ID. | Written before the mint POST. A permit moves to `creating`. A lost response retries with the same request ID. `creation_permit_required` mints again with a fresh request ID. `quota_exhausted` keeps the state. The generic unavailable response deletes the device file and starts a device pairing. |
+| `creating` | Permit, `R`, `W`, `O`, schema bytes, envelope, attempt ID, `settleNotAfter`, `clientNotAfter`. | Written before the create POST. On success, moves to `waiting`. After an ambiguous or interrupted create, reconciles through owner status exactly as product flows require; definitive absence discards the seeds and creates again with the same permit. A timeout during reconciliation keeps the attempt and exits 4 with state `creating`. A `creation_permit_required` response, from permit status or creation, moves to `minting` with a fresh request ID when a device file exists, and otherwise starts a device pairing. |
 | `waiting` | `R`, `W`, `O`, schema digest, `clientNotAfter`, `serverExpiresAt`, field mapping. | The first transition into `waiting` returns `hand_over_write_link` with exit 3. Later calls poll owner status with backoff from 2 to 15 seconds. `submitted` moves to `picking`. Terminal states end the operation. |
 | `picking` | As `waiting`. | Written before the pickup POST. First preflights the output target. A lost pickup response queries owner status: `submitted` permits one more pickup, `picked_up` ends with `pickup_lost`. |
 | `received` | `O`, `R`, exact `KXR1` bytes, schema digest, `clientNotAfter`, mapping. | Written after the full response is received and before decryption. Decrypts, verifies, and writes the output. An output failure keeps this state so that `wait` can retry after the cause is fixed. |
@@ -145,12 +167,13 @@ The CLI verifies a received answer against the locally stored request, not only 
 ### Send lifecycle
 
 ```text
-pairing → creating → handoff → created
+pairing → minting → creating → handoff → created
 ```
 
 | State | Stored sensitive material | `wait` behaviour |
 | --- | --- | --- |
-| `pairing` | Poll token, user code. | As for requests. |
+| `pairing` | As for requests. | As for requests. |
+| `minting` | Request ID. | As for requests. |
 | `creating` | Permit, `S`, `M`, second key, envelope, attempt ID, `settleNotAfter`, `clientNotAfter`. | Written before the create POST. The source values are read and encrypted when entering this state and then exist only inside the envelope. Reconciliation uses send status with the management capability, as for requests. |
 | `handoff` | `S`, `M`, second key, `serverExpiresAt`. | Writes the hand-off file, then moves to `created`. A write failure keeps this state for a retry. |
 | `created` | Recipient link only. | Returns `hand_over_recipient_link` with exit 3 the first time and exit 0 after that. |
@@ -212,6 +235,7 @@ A zero exit code completes the operation. A non-zero exit code or a failure to s
 - Redirects are rejected. TLS certificate verification is never disabled.
 - Requests carry no `Origin`, no `Cookie`, and no Fetch Metadata headers. A creation permit is presented only in the `Kryptex-Create-Permit` header, and only on permit status and resource creation.
 - Each request has a 30-second timeout. Response bodies are bounded: 64 KiB for JSON and the maximum envelope length plus 1 KiB for binary responses.
+- The device token is sent only to the device pairing redeem, permit, status, and revoke routes of the recorded origin.
 - The CLI never sends the owner seed, HPKE private key, second key, plaintext, field targets, or local paths.
 
 ## Errors
@@ -221,6 +245,7 @@ A zero exit code completes the operation. A non-zero exit code or a failure to s
 | `busy` | yes | Another command holds the operation or destination lock. |
 | `network` | yes | The service could not be reached, or the outcome of a non-consuming call is unknown. |
 | `rate_limited` | yes | The service asked the client to slow down. |
+| `quota_exhausted` | yes | The device grant reached its 50 permits in the last 24 hours. A later `wait` mints again. |
 | `unavailable` | no | The resource is missing, expired, revoked, or no longer accepts the operation. |
 | `expired` | no | The resource reached its expiry before the operation finished. |
 | `revoked` | no | The resource was revoked. |
@@ -256,7 +281,7 @@ Ask a person for secrets:
    - A command: `--exec -- <command> …`. The values arrive as environment variables named by `target`, standard input is closed, and output is redacted. For example `--exec -- sh -c 'printf %s "$API_KEY" | wrangler secret put API_KEY'`. A failed command runs again on the next `wait`, so make it idempotent.
 2. Write a form spec with one field per secret, for example `{"title":"Deploy credentials","fields":[{"target":"API_KEY","label":"API key","help":"From the provider dashboard","type":"secret","required":true}]}`. `type` is `secret`, `text`, `long-secret`, `long-text`, or `instruction`; an instruction has no `target` and is not required. Every listed key is required and no other key is allowed.
 3. `kryptex request create --spec form.json` plus the target options from step 1.
-4. Exit 3 with `action: pair`: ask the person to open `pairUrl` and approve `userCode`. Then run `kryptex wait <handle>`.
+4. Exit 3 with `action: pair`: ask the person to open `pairUrl`, type `userCode`, and choose "This machine" if you should create transfers without asking again. This happens once per machine until the permission expires. Then run `kryptex wait <handle>`.
 5. Exit 3 with `action: hand_over_write_link`: give `writeUrl` to the person who should fill in the form. Anyone holding the link can submit the one accepted answer before `expiresAt`, so it must reach only that person.
 6. Run `kryptex wait <handle>` until exit 0. If the form will be filled later, tell the person and stop; keep the handle, or find it again with `kryptex list`.
 7. Exit 0: the values are in the target. Tell the person which keys arrived. Do not read them.
@@ -266,5 +291,5 @@ Send secrets to a person:
 2. Handle pairing as above.
 3. Exit 3 with `action: hand_over_recipient_link`: give `recipientUrl` to the recipient. Tell the person that the second key and the management link are in `handoffFile` and that the second key must reach the recipient through a different channel. Do not read the file.
 
-On exit 1, report the error code and message; `retryable: true` means fix the cause and run `wait` again. Exit 2 means the command line was invalid and nothing was recorded. `kryptex list` shows operations; `kryptex discard <handle>` revokes and removes one.
+On exit 1, report the error code and message; `retryable: true` means fix the cause and run `wait` again. `quota_exhausted` means this machine started 50 transfers in 24 hours; run `wait` later. Exit 2 means the command line was invalid and nothing was recorded. `kryptex list` shows operations; `kryptex discard <handle>` revokes and removes one. `kryptex device status` shows this machine's permission; `kryptex device forget` revokes it.
 ```

@@ -1,6 +1,8 @@
 # ADR 0002: Long-lived authorization for native clients
 
-Status: proposed. The owner chooses an option before any spec, protocol, or server change.
+Status: accepted.
+
+Decision: option A. Grant lifetimes 1, 7, 30, or 90 days; the CLI asks for 30 by default. Quota 50 creations per rolling 24 hours per grant. The confirmation page keeps **this transfer only**. Device grants are a new version of creation authorization: routes under `/api/v3/devices`, and device-minted permits presented as `v3.<P>`, so no existing `v2.` value changes meaning. The [HTTP API](../spec/api-v1.md#device-grants-creation-authorization-version-3) holds the specification.
 
 ## Context
 
@@ -50,7 +52,7 @@ The person pairs once per machine and service origin. Approval creates a revocab
 Device pairing uses new routes and new pages. The existing pairing routes, the `/pair` page, and their stored records stay byte-identical, and an old CLI keeps using them.
 
 1. `kryptex` generates a random 16-byte device locator and a 32-byte device token, and calls `POST /api/v2/devices/pairings` with them and the requested maximum duration. The service returns a user code, as today.
-2. The person opens `/pair/device`. The code is not prefilled: the person types the code their terminal shows. Turnstile runs in this document. The approve route verifies Turnstile, records the approval in the device-pairing object, and sets a claim cookie. It mints nothing.
+2. The person opens `/pair/device`. The code is not prefilled: the person types the code their terminal shows. Turnstile runs in this document. The approve route verifies Turnstile, records the approval and a Turnstile-backed permit in the device-pairing object exactly as pairing does, and sets a claim cookie. It hands nothing out until the claim.
 3. A full-page navigation opens a Turnstile-free confirmation page. This repeats the `/gate` to `/send` pattern: the device management capability is a protected asset, and Turnstile must not run in a document that holds one.
 4. The confirmation page shows the duration the terminal asked for and offers **this transfer only** or **this machine until \<date\>**, with no preselection. It can shorten the duration but never extend it. For a device grant, the page generates a random 32-byte management token, sends it with the claim, and shows a **device management link** `/d#…` once, with the same copy and saved confirmation as other links. **This transfer only** mints one permit, as today's pairing does.
 5. The CLI redeems with its device token and reports the grant's scope and expiry to the agent.
