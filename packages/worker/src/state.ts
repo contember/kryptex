@@ -1,4 +1,4 @@
-import type { FactorMode } from "@kryptex/contracts/protocol";
+import type { CapabilityKind, DeviceGrantDays, FactorMode } from "@kryptex/contracts/protocol";
 
 export interface ObjectMetadata {
   readonly digest: string;
@@ -82,6 +82,60 @@ export interface PairingRecord {
   readonly tag: string;
 }
 
+export interface DevicePairingApproval extends PairingApproval {
+  readonly claimTag: string;
+}
+
+export type DevicePairingClaim =
+  | { readonly claimedAt: number; readonly scope: "transfer" }
+  | {
+      readonly claimedAt: number;
+      readonly days: DeviceGrantDays;
+      readonly deviceExpiresAt: number;
+      readonly manageTag: string;
+      readonly scope: "device";
+      readonly state: "claiming" | "claimed";
+    };
+
+export interface DevicePairingRecord {
+  readonly approval: DevicePairingApproval | null;
+  readonly authKeyId: string;
+  readonly claim: DevicePairingClaim | null;
+  readonly deviceLocator: string;
+  readonly generation: number;
+  /** The device-token tag for the future grant, computed while the device token is at hand. */
+  readonly grantTag: string;
+  readonly kind: "device_pairing";
+  readonly maxDays: DeviceGrantDays;
+  readonly pairingExpiresAt: number;
+  readonly pollTag: string;
+}
+
+export interface DeviceMint {
+  readonly keyId: string;
+  readonly mintedAt: number;
+  readonly requestId: string;
+}
+
+export interface HourlyMintCount {
+  readonly count: number;
+  /** Whole UTC hours since the Unix epoch. */
+  readonly hour: number;
+}
+
+export interface DeviceRecord {
+  readonly authKeyId: string;
+  readonly deviceTag: string;
+  readonly expiresAt: number;
+  readonly generation: number;
+  readonly hourlyMints: readonly HourlyMintCount[];
+  readonly kind: "device";
+  readonly manageTag: string;
+  /** Only mints still inside the device-permit lifetime keep their time; older IDs live on as spent keys. */
+  readonly recentMints: readonly DeviceMint[];
+  readonly revoked: boolean;
+}
+
 export interface CapabilitySnapshot {
   readonly generation: number;
   readonly keyId: string;
@@ -94,8 +148,12 @@ export type AuthResult =
   | { readonly kind: "unavailable"; readonly stateCheckedAt: number };
 
 export const RECORD_KEY = "record";
-export function authKey(capabilityKind: 1 | 2 | 3 | 4): string {
+export function authKey(capabilityKind: CapabilityKind): string {
   return `auth:${capabilityKind}`;
+}
+
+export function spentRequestKey(requestId: string): string {
+  return `spent:${requestId}`;
 }
 
 export function cleanupDelayMs(failureCount: number): number {

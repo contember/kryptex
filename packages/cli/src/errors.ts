@@ -2,6 +2,7 @@ export type ErrorCode =
   | "busy"
   | "network"
   | "rate_limited"
+  | "quota_exhausted"
   | "unavailable"
   | "expired"
   | "revoked"
@@ -27,6 +28,7 @@ const DETAILS: Readonly<Record<ErrorCode, { readonly message: string; readonly r
   internal: { message: "An unexpected failure occurred.", retryable: false },
   network: { message: "The service could not be reached. Run wait again.", retryable: true },
   pickup_lost: { message: "The answer was released by the service but not received. It cannot be recovered.", retryable: false },
+  quota_exhausted: { message: "This machine's device grant reached its 50 permits in the last 24 hours. Run wait again later.", retryable: true },
   rate_limited: { message: "The service asked the client to slow down. Run wait again later.", retryable: true },
   revoked: { message: "The resource was revoked.", retryable: false },
   source_invalid: { message: "A source key is missing or empty, or the source file cannot be read.", retryable: true },

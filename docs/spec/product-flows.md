@@ -15,9 +15,9 @@ The generated second key is the recommended protection. Its instruction says: **
 
 ## Shared fragment lifecycle
 
-The `/s`, `/m`, `/r`, and `/i` shells all follow one rule. Before parsing or rendering secret-related UI, the shell copies the fragment into memory and synchronously removes it with `history.replaceState`. It never persists the copied bytes.
+The `/s`, `/m`, `/r`, `/i`, and `/d` shells all follow one rule. Before parsing or rendering secret-related UI, the shell copies the fragment into memory and synchronously removes it with `history.replaceState`. It never persists the copied bytes.
 
-After removal, Reload, Back, crash recovery, and a duplicated scrubbed tab cannot reconstruct the capability. The page tells the user to reopen the original link. This applies to recipient, management, writer, and owner pages. No flow stores decrypted values or fragment material in `localStorage`, `sessionStorage`, IndexedDB, Cache Storage, or a service worker.
+After removal, Reload, Back, crash recovery, and a duplicated scrubbed tab cannot reconstruct the capability. The page tells the user to reopen the original link. This applies to recipient, management, writer, owner, and device management pages. No flow stores decrypted values or fragment material in `localStorage`, `sessionStorage`, IndexedDB, Cache Storage, or a service worker.
 
 ## Home
 
@@ -44,6 +44,23 @@ A native client such as the [CLI](cli-v1.md) cannot run Turnstile. It starts a [
 4. Success says: **Approved. Return to your terminal.** A generic unavailable response says that the code is wrong, expired, or already used, and that the terminal can start a new pairing.
 
 The page never receives a permit and never sets a cookie.
+
+## Pairing a native client as a device
+
+A native client that asks for a [device grant](api-v1.md#device-grants-creation-authorization-version-3) shows the link `/pair/device` and, separately, its user code. The link carries no code.
+
+1. The `/pair/device` page has an empty code field. It says: **Type the code that your own terminal shows. Approving can give that terminal standing permission to create transfers.** A fragment, if present, is removed with `history.replaceState` and ignored. The page contains no secret fields.
+2. Turnstile runs in this document. After the check, the page sends the approval. The response sets the HttpOnly claim cookie, and the page performs a full-page navigation to `/pair/device/confirm`, which unloads Turnstile.
+3. The confirmation page loads Turnstile nowhere. It reads the claim status and says how long the terminal asked for. It offers two choices with neither selected: **This transfer only** and **This machine until \<date\>**, with lifetimes of 1, 7, 30, or 90 days up to the requested maximum. The date is shown in full.
+4. **This transfer only** finishes with **Approved for one transfer. Return to your terminal.**
+5. **This machine** generates the management token in this document, sends the claim, and shows the **device management link** once with its own copy action and a **Management link saved or intentionally discarded** confirmation. It says: **Keep this link to see how many transfers this machine started and to revoke its permission.** Then: **Approved. Return to your terminal.**
+6. A generic unavailable response at any step says that the code is wrong, expired, or already used, and that the terminal can start a new pairing.
+
+Reload after the claim cannot show the management link again; the page says so, like every other link page.
+
+## Device management
+
+The `/d` page follows the shared fragment lifecycle. It shows the grant state, its expiry, the remaining quota, and the creations per hour over the last 24 hours, with the statement that the counts describe permits the machine took, not transfers anyone opened. It offers **Revoke this machine's permission**, which needs a confirmation. A revoked grant shows that the machine must pair again. After the grant's expiry the service holds no record, and the page says only that the record is unavailable.
 
 ## Send creation
 

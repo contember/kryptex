@@ -47,6 +47,8 @@ function workerEnvironment(): WorkerEnv {
     CAPABILITY_HMAC_KEYRING: `{"dev-v1":"${key}"}`,
     CIPHERTEXT: env.CIPHERTEXT,
     CREATE_PERMIT_OBJECTS: env.CREATE_PERMIT_OBJECTS,
+    DEVICE_OBJECTS: env.DEVICE_OBJECTS,
+    DEVICE_PAIRING_OBJECTS: env.DEVICE_PAIRING_OBJECTS,
     EDGE_RATE_LIMITER: env.EDGE_RATE_LIMITER,
     EXPECTED_ORIGIN: env.EXPECTED_ORIGIN,
     LOCATOR_RATE_LIMITER: env.LOCATOR_RATE_LIMITER,
@@ -119,7 +121,9 @@ describe("Turnstile Siteverify", () => {
     expect(accepted.headers.get("Set-Cookie")).toContain("kx_create_v2=v2.");
     expect(accepted.headers.get("Set-Cookie")).toContain("Max-Age=1800");
     const acceptedBody = await accepted.json<{ permitExpiresAt: number; serverTime: number }>();
-    expect(acceptedBody.permitExpiresAt - acceptedBody.serverTime).toBe(1800);
+    // The expiry is fixed at verification and serverTime at response creation, so a second boundary may fall between them.
+    expect(acceptedBody.permitExpiresAt - acceptedBody.serverTime).toBeGreaterThanOrEqual(1799);
+    expect(acceptedBody.permitExpiresAt - acceptedBody.serverTime).toBeLessThanOrEqual(1800);
     expect(rejected.status).toBe(403);
     expect(await rejected.json()).toEqual({ error: "gate_failed" });
     expect(fetchCalled).toBe(false);

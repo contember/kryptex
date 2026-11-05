@@ -73,6 +73,19 @@ export function formatExactTime(expiresAt: number): string {
   return new Date(expiresAt * 1_000).toLocaleString();
 }
 
+/** Weekday, day, month, and year spelled out, so a grant end date cannot be misread. */
+export function formatFullDate(seconds: number): string {
+  return new Date(seconds * 1_000).toLocaleString(undefined, { dateStyle: "full", timeStyle: "short" });
+}
+
+export function formatHourStart(seconds: number): string {
+  return new Date(seconds * 1_000).toLocaleString(undefined, { hour: "2-digit", minute: "2-digit", weekday: "short" });
+}
+
+export function formatDays(days: number): string {
+  return plural(days, "day");
+}
+
 export function formatOpens(count: number): string {
   if (count <= 0) return "no opens left";
   if (count === 1) return "1 open left";

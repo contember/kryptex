@@ -45,6 +45,9 @@ describe("fragment lifecycle", () => {
     expect(isSecretRoute("/i")).toBe(true);
     expect(isSecretRoute("/i/")).toBe(true);
     expect(isSecretRoute("/pair")).toBe(true);
+    expect(isSecretRoute("/pair/device")).toBe(true);
+    expect(isSecretRoute("/d")).toBe(true);
+    expect(canonicalSecretRoute("/d/")).toBe("/d");
     expect(canonicalSecretRoute("/s/")).toBe("/s");
   });
 
@@ -53,6 +56,7 @@ describe("fragment lifecycle", () => {
     expect(isSecretRoute("/security")).toBe(false);
     expect(isSecretRoute("/s//")).toBe(false);
     expect(isSecretRoute("/s/nested")).toBe(false);
+    expect(isSecretRoute("/pair/device/confirm")).toBe(false);
   });
 
   it("canonicalizes a trailing slash and drops query and fragment before rendering", () => {

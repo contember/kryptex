@@ -218,6 +218,71 @@ export function PairPage({ capture }: { readonly capture: FragmentCapture }) {
   </div>;
 }
 
+/** A device pairing grants standing permission, so a code arriving in a link is wiped and never offered. */
+function discardFragment(capture: FragmentCapture): string {
+  capture.fragmentBytes?.fill(0);
+  return "";
+}
+
+export function DevicePairPage({ capture }: { readonly capture: FragmentCapture }) {
+  const client = useClient();
+  const container = useRef<HTMLDivElement>(null);
+  const [requestId] = useState(() => crypto.randomUUID().toLowerCase());
+  const [code, setCode] = useState(() => discardFragment(capture));
+  const [token, setToken] = useState<string | null>(null);
+  const siteKey = resolveTurnstileSiteKey(import.meta.env.VITE_TURNSTILE_SITE_KEY, import.meta.env.PROD);
+  const [state, setState] = useState<"ready" | "working" | "retry" | "approved" | "unavailable" | "failed">(siteKey === null ? "failed" : "ready");
+  const userCode = normalizeUserCodeInput(code);
+
+  useTurnstileWidget(container, siteKey, state !== "failed" && state !== "approved", setToken, () => { setState("failed"); });
+
+  function approve(): void {
+    if (userCode === null || token === null) return;
+    setState("working");
+    void client.approveDevicePairing({ requestId, turnstileResponse: token, userCode }).then(() => {
+      setState("approved");
+      // A full-page navigation unloads Turnstile before the page that generates the management token.
+      window.location.assign("/pair/device/confirm");
+    }).catch((error: unknown) => {
+      if (error instanceof ApiFailure && error.ambiguous) setState("retry");
+      else setState(error instanceof ApiFailure && error.code === "unavailable" ? "unavailable" : "failed");
+    });
+  }
+
+  if (state === "approved") {
+    return <div className="task-page task-page--narrow">
+      <PageIntro title="Code approved">
+        <p>Opening the confirmation page…</p>
+      </PageIntro>
+    </div>;
+  }
+
+  return <div className="task-page task-page--narrow">
+    <PageIntro title="Approve a terminal">
+      <p>A command-line client asked for permission to create transfers. Type the code that your own terminal shows. Approving can give that terminal standing permission to create transfers.</p>
+    </PageIntro>
+    <div className="field-block">
+      <label><span>Code shown in your terminal</span><input autoComplete="off" className="mono" onChange={(event) => { setCode(event.currentTarget.value); }} placeholder="XXXX-XXXX" spellCheck={false} type="text" value={code} /></label>
+      {code.length > 0 && userCode === null ? <FieldHint>A code is 8 characters, usually written as two groups of four.</FieldHint> : null}
+    </div>
+    <div ref={container} />
+    {state === "ready" || state === "retry"
+      ? <button className="primary-button full-button" disabled={userCode === null || token === null} onClick={approve} type="button">
+        {state === "retry" ? "Try the same approval again" : "Continue"}
+      </button>
+      : null}
+    {state === "ready" && token === null ? <StatusMessage>Waiting for the check…</StatusMessage> : null}
+    {state === "working" ? <StatusMessage>Approving…</StatusMessage> : null}
+    {state === "retry" ? <StatusMessage tone="warning">The approval could not be confirmed.</StatusMessage> : null}
+    {state === "unavailable"
+      ? <StatusMessage tone="danger">This code is wrong, expired, or already used. Your terminal can start a new pairing.</StatusMessage>
+      : null}
+    {state === "failed"
+      ? <StatusMessage tone="danger">The check is unavailable right now. Nothing was approved.</StatusMessage>
+      : null}
+  </div>;
+}
+
 export function SecurityPage() {
   return <div className="task-page">
     <PageIntro title="What Kryptex protects">

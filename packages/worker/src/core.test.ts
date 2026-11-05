@@ -4,8 +4,11 @@ import {
   blindedLocator,
   capabilityTag,
   decodeUuid,
+  deriveDevicePermitMaterial,
+  derivePermitFromSeed,
   derivePermitMaterial,
   encodeBase64Url,
+  hmacSign,
   verifyCapabilityTag
 } from "./core.js";
 import { decodeCanonicalBase64Url } from "./strict.js";
@@ -80,5 +83,24 @@ describe("server protocol primitives", () => {
     expect(encodeBase64Url(material.permitSeed)).toBe(encodeBase64Url(hexBytes(vector.permitSeedHex)));
     expect(encodeBase64Url(material.locator)).toBe(vector.permitLocatorBase64url);
     expect(encodeBase64Url(material.token)).toBe(vector.permitTokenBase64url);
+  });
+
+  test("derives device permits under their own label and the device locator", async () => {
+    const key = hexBytes(serverVectors.createPermit.issuanceKeyHex);
+    const requestId = decodeUuid("550e8400-e29b-41d4-a716-446655440000");
+    const deviceLocator = new Uint8Array(16).fill(9);
+    const label = new TextEncoder().encode("kryptex/v3/device-permit/issuance");
+    const input = new Uint8Array([...label, 0, ...deviceLocator, ...requestId]);
+
+    const material = await deriveDevicePermitMaterial(key, deviceLocator, requestId);
+    expect(material.permitSeed).toEqual(await hmacSign(key, input));
+    const derived = await derivePermitFromSeed(material.permitSeed);
+    expect(material.locator).toEqual(derived.locator);
+    expect(material.token).toEqual(derived.token);
+
+    const turnstile = await derivePermitMaterial(key, requestId);
+    expect(material.permitSeed).not.toEqual(turnstile.permitSeed);
+    const otherDevice = await deriveDevicePermitMaterial(key, new Uint8Array(16).fill(10), requestId);
+    expect(material.permitSeed).not.toEqual(otherDevice.permitSeed);
   });
 });

@@ -1,5 +1,5 @@
 import type { RequestFieldType } from "@kryptex/contracts/payloads";
-import { isTtlSeconds, type TtlSeconds } from "@kryptex/contracts/protocol";
+import { DEFAULT_DEVICE_GRANT_DAYS, isDeviceGrantDays, isTtlSeconds, type DeviceGrantDays, type TtlSeconds } from "@kryptex/contracts/protocol";
 import type { ErrorCode } from "./errors.js";
 import {
   arrayValue,
@@ -31,11 +31,28 @@ export interface StoredField {
   readonly type: RequestFieldType;
 }
 
-export interface Pairing {
+/** A one-permit pairing, used against a service without device grants and by records of an earlier CLI. */
+export interface LegacyPairing {
   readonly pairingExpiresAt: number;
   readonly pollToken: string;
   readonly userCode: string;
 }
+
+/** The device token doubles as the pairing's poll credential. */
+export interface DevicePairing {
+  readonly deviceLocator: string;
+  readonly deviceToken: string;
+  readonly maxDays: DeviceGrantDays;
+  readonly pairingExpiresAt: number;
+  readonly userCode: string;
+}
+
+export type Pairing = DevicePairing | LegacyPairing;
+
+/** `requestedAt` bounds replays of `requestId` to the device permit lifetime, after which the service no longer repeats the mint. */
+export type AuthorizationPhase =
+  | { readonly name: "pairing"; readonly pairing: Pairing }
+  | { readonly name: "minting"; readonly requestId: string; readonly requestedAt: number };
 
 export interface RequestAttempt {
   readonly attemptId: string;
@@ -62,7 +79,7 @@ export type Delivered =
   | { readonly command: string; readonly exitCode: number; readonly keys: readonly string[]; readonly kind: "exec" };
 
 export type RequestPhase =
-  | { readonly name: "pairing"; readonly pairing: Pairing }
+  | AuthorizationPhase
   | { readonly attempt: RequestAttempt | null; readonly name: "creating"; readonly permit: string }
   | { readonly name: "waiting"; readonly reported: boolean; readonly request: CreatedRequest }
   | { readonly name: "picking"; readonly request: CreatedRequest }
@@ -90,7 +107,7 @@ export interface CreatedSend {
 }
 
 export type SendPhase =
-  | { readonly name: "pairing"; readonly pairing: Pairing }
+  | AuthorizationPhase
   | { readonly attempt: SendAttempt | null; readonly name: "creating"; readonly permit: string }
   | { readonly name: "handoff"; readonly send: CreatedSend }
   | { readonly name: "created"; readonly recipientUrl: string; readonly reported: boolean; readonly serverExpiresAt: number }
@@ -99,6 +116,8 @@ export type SendPhase =
 interface CommonRecord {
   readonly createdAt: number;
   readonly cwd: string;
+  /** The longest device grant a pairing started by this operation asks for. */
+  readonly deviceDays: DeviceGrantDays;
   readonly handle: string;
   readonly origin: string;
   readonly projectRoot: string;
@@ -132,7 +151,7 @@ export interface SendRecord extends CommonRecord {
 export type OperationRecord = RequestRecord | SendRecord;
 
 const ERROR_CODES: readonly ErrorCode[] = [
-  "busy", "network", "rate_limited", "unavailable", "expired", "revoked", "pickup_lost", "answer_invalid", "target_invalid",
+  "busy", "network", "rate_limited", "quota_exhausted", "unavailable", "expired", "revoked", "pickup_lost", "answer_invalid", "target_invalid",
   "env_file_conflict", "env_value_unrepresentable", "source_invalid", "exec_failed", "handoff_failed", "state_invalid", "internal"
 ];
 const FIELD_TYPES: readonly RequestFieldType[] = ["secret", "text", "long-secret", "long-text", "instruction"];
@@ -147,13 +166,42 @@ function stringList(value: unknown, context: string): readonly string[] {
   return arrayValue(value, context).map((entry) => stringValue(entry, context));
 }
 
+const REQUEST_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
+
+function deviceDays(value: unknown, context: string): DeviceGrantDays {
+  const days = integerValue(value, context);
+  if (!isDeviceGrantDays(days)) throw new ShapeError(context);
+  return days;
+}
+
 function parsePairing(value: unknown): Pairing {
+  if (typeof value === "object" && value !== null && "deviceToken" in value) {
+    const object = exactObject(value, ["deviceLocator", "deviceToken", "maxDays", "pairingExpiresAt", "userCode"], "pairing");
+    return {
+      deviceLocator: base64UrlValue(field(object, "deviceLocator"), 16, "pairing.deviceLocator"),
+      deviceToken: base64UrlValue(field(object, "deviceToken"), 32, "pairing.deviceToken"),
+      maxDays: deviceDays(field(object, "maxDays"), "pairing.maxDays"),
+      pairingExpiresAt: integerValue(field(object, "pairingExpiresAt"), "pairing.pairingExpiresAt"),
+      userCode: stringValue(field(object, "userCode"), "pairing.userCode")
+    };
+  }
   const object = exactObject(value, ["pairingExpiresAt", "pollToken", "userCode"], "pairing");
   return {
     pairingExpiresAt: integerValue(field(object, "pairingExpiresAt"), "pairing.pairingExpiresAt"),
     pollToken: base64UrlValue(field(object, "pollToken"), 32, "pairing.pollToken"),
     userCode: stringValue(field(object, "userCode"), "pairing.userCode")
   };
+}
+
+/** Parses the phases every operation kind shares. */
+function parseAuthorizationPhase(value: unknown, name: AuthorizationPhase["name"]): AuthorizationPhase {
+  if (name === "pairing") {
+    return { name, pairing: parsePairing(field(exactObject(value, ["name", "pairing"], "phase"), "pairing")) };
+  }
+  const object = exactObject(value, ["name", "requestId", "requestedAt"], "phase");
+  const requestId = stringValue(field(object, "requestId"), "requestId");
+  if (!REQUEST_ID_PATTERN.test(requestId)) throw new ShapeError("requestId");
+  return { name, requestId, requestedAt: integerValue(field(object, "requestedAt"), "requestedAt") };
 }
 
 function parseRequestAttempt(value: unknown): RequestAttempt {
@@ -204,10 +252,8 @@ function phaseName<const T extends string>(value: unknown, names: readonly T[]):
 }
 
 function parseRequestPhase(value: unknown): RequestPhase {
-  const name = phaseName(value, ["pairing", "creating", "waiting", "picking", "received", "delivered", "failed"]);
-  if (name === "pairing") {
-    return { name, pairing: parsePairing(field(exactObject(value, ["name", "pairing"], "phase"), "pairing")) };
-  }
+  const name = phaseName(value, ["pairing", "minting", "creating", "waiting", "picking", "received", "delivered", "failed"]);
+  if (name === "pairing" || name === "minting") return parseAuthorizationPhase(value, name);
   if (name === "creating") {
     const object = exactObject(value, ["attempt", "name", "permit"], "phase");
     return { attempt: nullable(field(object, "attempt"), parseRequestAttempt), name, permit: stringValue(field(object, "permit"), "permit") };
@@ -257,10 +303,8 @@ function parseCreatedSend(value: unknown): CreatedSend {
 }
 
 function parseSendPhase(value: unknown): SendPhase {
-  const name = phaseName(value, ["pairing", "creating", "handoff", "created", "failed"]);
-  if (name === "pairing") {
-    return { name, pairing: parsePairing(field(exactObject(value, ["name", "pairing"], "phase"), "pairing")) };
-  }
+  const name = phaseName(value, ["pairing", "minting", "creating", "handoff", "created", "failed"]);
+  if (name === "pairing" || name === "minting") return parseAuthorizationPhase(value, name);
   if (name === "creating") {
     const object = exactObject(value, ["attempt", "name", "permit"], "phase");
     return { attempt: nullable(field(object, "attempt"), parseSendAttempt), name, permit: stringValue(field(object, "permit"), "permit") };
@@ -311,12 +355,16 @@ const COMMON_KEYS = ["createdAt", "cwd", "handle", "kind", "origin", "phase", "p
 export function parseRecord(value: unknown): OperationRecord {
   if (typeof value !== "object" || value === null) throw new ShapeError("record");
   const kind = literal(Reflect.get(value, "kind"), ["request", "send"], "record.kind");
+  // Records written before device grants have no `deviceDays`; their later pairings ask for the default.
+  const hasDeviceDays = "deviceDays" in value;
+  const commonKeys = hasDeviceDays ? [...COMMON_KEYS, "deviceDays"] : COMMON_KEYS;
   const object = kind === "request"
-    ? exactObject(value, [...COMMON_KEYS, "fields", "sink", "title", "ttl"], "record")
-    : exactObject(value, [...COMMON_KEYS, "handoffPath", "maxRetrievals", "source", "ttl"], "record");
+    ? exactObject(value, [...commonKeys, "fields", "sink", "title", "ttl"], "record")
+    : exactObject(value, [...commonKeys, "handoffPath", "maxRetrievals", "source", "ttl"], "record");
   const common: CommonRecord = {
     createdAt: integerValue(field(object, "createdAt"), "createdAt"),
     cwd: stringValue(field(object, "cwd"), "cwd"),
+    deviceDays: hasDeviceDays ? deviceDays(field(object, "deviceDays"), "deviceDays") : DEFAULT_DEVICE_GRANT_DAYS,
     handle: stringValue(field(object, "handle"), "handle"),
     origin: stringValue(field(object, "origin"), "origin"),
     projectRoot: stringValue(field(object, "projectRoot"), "projectRoot"),

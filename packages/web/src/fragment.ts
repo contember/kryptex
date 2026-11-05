@@ -16,7 +16,8 @@ export interface FragmentCapture {
 }
 
 // `/pair` carries a pairing code, not key material, but follows the same fragment lifecycle.
-const SECRET_ROUTES = new Set(["/s", "/m", "/r", "/i", "/pair"]);
+// `/pair/device` never reads a fragment; it is scrubbed only so a pasted code stays out of history.
+const SECRET_ROUTES = new Set(["/s", "/m", "/r", "/i", "/pair", "/pair/device", "/d"]);
 
 export function canonicalSecretRoute(pathname: string): string | null {
   const withoutTrailingSlash = pathname.endsWith("/") && pathname.length === 3

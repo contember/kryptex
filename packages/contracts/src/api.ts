@@ -1,5 +1,13 @@
 import { parseKxe1Envelope, parseKxr1Envelope } from "./envelopes.js";
-import { FAILED_ACCESS_SATURATION, isTtlSeconds, type TtlSeconds } from "./protocol.js";
+import {
+  DEVICE_QUOTA_PER_DAY,
+  DEVICE_QUOTA_WINDOW_HOURS,
+  FAILED_ACCESS_SATURATION,
+  isDeviceGrantDays,
+  isTtlSeconds,
+  type DeviceGrantDays,
+  type TtlSeconds
+} from "./protocol.js";
 import { parseJsonWithoutDuplicateKeys } from "./json.js";
 import {
   ContractValidationError,
@@ -24,7 +32,8 @@ export type ApiErrorCode =
   | "creation_permit_required"
   | "internal_error"
   | "gate_failed"
-  | "gate_unavailable";
+  | "gate_unavailable"
+  | "quota_exhausted";
 
 export interface CreatePermitRequest {
   readonly requestId: string;
@@ -153,6 +162,65 @@ export type PairingRedeemResponse =
   | { readonly pairingExpiresAt: number; readonly state: "pending" }
   | { readonly permit: string; readonly permitExpiresAt: number; readonly serverTime: number; readonly state: "approved" };
 
+export interface DevicePairingStartRequest {
+  readonly deviceLocator: string;
+  readonly deviceToken: string;
+  readonly maxDays: DeviceGrantDays;
+}
+
+export type DevicePairingStartResponse = PairingStartResponse;
+export type DevicePairingApproveRequest = PairingApproveRequest;
+export type DevicePairingApproveResponse = PairingApproveResponse;
+
+export interface DevicePairingClaimStatusResponse {
+  readonly maxDays: DeviceGrantDays;
+  readonly pairingExpiresAt: number;
+}
+
+export type DevicePairingClaimRequest =
+  | { readonly scope: "transfer" }
+  | { readonly days: DeviceGrantDays; readonly manageToken: string; readonly scope: "device" };
+
+export type DevicePairingClaimResponse =
+  | { readonly scope: "transfer" }
+  | { readonly deviceExpiresAt: number; readonly deviceLocator: string; readonly scope: "device" };
+
+export interface DevicePairingRedeemRequest {
+  readonly deviceToken: string;
+  readonly userCode: string;
+}
+
+export type DevicePairingRedeemResponse =
+  | { readonly pairingExpiresAt: number; readonly state: "pending" }
+  | { readonly permit: string; readonly permitExpiresAt: number; readonly serverTime: number; readonly state: "transfer" }
+  | { readonly deviceExpiresAt: number; readonly state: "device" };
+
+export interface DevicePermitRequest {
+  readonly deviceLocator: string;
+  readonly deviceToken: string;
+  readonly requestId: string;
+}
+
+export interface DevicePermitResponse {
+  readonly permit: string;
+  readonly permitExpiresAt: number;
+  readonly serverTime: number;
+}
+
+/** Either the client's device token or the person's management token authorizes status and revocation. */
+export type DeviceAccessRequest =
+  | { readonly deviceLocator: string; readonly deviceToken: string }
+  | { readonly deviceLocator: string; readonly manageToken: string };
+
+export type DeviceState = "active" | "revoked";
+
+export interface DeviceStatusResponse {
+  readonly expiresAt: number;
+  readonly hourlyMints: readonly number[];
+  readonly quotaRemaining: number;
+  readonly state: DeviceState;
+}
+
 export interface ApiErrorResponse {
   readonly error: ApiErrorCode;
 }
@@ -222,7 +290,8 @@ function parseErrorCode(value: unknown): ApiErrorCode {
     value === "creation_permit_required" ||
     value === "internal_error" ||
     value === "gate_failed" ||
-    value === "gate_unavailable"
+    value === "gate_unavailable" ||
+    value === "quota_exhausted"
   ) {
     return value;
   }
@@ -319,13 +388,29 @@ function parseUserCode(value: unknown, context: string): string {
   return code;
 }
 
-function parsePermitValue(value: unknown, context: string): string {
+function parsePermitValue(value: unknown, context: string, prefix: "v2." | "v3." = "v2."): string {
   const permit = expectString(value, context);
-  if (!permit.startsWith("v2.")) {
-    throw new ContractValidationError(`${context} is not a version 2 permit`);
+  if (!permit.startsWith(prefix)) {
+    throw new ContractValidationError(`${context} is not a ${prefix} permit`);
   }
   expectCanonicalBase64UrlLength(permit.slice(3), 32, context);
   return permit;
+}
+
+function parseDeviceGrantDays(value: unknown, context: string): DeviceGrantDays {
+  const days = expectSafeInteger(value, context);
+  if (!isDeviceGrantDays(days)) {
+    throw new ContractValidationError(`${context} is not an allowed device grant lifetime`);
+  }
+  return days;
+}
+
+function isObjectWithKeyCount(value: unknown, count: number): boolean {
+  return typeof value === "object" && value !== null && !Array.isArray(value) && Object.keys(value).length === count;
+}
+
+function hasKey(value: unknown, key: string): boolean {
+  return typeof value === "object" && value !== null && !Array.isArray(value) && Object.hasOwn(value, key);
 }
 
 export function parsePairingStartRequest(value: unknown): PairingStartRequest {
@@ -404,6 +489,184 @@ export function parsePairingRedeemResponse(value: unknown): PairingRedeemRespons
     permitExpiresAt: parseTimestamp(readProperty(object, "permitExpiresAt", context), `${context}.permitExpiresAt`),
     serverTime: parseTimestamp(readProperty(object, "serverTime", context), `${context}.serverTime`),
     state: "approved"
+  };
+}
+
+export function parseDevicePairingStartRequest(value: unknown): DevicePairingStartRequest {
+  const context = "device pairing start request";
+  const object = expectExactObject(value, ["deviceLocator", "deviceToken", "maxDays"], context);
+  return {
+    deviceLocator: parseLocator(readProperty(object, "deviceLocator", context), `${context}.deviceLocator`),
+    deviceToken: parseToken(readProperty(object, "deviceToken", context), `${context}.deviceToken`),
+    maxDays: parseDeviceGrantDays(readProperty(object, "maxDays", context), `${context}.maxDays`)
+  };
+}
+
+export function parseDevicePairingStartRequestJson(text: string): DevicePairingStartRequest {
+  return parseApiJsonText(text, parseDevicePairingStartRequest);
+}
+
+export function parseDevicePairingApproveRequestJson(text: string): DevicePairingApproveRequest {
+  return parseApiJsonText(text, parsePairingApproveRequest);
+}
+
+export function parseDevicePairingClaimStatusResponse(value: unknown): DevicePairingClaimStatusResponse {
+  const context = "device claim status response";
+  const object = expectExactObject(value, ["maxDays", "pairingExpiresAt"], context);
+  return {
+    maxDays: parseDeviceGrantDays(readProperty(object, "maxDays", context), `${context}.maxDays`),
+    pairingExpiresAt: parseTimestamp(readProperty(object, "pairingExpiresAt", context), `${context}.pairingExpiresAt`)
+  };
+}
+
+export function parseDevicePairingClaimRequest(value: unknown): DevicePairingClaimRequest {
+  const context = "device claim request";
+  if (isObjectWithKeyCount(value, 1)) {
+    const object = expectExactObject(value, ["scope"], context);
+    if (readProperty(object, "scope", context) !== "transfer") {
+      throw new ContractValidationError(`${context}.scope is invalid`);
+    }
+    return { scope: "transfer" };
+  }
+  const object = expectExactObject(value, ["days", "manageToken", "scope"], context);
+  if (readProperty(object, "scope", context) !== "device") {
+    throw new ContractValidationError(`${context}.scope is invalid`);
+  }
+  return {
+    days: parseDeviceGrantDays(readProperty(object, "days", context), `${context}.days`),
+    manageToken: parseToken(readProperty(object, "manageToken", context), `${context}.manageToken`),
+    scope: "device"
+  };
+}
+
+export function parseDevicePairingClaimRequestJson(text: string): DevicePairingClaimRequest {
+  return parseApiJsonText(text, parseDevicePairingClaimRequest);
+}
+
+export function parseDevicePairingClaimResponse(value: unknown): DevicePairingClaimResponse {
+  const context = "device claim response";
+  if (isObjectWithKeyCount(value, 1)) {
+    const object = expectExactObject(value, ["scope"], context);
+    if (readProperty(object, "scope", context) !== "transfer") {
+      throw new ContractValidationError(`${context}.scope is invalid`);
+    }
+    return { scope: "transfer" };
+  }
+  const object = expectExactObject(value, ["deviceExpiresAt", "deviceLocator", "scope"], context);
+  if (readProperty(object, "scope", context) !== "device") {
+    throw new ContractValidationError(`${context}.scope is invalid`);
+  }
+  return {
+    deviceExpiresAt: parseTimestamp(readProperty(object, "deviceExpiresAt", context), `${context}.deviceExpiresAt`),
+    deviceLocator: parseLocator(readProperty(object, "deviceLocator", context), `${context}.deviceLocator`),
+    scope: "device"
+  };
+}
+
+export function parseDevicePairingRedeemRequest(value: unknown): DevicePairingRedeemRequest {
+  const context = "device pairing redeem request";
+  const object = expectExactObject(value, ["deviceToken", "userCode"], context);
+  return {
+    deviceToken: parseToken(readProperty(object, "deviceToken", context), `${context}.deviceToken`),
+    userCode: parseUserCode(readProperty(object, "userCode", context), `${context}.userCode`)
+  };
+}
+
+export function parseDevicePairingRedeemRequestJson(text: string): DevicePairingRedeemRequest {
+  return parseApiJsonText(text, parseDevicePairingRedeemRequest);
+}
+
+export function parseDevicePairingRedeemResponse(value: unknown): DevicePairingRedeemResponse {
+  const context = "device pairing redeem response";
+  if (isObjectWithKeyCount(value, 2) && hasKey(value, "pairingExpiresAt")) {
+    const object = expectExactObject(value, ["pairingExpiresAt", "state"], context);
+    if (readProperty(object, "state", context) !== "pending") {
+      throw new ContractValidationError(`${context}.state is invalid`);
+    }
+    return {
+      pairingExpiresAt: parseTimestamp(readProperty(object, "pairingExpiresAt", context), `${context}.pairingExpiresAt`),
+      state: "pending"
+    };
+  }
+  if (isObjectWithKeyCount(value, 2)) {
+    const object = expectExactObject(value, ["deviceExpiresAt", "state"], context);
+    if (readProperty(object, "state", context) !== "device") {
+      throw new ContractValidationError(`${context}.state is invalid`);
+    }
+    return {
+      deviceExpiresAt: parseTimestamp(readProperty(object, "deviceExpiresAt", context), `${context}.deviceExpiresAt`),
+      state: "device"
+    };
+  }
+  const object = expectExactObject(value, ["permit", "permitExpiresAt", "serverTime", "state"], context);
+  if (readProperty(object, "state", context) !== "transfer") {
+    throw new ContractValidationError(`${context}.state is invalid`);
+  }
+  return {
+    permit: parsePermitValue(readProperty(object, "permit", context), `${context}.permit`),
+    permitExpiresAt: parseTimestamp(readProperty(object, "permitExpiresAt", context), `${context}.permitExpiresAt`),
+    serverTime: parseTimestamp(readProperty(object, "serverTime", context), `${context}.serverTime`),
+    state: "transfer"
+  };
+}
+
+export function parseDevicePermitRequest(value: unknown): DevicePermitRequest {
+  const context = "device permit request";
+  const object = expectExactObject(value, ["deviceLocator", "deviceToken", "requestId"], context);
+  return {
+    deviceLocator: parseLocator(readProperty(object, "deviceLocator", context), `${context}.deviceLocator`),
+    deviceToken: parseToken(readProperty(object, "deviceToken", context), `${context}.deviceToken`),
+    requestId: parseRequestId(readProperty(object, "requestId", context))
+  };
+}
+
+export function parseDevicePermitRequestJson(text: string): DevicePermitRequest {
+  return parseApiJsonText(text, parseDevicePermitRequest);
+}
+
+export function parseDevicePermitResponse(value: unknown): DevicePermitResponse {
+  const context = "device permit response";
+  const object = expectExactObject(value, ["permit", "permitExpiresAt", "serverTime"], context);
+  return {
+    permit: parsePermitValue(readProperty(object, "permit", context), `${context}.permit`, "v3."),
+    permitExpiresAt: parseTimestamp(readProperty(object, "permitExpiresAt", context), `${context}.permitExpiresAt`),
+    serverTime: parseTimestamp(readProperty(object, "serverTime", context), `${context}.serverTime`)
+  };
+}
+
+export function parseDeviceAccessRequest(value: unknown): DeviceAccessRequest {
+  const context = "device access request";
+  if (hasKey(value, "manageToken")) {
+    const object = expectExactObject(value, ["deviceLocator", "manageToken"], context);
+    return {
+      deviceLocator: parseLocator(readProperty(object, "deviceLocator", context), `${context}.deviceLocator`),
+      manageToken: parseToken(readProperty(object, "manageToken", context), `${context}.manageToken`)
+    };
+  }
+  const object = expectExactObject(value, ["deviceLocator", "deviceToken"], context);
+  return {
+    deviceLocator: parseLocator(readProperty(object, "deviceLocator", context), `${context}.deviceLocator`),
+    deviceToken: parseToken(readProperty(object, "deviceToken", context), `${context}.deviceToken`)
+  };
+}
+
+export function parseDeviceAccessRequestJson(text: string): DeviceAccessRequest {
+  return parseApiJsonText(text, parseDeviceAccessRequest);
+}
+
+export function parseDeviceStatusResponse(value: unknown): DeviceStatusResponse {
+  const context = "device status response";
+  const object = expectExactObject(value, ["expiresAt", "hourlyMints", "quotaRemaining", "state"], context);
+  const state = readProperty(object, "state", context);
+  if (state !== "active" && state !== "revoked") {
+    throw new ContractValidationError(`${context}.state is invalid`);
+  }
+  return {
+    expiresAt: parseTimestamp(readProperty(object, "expiresAt", context), `${context}.expiresAt`),
+    hourlyMints: expectArray(readProperty(object, "hourlyMints", context), DEVICE_QUOTA_WINDOW_HOURS, DEVICE_QUOTA_WINDOW_HOURS, `${context}.hourlyMints`)
+      .map((entry, index) => expectIntegerInRange(entry, 0, DEVICE_QUOTA_PER_DAY, `${context}.hourlyMints[${index}]`)),
+    quotaRemaining: expectIntegerInRange(readProperty(object, "quotaRemaining", context), 0, DEVICE_QUOTA_PER_DAY, `${context}.quotaRemaining`),
+    state
   };
 }
 

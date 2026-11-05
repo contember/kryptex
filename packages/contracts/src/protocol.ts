@@ -1,8 +1,9 @@
 export type FactorMode = 0 | 1 | 2;
 export type ContentMode = 1 | 2;
 export type BundleKind = 1 | 2 | 3 | 4;
-export type ResourceKind = 1 | 2 | 3 | 4;
-export type CapabilityKind = 1 | 2 | 3 | 4;
+export type ResourceKind = 1 | 2 | 3 | 4 | 5 | 6;
+export type CapabilityKind = 1 | 2 | 3 | 4 | 5 | 6 | 7;
+export type DeviceGrantDays = 1 | 7 | 30 | 90;
 export type TtlSeconds = 900 | 3600 | 28800 | 86400 | 259200 | 604800 | 1209600 | 2592000;
 
 export const PROTOCOL_VERSION = 1;
@@ -70,6 +71,14 @@ export const MAX_VALUE_UTF8_BYTES = 262144;
 export const API_ROUTES = Object.freeze({
   createPermit: "/api/v2/create-permits",
   createPermitStatus: "/api/v2/create-permits/status",
+  devicePairingApprove: "/api/v3/devices/pairings/approve",
+  devicePairingClaim: "/api/v3/devices/pairings/claim",
+  devicePairingClaimStatus: "/api/v3/devices/pairings/claim/status",
+  devicePairingRedeem: "/api/v3/devices/pairings/redeem",
+  devicePairingStart: "/api/v3/devices/pairings",
+  devicePermit: "/api/v3/devices/permits",
+  deviceRevoke: "/api/v3/devices/revoke",
+  deviceStatus: "/api/v3/devices/status",
   pairingApprove: "/api/v2/create-permits/pairings/approve",
   pairingRedeem: "/api/v2/create-permits/pairings/redeem",
   pairingStart: "/api/v2/create-permits/pairings",
@@ -101,6 +110,23 @@ export const RESPONSE_HEADERS = Object.freeze({
 /** Native clients present a creation permit in this request header; browsers use the HttpOnly cookie. */
 export const CREATE_PERMIT_HEADER = "Kryptex-Create-Permit";
 export const PAIRING_TTL_SECONDS = 600;
+
+export const DEVICE_GRANT_DAYS: readonly DeviceGrantDays[] = Object.freeze([1, 7, 30, 90]);
+export const DEFAULT_DEVICE_GRANT_DAYS: DeviceGrantDays = 30;
+export const DEVICE_PAIRING_TTL_SECONDS = 600;
+export const DEVICE_PERMIT_TTL_SECONDS = 120;
+/** A claimed device pairing stays redeemable this long, so a client that missed the claim still learns its grant. */
+export const DEVICE_PAIRING_CLAIM_RETENTION_SECONDS = 1800;
+export const DEVICE_QUOTA_PER_DAY = 50;
+export const DEVICE_QUOTA_WINDOW_HOURS = 24;
+export const DEVICE_CLAIM_COOKIE = "kx_device_claim_v3";
+export const DEVICE_LINK_MAGIC = "KXD1";
+export const DEVICE_LINK_VERSION = 1;
+export const DEVICE_LINK_BYTE_LENGTH = 53;
+
+export function isDeviceGrantDays(value: number): value is DeviceGrantDays {
+  return value === 1 || value === 7 || value === 30 || value === 90;
+}
 
 export function isTtlSeconds(value: number): value is TtlSeconds {
   return value === 900 || value === 3600 || value === 28800 || value === 86400 || value === 259200 || value === 604800 || value === 1209600 || value === 2592000;

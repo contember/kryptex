@@ -15,7 +15,7 @@ Ask a person for secrets:
    - A command: \`--exec -- <command> …\`. The values arrive as environment variables named by \`target\`, standard input is closed, and output is redacted. For example \`--exec -- sh -c 'printf %s "$API_KEY" | wrangler secret put API_KEY'\`. A failed command runs again on the next \`wait\`, so make it idempotent.
 2. Write a form spec with one field per secret, for example \`{"title":"Deploy credentials","fields":[{"target":"API_KEY","label":"API key","help":"From the provider dashboard","type":"secret","required":true}]}\`. \`type\` is \`secret\`, \`text\`, \`long-secret\`, \`long-text\`, or \`instruction\`; an instruction has no \`target\` and is not required. Every listed key is required and no other key is allowed.
 3. \`kryptex request create --spec form.json\` plus the target options from step 1.
-4. Exit 3 with \`action: pair\`: ask the person to open \`pairUrl\` and approve \`userCode\`. Then run \`kryptex wait <handle>\`.
+4. Exit 3 with \`action: pair\`: ask the person to open \`pairUrl\`, type \`userCode\`, and choose "This machine" if you should create transfers without asking again. This happens once per machine until the permission expires. Then run \`kryptex wait <handle>\`.
 5. Exit 3 with \`action: hand_over_write_link\`: give \`writeUrl\` to the person who should fill in the form. Anyone holding the link can submit the one accepted answer before \`expiresAt\`, so it must reach only that person.
 6. Run \`kryptex wait <handle>\` until exit 0. If the form will be filled later, tell the person and stop; keep the handle, or find it again with \`kryptex list\`.
 7. Exit 0: the values are in the target. Tell the person which keys arrived. Do not read them.
@@ -25,5 +25,5 @@ Send secrets to a person:
 2. Handle pairing as above.
 3. Exit 3 with \`action: hand_over_recipient_link\`: give \`recipientUrl\` to the recipient. Tell the person that the second key and the management link are in \`handoffFile\` and that the second key must reach the recipient through a different channel. Do not read the file.
 
-On exit 1, report the error code and message; \`retryable: true\` means fix the cause and run \`wait\` again. Exit 2 means the command line was invalid and nothing was recorded. \`kryptex list\` shows operations; \`kryptex discard <handle>\` revokes and removes one.
+On exit 1, report the error code and message; \`retryable: true\` means fix the cause and run \`wait\` again. \`quota_exhausted\` means this machine started 50 transfers in 24 hours; run \`wait\` later. Exit 2 means the command line was invalid and nothing was recorded. \`kryptex list\` shows operations; \`kryptex discard <handle>\` revokes and removes one. \`kryptex device status\` shows this machine's permission; \`kryptex device forget\` revokes it.
 `;

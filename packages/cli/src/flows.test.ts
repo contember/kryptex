@@ -1,11 +1,20 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { chmodSync, existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ApiFailure } from "@kryptex/client";
 import type {
   CreatePermitStatusResponse,
   CreateResourceResponse,
+  DeviceAccessRequest,
+  DevicePairingRedeemRequest,
+  DevicePairingRedeemResponse,
+  DevicePairingStartRequest,
+  DevicePairingStartResponse,
+  DevicePermitRequest,
+  DevicePermitResponse,
+  DeviceStatusResponse,
   PairingRedeemRequest,
   PairingRedeemResponse,
   PairingStartRequest,
@@ -61,44 +70,155 @@ interface StoredSend {
 
 type Fault = "commit-then-lose-response" | "lose-response" | null;
 
+interface StoredGrant {
+  readonly expiresAt: number;
+  readonly mints: Map<string, { readonly mintedAt: number; readonly permit: string }>;
+  minted: number;
+  revoked: boolean;
+  readonly token: string;
+}
+
+type StoredPairing = { readonly expiresAt: number; readonly userCode: string } & (
+  | { readonly deviceLocator: string; readonly deviceToken: string; readonly kind: "device"; readonly maxDays: number }
+  | { readonly kind: "legacy"; readonly pollToken: string }
+);
+
 /** An in-memory service that follows the API contract closely enough to drive the CLI state machines. */
 class FakeService implements NativeClient {
   clock = START_SECONDS * 1_000;
   approved = false;
+  /** What the person picks on the confirmation page of a device pairing. */
+  approvalScope: "device" | "transfer" = "transfer";
+  /** False plays a service that predates device grants. */
+  deviceRoutes = true;
+  devicePairingsStarted = 0;
+  mintFault: Fault = null;
+  rejectNextMint = false;
+  rejectNextPermitStatus = false;
   permitUsed = false;
   createFault: Fault = null;
   pickupFault: Fault = null;
+  readonly grants = new Map<string, StoredGrant>();
   readonly requests = new Map<string, StoredRequest>();
   readonly sends = new Map<string, StoredSend>();
-  readonly #permit = `v2.${encodeBase64Url(randomBytes(32))}`;
-  #pairing: { readonly pollToken: string; readonly userCode: string } | null = null;
+  readonly #mintedPermits = new Map<string, { readonly expiresAt: number; used: boolean }>();
+  #permit = `v2.${encodeBase64Url(randomBytes(32))}`;
+  /** Keyed by the poll credential: the poll token, or the device token of a device pairing. */
+  readonly #pairings = new Map<string, StoredPairing>();
 
   get seconds(): number {
     return Math.floor(this.clock / 1_000);
   }
 
-  startPairing(input: PairingStartRequest): Promise<PairingStartResponse> {
-    this.#pairing = { pollToken: input.pollToken, userCode: "ABCD-EFGH" };
+  #newPairing(credential: string, pairing: StoredPairing): PairingStartResponse {
+    this.#pairings.set(credential, pairing);
+    this.#permit = `v2.${encodeBase64Url(randomBytes(32))}`;
     this.approved = false;
-    return Promise.resolve({ pairingExpiresAt: this.seconds + 600, serverTime: this.seconds, userCode: "ABCD-EFGH" });
+    this.permitUsed = false;
+    return { pairingExpiresAt: pairing.expiresAt, serverTime: this.seconds, userCode: pairing.userCode };
+  }
+
+  /** An unapproved pairing ends at its expiry; an approved one stays redeemable, as the service retains it past expiry. */
+  #pairing(credential: string, userCode: string): StoredPairing {
+    const pairing = this.#pairings.get(credential);
+    if (pairing?.userCode !== userCode || (!this.approved && this.seconds >= pairing.expiresAt)) throw new ApiFailure("unavailable", false);
+    return pairing;
+  }
+
+  startPairing(input: PairingStartRequest): Promise<PairingStartResponse> {
+    return Promise.resolve(this.#newPairing(input.pollToken, { expiresAt: this.seconds + 600, kind: "legacy", pollToken: input.pollToken, userCode: "ABCD-EFGH" }));
   }
 
   redeemPairing(input: PairingRedeemRequest): Promise<PairingRedeemResponse> {
-    if (this.#pairing === null || this.#pairing.pollToken !== input.pollToken || this.#pairing.userCode !== input.userCode) {
-      return Promise.reject(new ApiFailure("unavailable", false));
-    }
+    if (this.#pairing(input.pollToken, input.userCode).kind !== "legacy") throw new ApiFailure("unavailable", false);
     if (!this.approved) return Promise.resolve({ pairingExpiresAt: this.seconds + 600, state: "pending" });
     return Promise.resolve({ permit: this.#permit, permitExpiresAt: this.seconds + 600, serverTime: this.seconds, state: "approved" });
   }
 
+  startDevicePairing(input: DevicePairingStartRequest): Promise<DevicePairingStartResponse> {
+    if (!this.deviceRoutes) return Promise.reject(new ApiFailure("invalid_request", false));
+    this.devicePairingsStarted += 1;
+    return Promise.resolve(this.#newPairing(input.deviceToken, { ...input, expiresAt: this.seconds + 600, kind: "device", userCode: "WXYZ-2345" }));
+  }
+
+  redeemDevicePairing(input: DevicePairingRedeemRequest): Promise<DevicePairingRedeemResponse> {
+    const pairing = this.#pairing(input.deviceToken, input.userCode);
+    if (pairing.kind !== "device") throw new ApiFailure("unavailable", false);
+    if (!this.approved) return Promise.resolve({ pairingExpiresAt: pairing.expiresAt, state: "pending" });
+    if (this.approvalScope === "transfer") {
+      return Promise.resolve({ permit: this.#permit, permitExpiresAt: this.seconds + 600, serverTime: this.seconds, state: "transfer" });
+    }
+    const grant = this.grants.get(pairing.deviceLocator) ?? { expiresAt: this.seconds + pairing.maxDays * 86400, mints: new Map(), minted: 0, revoked: false, token: pairing.deviceToken };
+    this.grants.set(pairing.deviceLocator, grant);
+    return Promise.resolve({ deviceExpiresAt: grant.expiresAt, state: "device" });
+  }
+
+  #grant(input: DeviceAccessRequest): StoredGrant {
+    const grant = this.grants.get(input.deviceLocator);
+    if (grant === undefined || !("deviceToken" in input) || grant.token !== input.deviceToken || this.seconds >= grant.expiresAt) {
+      throw new ApiFailure("unavailable", false);
+    }
+    return grant;
+  }
+
+  mintDevicePermit(input: DevicePermitRequest): Promise<DevicePermitResponse> {
+    const grant = this.#grant(input);
+    if (grant.revoked) throw new ApiFailure("unavailable", false);
+    if (this.rejectNextMint) {
+      this.rejectNextMint = false;
+      throw new ApiFailure("creation_permit_required", false);
+    }
+    const known = grant.mints.get(input.requestId);
+    if (known !== undefined) {
+      if (this.seconds - known.mintedAt > 120) throw new ApiFailure("creation_permit_required", false);
+      if (this.#mintedPermits.get(known.permit)?.used === true) throw new ApiFailure("creation_permit_required", false);
+      return Promise.resolve({ permit: known.permit, permitExpiresAt: known.mintedAt + 120, serverTime: this.seconds });
+    }
+    if (grant.minted >= 50) throw new ApiFailure("quota_exhausted", false);
+    const permit = `v3.${encodeBase64Url(randomBytes(32))}`;
+    grant.mints.set(input.requestId, { mintedAt: this.seconds, permit });
+    grant.minted += 1;
+    this.#mintedPermits.set(permit, { expiresAt: this.seconds + 120, used: false });
+    if (this.mintFault === "commit-then-lose-response") {
+      this.mintFault = null;
+      return Promise.reject(new ApiFailure("network", true));
+    }
+    return Promise.resolve({ permit, permitExpiresAt: this.seconds + 120, serverTime: this.seconds });
+  }
+
+  deviceStatus(input: DeviceAccessRequest): Promise<DeviceStatusResponse> {
+    const grant = this.#grant(input);
+    const hourlyMints = Array.from({ length: 24 }, (_, index) => index === 23 ? grant.minted : 0);
+    return Promise.resolve({ expiresAt: grant.expiresAt, hourlyMints, quotaRemaining: 50 - grant.minted, state: grant.revoked ? "revoked" : "active" });
+  }
+
+  revokeDevice(input: DeviceAccessRequest): Promise<RevokeResponse> {
+    this.#grant(input).revoked = true;
+    return Promise.resolve({ state: "revoked" });
+  }
+
+  #permitUsable(permit: string | undefined): boolean {
+    if (permit === this.#permit) return !this.permitUsed;
+    const minted = permit === undefined ? undefined : this.#mintedPermits.get(permit);
+    return minted !== undefined && !minted.used && this.seconds < minted.expiresAt;
+  }
+
   permitStatus(permit?: string): Promise<CreatePermitStatusResponse> {
-    if (permit !== this.#permit || this.permitUsed) return Promise.reject(new ApiFailure("creation_permit_required", false));
-    return Promise.resolve({ permitExpiresAt: this.seconds + 600, serverTime: this.seconds, state: "unused" });
+    if (this.rejectNextPermitStatus || !this.#permitUsable(permit)) {
+      this.rejectNextPermitStatus = false;
+      return Promise.reject(new ApiFailure("creation_permit_required", false));
+    }
+    return Promise.resolve({ permitExpiresAt: this.seconds + 120, serverTime: this.seconds, state: "unused" });
   }
 
   #consumePermit(permit: string | undefined): void {
-    if (permit !== this.#permit || this.permitUsed) throw new ApiFailure("creation_permit_required", false);
-    this.permitUsed = true;
+    if (!this.#permitUsable(permit)) throw new ApiFailure("creation_permit_required", false);
+    if (permit === this.#permit) {
+      this.permitUsed = true;
+      return;
+    }
+    const minted = permit === undefined ? undefined : this.#mintedPermits.get(permit);
+    if (minted !== undefined) minted.used = true;
   }
 
   createRequest(input: RequestCreateRequest, permit?: string): Promise<CreateResourceResponse> {
@@ -239,7 +359,7 @@ function text(output: Readonly<Record<string, unknown>>, key: string): string {
 async function createRequest(...sink: string[]): Promise<string> {
   const created = await kryptex("request", "create", "--spec", "form.json", ...sink);
   expect(created.exitCode).toBe(3);
-  expect(created.output).toMatchObject({ action: "pair", pairUrl: "https://kryptex.example/pair#ABCD-EFGH", state: "pairing", userCode: "ABCD-EFGH" });
+  expect(created.output).toMatchObject({ action: "pair", pairUrl: "https://kryptex.example/pair/device", state: "pairing", userCode: "WXYZ-2345" });
   return text(created.output, "handle");
 }
 
@@ -405,5 +525,312 @@ describe("send", () => {
     const visible = await kryptex("send", "create", "--from-env-file", ".env", "--env-dialect", "literal", "--key", "API_KEY", "--handoff-file", "visible.txt");
     expect(visible).toMatchObject({ exitCode: 1, output: { error: "target_invalid" } });
     expect(existsSync(state)).toBe(false);
+  });
+});
+
+const ORIGIN = "https://kryptex.example";
+const ENV_SINK = ["--env-file", ".env", "--env-dialect", "literal"];
+
+function devicePath(): string {
+  return join(state, "devices", `${createHash("sha256").update(ORIGIN).digest("hex")}.json`);
+}
+
+function onlyGrant(): StoredGrant & { readonly locator: string } {
+  const entries = [...service.grants];
+  const [entry] = entries;
+  if (entries.length !== 1 || entry === undefined) throw new Error("expected exactly one grant");
+  return Object.assign(entry[1], { locator: entry[0] });
+}
+
+/** Replaces the device file with mutated content, keeping mode 0600. */
+function rewriteDeviceFile(change: (grant: Record<string, unknown>) => Record<string, unknown>): void {
+  const parsed: unknown = JSON.parse(readFileSync(devicePath(), "utf8"));
+  if (typeof parsed !== "object" || parsed === null) throw new Error("device file is not an object");
+  writeFileSync(devicePath(), JSON.stringify(change({ ...parsed })), { mode: 0o600 });
+}
+
+/** Runs the first operation through a device pairing that the person approves for this machine. */
+async function pairDevice(...extra: string[]): Promise<string> {
+  const handle = await createRequest(...ENV_SINK, ...extra);
+  service.approvalScope = "device";
+  await pairAndCreate(handle);
+  return handle;
+}
+
+async function stateOf(handle: string): Promise<unknown> {
+  const listed = await kryptex("list");
+  const operations = listed.output["operations"];
+  if (!Array.isArray(operations)) throw new Error("no operations");
+  const found: unknown = operations.find((entry: unknown) => typeof entry === "object" && entry !== null && Reflect.get(entry, "handle") === handle);
+  return typeof found === "object" && found !== null ? Reflect.get(found, "state") : undefined;
+}
+
+function expectNoDeviceSecrets(): void {
+  const grant = onlyGrant();
+  for (const output of printed) {
+    expect(output).not.toContain(grant.token);
+    expect(output).not.toContain(grant.locator);
+  }
+}
+
+describe("device grants", () => {
+  it("pairs once and then creates requests and sends without pairing", async () => {
+    await pairDevice("--device-days", "7");
+    const grant = onlyGrant();
+    expect(grant.expiresAt).toBe(START_SECONDS + 7 * 86400);
+    expect(statSync(join(state, "devices")).mode & 0o777).toBe(0o700);
+    expect(statSync(devicePath()).mode & 0o777).toBe(0o600);
+    expect(JSON.parse(readFileSync(devicePath(), "utf8"))).toEqual({
+      deviceExpiresAt: grant.expiresAt,
+      deviceLocator: grant.locator,
+      deviceToken: grant.token,
+      origin: ORIGIN,
+      version: 1
+    });
+
+    const second = await kryptex("request", "create", "--spec", "form.json", ...ENV_SINK);
+    expect(second).toMatchObject({ exitCode: 3, output: { action: "hand_over_write_link", kind: "request", state: "waiting" } });
+    await service.submit(text(second.output, "writeUrl"), answers);
+    expect(await kryptex("wait", text(second.output, "handle"))).toMatchObject({ exitCode: 0, output: { state: "delivered" } });
+
+    writeFileSync(join(project, "source.env"), `API_KEY=${SECRET}\n`);
+    writeFileSync(join(project, ".gitignore"), ".env\n.state/\nhandoff.txt\nsource.env\n");
+    const sent = await kryptex("send", "create", "--from-env-file", "source.env", "--env-dialect", "literal", "--key", "API_KEY", "--handoff-file", "handoff.txt");
+    expect(sent).toMatchObject({ exitCode: 3, output: { action: "hand_over_recipient_link", kind: "send", state: "created" } });
+
+    expect(service.devicePairingsStarted).toBe(1);
+    expect(grant.minted).toBe(3);
+    expectNoDeviceSecrets();
+  });
+
+  it("asks for the requested device lifetime and rejects others", async () => {
+    expect(await kryptex("request", "create", "--spec", "form.json", ...ENV_SINK, "--device-days", "14")).toMatchObject({ exitCode: 2, output: { error: "usage" } });
+    expect(existsSync(state)).toBe(false);
+  });
+
+  it("pairs again after a transfer-only approval", async () => {
+    await pairAndCreate(await createRequest(...ENV_SINK));
+    expect(existsSync(devicePath())).toBe(false);
+    expect(service.grants.size).toBe(0);
+    await createRequest(...ENV_SINK);
+    expect(service.devicePairingsStarted).toBe(2);
+  });
+
+  it("replays a mint whose response was lost with the same request ID", async () => {
+    await pairDevice();
+    service.mintFault = "commit-then-lose-response";
+    const lost = await kryptex("request", "create", "--spec", "form.json", ...ENV_SINK);
+    expect(lost).toMatchObject({ exitCode: 1, output: { error: "network", retryable: true } });
+    const handle = text(lost.output, "handle");
+    expect(await stateOf(handle)).toBe("minting");
+    expect(onlyGrant().minted).toBe(2);
+
+    expect(await kryptex("wait", handle)).toMatchObject({ exitCode: 3, output: { action: "hand_over_write_link", handle } });
+    expect(onlyGrant().minted).toBe(2);
+  });
+
+  it("mints with a fresh request ID once the service no longer repeats the lost mint", async () => {
+    await pairDevice();
+    service.mintFault = "commit-then-lose-response";
+    const handle = text((await kryptex("request", "create", "--spec", "form.json", ...ENV_SINK)).output, "handle");
+    service.clock += 125_000;
+    expect(await kryptex("wait", handle)).toMatchObject({ exitCode: 3, output: { action: "hand_over_write_link", handle } });
+    expect(onlyGrant().minted).toBe(3);
+    expect(existsSync(devicePath())).toBe(true);
+  });
+
+  it("keeps the operation and the device file when the quota is exhausted", async () => {
+    await pairDevice();
+    onlyGrant().minted = 50;
+    const exhausted = await kryptex("request", "create", "--spec", "form.json", ...ENV_SINK);
+    expect(exhausted).toMatchObject({ exitCode: 1, output: { error: "quota_exhausted", retryable: true } });
+    const handle = text(exhausted.output, "handle");
+    expect(await stateOf(handle)).toBe("minting");
+    expect(existsSync(devicePath())).toBe(true);
+
+    onlyGrant().minted = 0;
+    expect(await kryptex("wait", handle)).toMatchObject({ exitCode: 3, output: { action: "hand_over_write_link", handle } });
+  });
+
+  it("deletes the device file of a revoked grant and pairs again", async () => {
+    await pairDevice();
+    onlyGrant().revoked = true;
+    const created = await kryptex("request", "create", "--spec", "form.json", ...ENV_SINK);
+    expect(created).toMatchObject({ exitCode: 3, output: { action: "pair", pairUrl: `${ORIGIN}/pair/device`, state: "pairing" } });
+    expect(existsSync(devicePath())).toBe(false);
+    expect(service.devicePairingsStarted).toBe(2);
+  });
+
+  it("mints again when the service rejects a minted permit", async () => {
+    await pairDevice();
+    service.rejectNextPermitStatus = true;
+    expect(await kryptex("request", "create", "--spec", "form.json", ...ENV_SINK)).toMatchObject({ exitCode: 3, output: { action: "hand_over_write_link" } });
+    expect(onlyGrant().minted).toBe(3);
+  });
+
+  it("falls back to a one-permit pairing on a service without device grants", async () => {
+    service.deviceRoutes = false;
+    const created = await kryptex("request", "create", "--spec", "form.json", ...ENV_SINK);
+    expect(created).toMatchObject({ exitCode: 3, output: { action: "pair", pairUrl: `${ORIGIN}/pair#ABCD-EFGH`, state: "pairing", userCode: "ABCD-EFGH" } });
+    await pairAndCreate(text(created.output, "handle"));
+    expect(existsSync(devicePath())).toBe(false);
+  });
+
+  it("finishes a pairing record written by an earlier CLI through the legacy pairing", async () => {
+    service.deviceRoutes = false;
+    const handle = text((await kryptex("request", "create", "--spec", "form.json", ...ENV_SINK)).output, "handle");
+    const path = join(state, `${handle}.json`);
+    const parsed: unknown = JSON.parse(readFileSync(path, "utf8"));
+    if (typeof parsed !== "object" || parsed === null) throw new Error("record is not an object");
+    expect(Object.keys(parsed)).toContain("deviceDays");
+    const earlier = Object.fromEntries(Object.entries(parsed).filter(([key]) => key !== "deviceDays"));
+    writeFileSync(path, JSON.stringify(earlier), { mode: 0o600 });
+    service.deviceRoutes = true;
+
+    expect(await kryptex("wait", handle, "--timeout", "5")).toMatchObject({ exitCode: 4, output: { action: "pair", pairUrl: `${ORIGIN}/pair#ABCD-EFGH` } });
+    await pairAndCreate(handle);
+  });
+
+  it("replaces an expired legacy pairing with a device pairing", async () => {
+    service.deviceRoutes = false;
+    const handle = text((await kryptex("request", "create", "--spec", "form.json", ...ENV_SINK)).output, "handle");
+    service.deviceRoutes = true;
+    service.clock += 601_000;
+    expect(await kryptex("wait", handle)).toMatchObject({ exitCode: 3, output: { action: "pair", pairUrl: `${ORIGIN}/pair/device`, userCode: "WXYZ-2345" } });
+  });
+
+  it.each([
+    ["readable by others", () => {
+      chmodSync(devicePath(), 0o644);
+    }],
+    ["an extra key", () => {
+      rewriteDeviceFile((grant) => ({ ...grant, scope: "device" }));
+    }],
+    ["another origin", () => {
+      rewriteDeviceFile((grant) => ({ ...grant, origin: "https://other.example" }));
+    }],
+    ["another version", () => {
+      rewriteDeviceFile((grant) => ({ ...grant, version: 2 }));
+    }],
+    ["a short token", () => {
+      rewriteDeviceFile((grant) => ({ ...grant, deviceToken: "AAAA" }));
+    }]
+  ])("blocks the origin while the device file is %s, until device forget --force", async (_name, corrupt) => {
+    await pairDevice();
+    corrupt();
+    const handles = (await kryptex("list")).output["operations"];
+    expect(await kryptex("request", "create", "--spec", "form.json", ...ENV_SINK)).toMatchObject({ exitCode: 1, output: { error: "state_invalid" } });
+    expect((await kryptex("list")).output["operations"]).toEqual(handles);
+    expect(await kryptex("device", "status")).toEqual({ exitCode: 0, output: { device: { state: "invalid" }, origin: ORIGIN } });
+    expect(await kryptex("device", "forget")).toMatchObject({ exitCode: 1, output: { error: "state_invalid" } });
+    expect(existsSync(devicePath())).toBe(true);
+
+    expect(await kryptex("device", "forget", "--force")).toEqual({ exitCode: 0, output: { forgotten: true, origin: ORIGIN, revoked: false } });
+    expect(existsSync(devicePath())).toBe(false);
+    await createRequest(...ENV_SINK);
+  });
+
+  it("treats a device file past its expiry as absent", async () => {
+    await pairDevice();
+    rewriteDeviceFile((grant) => ({ ...grant, deviceExpiresAt: service.seconds }));
+    expect(await kryptex("device", "status")).toEqual({ exitCode: 0, output: { device: { state: "none" }, origin: ORIGIN } });
+    await createRequest(...ENV_SINK);
+  });
+
+  it("fails a minting operation while the device file is invalid and keeps its state", async () => {
+    await pairDevice();
+    onlyGrant().minted = 50;
+    const handle = text((await kryptex("request", "create", "--spec", "form.json", ...ENV_SINK)).output, "handle");
+    chmodSync(devicePath(), 0o640);
+    expect(await kryptex("wait", handle)).toMatchObject({ exitCode: 1, output: { error: "state_invalid", handle } });
+    expect(await stateOf(handle)).toBe("minting");
+    await kryptex("device", "forget", "--force");
+    expect(await kryptex("wait", handle)).toMatchObject({ exitCode: 3, output: { action: "pair", handle } });
+  });
+
+  it("reports and revokes the grant without printing the device token", async () => {
+    expect(await kryptex("device", "status")).toEqual({ exitCode: 0, output: { device: { state: "none" }, origin: ORIGIN } });
+    await pairDevice();
+    const grant = onlyGrant();
+    expect(await kryptex("device", "status", "--origin", ORIGIN)).toEqual({
+      exitCode: 0,
+      output: {
+        device: { expiresAt: grant.expiresAt, hourlyMints: [...Array.from({ length: 23 }, () => 0), 1], quotaRemaining: 49, state: "active" },
+        origin: ORIGIN
+      }
+    });
+    expect(await kryptex("device", "forget")).toEqual({ exitCode: 0, output: { forgotten: true, origin: ORIGIN, revoked: true } });
+    expect(grant.revoked).toBe(true);
+    expect(existsSync(devicePath())).toBe(false);
+    expect(await kryptex("device", "status")).toEqual({ exitCode: 0, output: { device: { state: "none" }, origin: ORIGIN } });
+    expect(await kryptex("device", "forget")).toEqual({ exitCode: 0, output: { forgotten: false, origin: ORIGIN, revoked: false } });
+    expectNoDeviceSecrets();
+  });
+
+  const approvals: readonly (readonly [string, "device" | "transfer", boolean])[] = [
+    ["for this machine", "device", true],
+    ["for one transfer", "transfer", false]
+  ];
+
+  it.each(approvals)("redeems a pairing approved %s after its local expiry", async (_name, scope, stored) => {
+    const handle = await createRequest(...ENV_SINK);
+    service.approvalScope = scope;
+    service.approved = true;
+    service.clock += 601_000;
+    expect(await kryptex("wait", handle)).toMatchObject({ exitCode: 3, output: { action: "hand_over_write_link", handle } });
+    expect(service.devicePairingsStarted).toBe(1);
+    expect(existsSync(devicePath())).toBe(stored);
+  });
+
+  it("redeems an approved legacy pairing after its local expiry", async () => {
+    service.deviceRoutes = false;
+    const handle = text((await kryptex("request", "create", "--spec", "form.json", ...ENV_SINK)).output, "handle");
+    service.approved = true;
+    service.clock += 601_000;
+    expect(await kryptex("wait", handle)).toMatchObject({ exitCode: 3, output: { action: "hand_over_write_link", handle } });
+  });
+
+  it.each([
+    ["revoked", true],
+    ["left to expire when the revoke fails", false]
+  ])("keeps the stored grant when a concurrent pairing is also approved for this machine; the new grant is %s", async (_name, revokes) => {
+    const first = await createRequest(...ENV_SINK);
+    const second = await createRequest(...ENV_SINK);
+    service.approvalScope = "device";
+    service.approved = true;
+    expect(await kryptex("wait", first)).toMatchObject({ exitCode: 3, output: { action: "hand_over_write_link" } });
+    const stored = readFileSync(devicePath(), "utf8");
+    if (!revokes) service.revokeDevice = () => Promise.reject(new ApiFailure("network", true));
+
+    expect(await kryptex("wait", second)).toMatchObject({ exitCode: 3, output: { action: "hand_over_write_link", handle: second } });
+    expect(readFileSync(devicePath(), "utf8")).toBe(stored);
+    const parsed: unknown = JSON.parse(stored);
+    const kept: unknown = typeof parsed === "object" && parsed !== null ? Reflect.get(parsed, "deviceLocator") : undefined;
+    const grants = [...service.grants];
+    expect(grants).toHaveLength(2);
+    for (const [locator, grant] of grants) {
+      expect(grant.revoked).toBe(locator === kept ? false : revokes);
+      expect(grant.minted).toBe(locator === kept ? 2 : 0);
+    }
+  });
+
+  it("mints a fresh request ID and keeps the device file when the mint answers creation_permit_required", async () => {
+    await pairDevice();
+    service.rejectNextMint = true;
+    expect(await kryptex("request", "create", "--spec", "form.json", ...ENV_SINK)).toMatchObject({ exitCode: 3, output: { action: "hand_over_write_link" } });
+    expect(existsSync(devicePath())).toBe(true);
+    expect(onlyGrant().minted).toBe(2);
+    expect(service.devicePairingsStarted).toBe(1);
+  });
+
+  it("keeps the device file when the revoke fails, unless forced", async () => {
+    await pairDevice();
+    const revokeDevice = service.revokeDevice.bind(service);
+    service.revokeDevice = () => Promise.reject(new ApiFailure("network", true));
+    expect(await kryptex("device", "forget")).toMatchObject({ exitCode: 1, output: { error: "network", retryable: true } });
+    expect(existsSync(devicePath())).toBe(true);
+    expect(await kryptex("device", "forget", "--force")).toEqual({ exitCode: 0, output: { forgotten: true, origin: ORIGIN, revoked: false } });
+    service.revokeDevice = revokeDevice;
+    expect(existsSync(devicePath())).toBe(false);
   });
 });

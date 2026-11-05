@@ -1,10 +1,10 @@
 # Kryptex HTTP API
 
-Status: frozen resource boundary for version 1 with creation-permit version 2, native-client requests, and browser pairing.
+Status: frozen resource boundary for version 1 with creation-permit version 2, native-client requests, browser pairing, and device grants (creation authorization version 3).
 
 ## Encoding and common responses
 
-Resource routes are `POST /api/v1/...`. Creation-permit routes are `POST /api/v2/create-permits...`. Request JSON uses `Content-Type: application/json` and UTF-8. Binary envelopes in JSON are canonical unpadded base64url. Locators decode to 16 bytes and tokens decode to 32 bytes.
+Resource routes are `POST /api/v1/...`. Creation-permit routes are `POST /api/v2/create-permits...`. Device-grant routes are `POST /api/v3/devices...`. Request JSON uses `Content-Type: application/json` and UTF-8. Binary envelopes in JSON are canonical unpadded base64url. Locators decode to 16 bytes and tokens decode to 32 bytes.
 
 Successful binary responses use `application/octet-stream`. All responses, including errors, set:
 
@@ -25,13 +25,13 @@ Content-Type: application/json
 {"error":"unavailable"}
 ```
 
-Rate limiting returns `429` and `{"error":"rate_limited"}` before existence-dependent work. Malformed, oversized, or unsupported input returns `400` and `{"error":"invalid_request"}` before resource lookup. An invalid browser origin returns `403` and `{"error":"forbidden"}`. A missing, expired, or consumed create cookie returns `403` and `{"error":"creation_permit_required"}`. Unexpected failures return `500` and `{"error":"internal_error"}`. Raw exception text is never returned.
+Rate limiting returns `429` and `{"error":"rate_limited"}` before existence-dependent work. An exhausted device-grant quota returns `429` and `{"error":"quota_exhausted"}`. Malformed, oversized, or unsupported input returns `400` and `{"error":"invalid_request"}` before resource lookup. An invalid browser origin returns `403` and `{"error":"forbidden"}`. A missing, expired, or consumed create cookie returns `403` and `{"error":"creation_permit_required"}`. Unexpected failures return `500` and `{"error":"internal_error"}`. Raw exception text is never returned.
 
 A request is a **browser request** when it carries an `Origin` header and a **native request** when it carries none of `Origin`, `Cookie`, and `Sec-Fetch-Site`. Any other combination is rejected with `403` and `{"error":"forbidden"}`.
 
 A browser request must match the configured exact `Origin`; `Origin: null` never matches. Browser requests that mutate state must have `Sec-Fetch-Site: same-origin` when Fetch Metadata headers are present. A browser request carrying `Kryptex-Create-Permit` is rejected with `403` and `{"error":"forbidden"}`.
 
-Native requests serve non-browser clients such as the [CLI](cli-v1.md). They carry no ambient credential: every capability is in the body, and a creation permit is presented only in the `Kryptex-Create-Permit` header. Because a native request can carry neither a cookie nor an origin a browser would attach, it cannot be used to spend a browser's permit cookie. Native requests are accepted on every route except `POST /api/v2/create-permits` and `POST /api/v2/create-permits/pairings/approve`, which only browsers may call.
+Native requests serve non-browser clients such as the [CLI](cli-v1.md). They carry no ambient credential: every capability is in the body, and a creation permit is presented only in the `Kryptex-Create-Permit` header. Because a native request can carry neither a cookie nor an origin a browser would attach, it cannot be used to spend a browser's permit cookie. Native requests are accepted on every route except `POST /api/v2/create-permits`, `POST /api/v2/create-permits/pairings/approve`, and the device-pairing approve and claim routes, which only browsers may call.
 
 API URLs with a query string are rejected before the body is read. The service does not enable credentialed cross-origin requests.
 
@@ -102,6 +102,14 @@ Kryptex-Create-Permit: v2.<base64url(P)>
 
 The value grammar, derivation, single use, and expiry are identical to the cookie. Creation routes never set or expire a cookie in response to a native request.
 
+A native client may instead present a permit minted by a [device grant](#device-grants-creation-authorization-version-3):
+
+```text
+Kryptex-Create-Permit: v3.<base64url(P)>
+```
+
+The prefix names the issuance, not a different permit: `v2.` seeds come from a Turnstile solve and `v3.` seeds from a device grant. Both map to the permit object through the same locator and token derivation, carry the same single-use state, and are accepted on the same three routes. A browser never presents a `v3.` value.
+
 ## Browser pairing for native clients
 
 A native client cannot run Turnstile. Browser pairing lets a person pass Turnstile in a browser and hand the resulting single-use permit to one native client. One Turnstile solve still mints at most one permit. The flow follows the OAuth device authorization grant: a short user code that the person sees and approves, separated from a high-entropy poll token that only the native client holds.
@@ -169,6 +177,190 @@ Redemption does not consume the permit. Repeating it after a lost response retur
 ### Phishing
 
 Anyone can start a pairing and send its link to someone else. Approving it grants the starter one creation permit, which is worth one Turnstile solve. The pairing page therefore tells the person to approve only a code that their own terminal shows.
+
+## Device grants (creation authorization version 3)
+
+A device grant lets a person pass Turnstile once and give one native client a standing, revocable right to mint creation permits. Decision record: [ADR 0002](../decisions/0002-native-client-authorization.md). The pairing routes above stay unchanged; device grants use their own routes, objects, and pages.
+
+### Constants
+
+| Name | Value |
+| --- | --- |
+| Grant lifetimes | `1`, `7`, `30`, or `90` days |
+| Device pairing lifetime | 600 seconds |
+| Device permit lifetime | 120 seconds |
+| Quota | 50 permits per rolling 24 hours, counted in whole UTC hours |
+
+### Capabilities
+
+| Capability | Holder | Tag resource kind | Tag capability kind | Tag locator |
+| --- | --- | --- | --- | --- |
+| Device token | Native client | `5=device` | `5=device-mint` | device locator |
+| Management token | Person, in the device management link | `5=device` | `6=device-manage` | device locator |
+| Device token, as poll credential | Native client | `6=device-pairing` | `5=device-mint` | pairing locator |
+| Claim token | Person's browser, in the claim cookie | `6=device-pairing` | `7=device-claim` | pairing locator |
+
+The device locator is 16 random bytes and every token is 32 random bytes, all generated by a client except the claim token, which the Worker generates. The pairing locator is the 5 user-code bytes followed by 11 zero bytes. All four are non-guessable and use the 30-second backoff cap. The device-pairing object is named `device-pairing:` followed by the 8 canonical user-code characters; the device object is named `device:` followed by the canonical base64url device locator.
+
+### Device permit derivation
+
+```text
+P = HMAC-SHA256(
+  permitIssuanceKey,
+  ASCII("kryptex/v3/device-permit/issuance") || 0x00 || deviceLocator[16] || requestId[16]
+)
+```
+
+`requestId` is the 16 bytes of the client's UUID v4. The permit locator and token derive from `P` exactly as for version 2. The device locator in the input keeps device permits apart from Turnstile permits: a request ID used for one never yields the other's seed.
+
+### `POST /api/v3/devices/pairings`
+
+Native requests only.
+
+```json
+{"deviceLocator":"<base64url-16>","deviceToken":"<base64url-32>","maxDays":30}
+```
+
+`maxDays` is a grant lifetime. The Worker generates a user code and initializes the device-pairing object if it is empty, storing the poll tag, the device-token tag for the future grant, the device locator, `maxDays`, the key ID, and the expiry. It retries with a fresh code when the object exists.
+
+```json
+{"pairingExpiresAt":1787227800,"serverTime":1787227200,"userCode":"ABCD-EFGH"}
+```
+
+### `POST /api/v3/devices/pairings/approve`
+
+Browser requests only.
+
+```json
+{"requestId":"550e8400-e29b-41d4-a716-446655440000","turnstileResponse":"...","userCode":"ABCD-EFGH"}
+```
+
+The Worker verifies Turnstile and initializes a version 2 permit exactly as pairing approval does. It generates a random 32-byte claim token, then asks the device-pairing object to record the request ID, issuance key ID, permit expiry, and claim-token tag. A pending, unexpired pairing records the approval. A pairing approved with the same request ID and not yet claimed replaces the claim-token tag and repeats the success. Every other state returns the generic unavailable response. The response sets:
+
+```text
+Set-Cookie: kx_device_claim_v3=v3.<8 user-code characters>.<base64url(claimToken)>; Max-Age=<seconds until pairing expiry>; Path=/api/v3/devices/pairings/claim; Secure; HttpOnly; SameSite=Strict
+```
+
+```json
+{"state":"approved"}
+```
+
+The approving page then navigates to the confirmation page. Gate failures use the permit-issuance error codes. The `/pair/device` page's Content Security Policy allows connections only to this route and to Turnstile, so a script in the Turnstile document cannot call the claim routes directly.
+
+### `POST /api/v3/devices/pairings/claim/status`
+
+Browser requests only. Body `{}`; the claim cookie is ambient. An approved, unclaimed pairing returns:
+
+```json
+{"maxDays":30,"pairingExpiresAt":1787227800}
+```
+
+A missing or invalid cookie, a wrong claim token, or any other state returns the generic unavailable response.
+
+### `POST /api/v3/devices/pairings/claim`
+
+Browser requests only, with the claim cookie.
+
+```json
+{"scope":"transfer"}
+{"days":30,"manageToken":"<base64url-32>","scope":"device"}
+```
+
+`days` is a grant lifetime no greater than the pairing's `maxDays`. The browser generates the management token in the Turnstile-free confirmation document.
+
+- `transfer` records the choice. Redemption then returns the version 2 permit recorded at approval.
+- `device` records the choice, the management-token tag, and `deviceExpiresAt = serverNow + days × 86400` in state `claiming`. The Worker then initializes the device object if it is empty, and confirms the claim, which moves the pairing to `claimed`.
+
+The first claim requires an unexpired pairing. A repeated claim with the same cookie and an identical choice repeats the success, and completes an interrupted `claiming`, for as long as the pairing record is retained. A different choice returns the generic unavailable response. Success expires the cookie and returns:
+
+```json
+{"scope":"transfer"}
+{"deviceExpiresAt":1789819200,"deviceLocator":"<base64url-16>","scope":"device"}
+```
+
+### `POST /api/v3/devices/pairings/redeem`
+
+Native requests only.
+
+```json
+{"deviceToken":"<base64url-32>","userCode":"ABCD-EFGH"}
+```
+
+The device-pairing object verifies the poll tag under the authorization lease and backoff. A pending, approved-but-unclaimed, or `claiming` pairing returns the following; for `claiming`, `pairingExpiresAt` may already have passed:
+
+```json
+{"pairingExpiresAt":1787227800,"state":"pending"}
+```
+
+A claimed pairing returns one of:
+
+```json
+{"permit":"v2.<base64url(P)>","permitExpiresAt":1787229000,"serverTime":1787227300,"state":"transfer"}
+{"deviceExpiresAt":1789819200,"state":"device"}
+```
+
+A pairing is retained until its expiry, a `transfer` pairing until its permit expires, and a `device` pairing for 1,800 seconds after the claim, so that redemption stays repeatable.
+
+### Device object
+
+The device object initializes only if empty. Initialization with identical tags and expiry repeats the success. It stores the device-token tag, the management-token tag, key ID, expiry, revoked flag, generation, hourly mint counts for the last 24 hours, request IDs minted within the device-permit lifetime with their mint time and issuance key ID, and every older request ID without a time. It never records which resource a permit created. Its alarm deletes all state at grant expiry; until then a revoked grant remains as a tombstone.
+
+### `POST /api/v3/devices/permits`
+
+Native requests only.
+
+```json
+{"deviceLocator":"<base64url-16>","deviceToken":"<base64url-32>","requestId":"550e8400-e29b-41d4-a716-446655440000"}
+```
+
+The device object verifies the device-token tag under the authorization lease and backoff. Inside one storage transaction it then rechecks the generation and requires the grant to be unrevoked and unexpired, and handles the request ID:
+
+- minted within the last 120 seconds: returns the recorded mint time and key ID without charging the quota;
+- known but older: `403` and `{"error":"creation_permit_required"}`, so that a spent ID never reads as a revoked grant;
+- unknown: when the last 24 hourly counts sum to 50 or more, returns `429` and `{"error":"quota_exhausted"}`; otherwise records the ID, the mint time, and the active issuance key ID, and increments the current hour.
+
+The Worker derives `P` with the recorded key, initializes the permit object with expiry `mintedAt + 120`, and returns:
+
+```json
+{"permit":"v3.<base64url(P)>","permitExpiresAt":1787227320,"serverTime":1787227200}
+```
+
+A replay after the permit was consumed returns `403` and `{"error":"creation_permit_required"}` from permit initialization. The client then mints with a fresh request ID.
+
+### `POST /api/v3/devices/status`
+
+Native or browser requests, with either capability:
+
+```json
+{"deviceLocator":"<base64url-16>","deviceToken":"<base64url-32>"}
+{"deviceLocator":"<base64url-16>","manageToken":"<base64url-32>"}
+```
+
+```json
+{"expiresAt":1789819200,"hourlyMints":[0,0,3,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0],"quotaRemaining":46,"state":"active"}
+```
+
+`state` is `active` or `revoked`. `hourlyMints` has 24 entries, oldest hour first, ending with the current UTC hour. After the alarm deletes the grant, the route returns the generic unavailable response.
+
+### `POST /api/v3/devices/revoke`
+
+Same inputs as status. Success returns `{"state":"revoked"}` and is repeatable. Outstanding device permits stay valid until their 120-second expiry.
+
+### Device management link
+
+```text
+https://host/d#<base64url(ASCII "KXD1" || 0x01 || deviceLocator[16] || manageToken[32])>
+```
+
+The 53-byte value is canonical unpadded base64url. It is not a `KXB1` bundle, and protocol version 1 does not change. The `/d` page follows the shared fragment lifecycle.
+
+### Rate limiting
+
+The device-pairing approve and redeem routes apply the blinded-locator limiter with resource kind `6` and the pairing locator. The permit, status, and revoke routes apply it with resource kind `5` and the device locator. Claim routes rely on the edge limiter.
+
+### Phishing and transcript exposure
+
+Approving a device pairing grants its starter up to the quota per day until the grant expires or is revoked. The pairing page therefore never prefills the code; the person types the code their own terminal shows. The confirmation page offers **this transfer only** and **this machine until a date**, with no preselection, and never a lifetime longer than the terminal requested. A party that reads the user code from an agent transcript can approve first and keep the management link; the person's own approval then fails, and the client can revoke the grant with its device token and pair again.
 
 ## Send routes
 

@@ -270,7 +270,7 @@ HMAC-SHA256(
 )
 ```
 
-Resource kind is `1=send`, `2=request`, `3=create-permit`. Capability kind is `1=retrieve/write`, `2=manage/owner`, `3=create`. The HTTP API adds resource kind `4=pairing` with capability kind `4=poll` for [browser pairing](api-v1.md#browser-pairing-for-native-clients); no existing value changes meaning. Verification reconstructs the exact input and uses `crypto.subtle.verify`. Key rotation retains old keys until every resource using them has expired.
+Resource kind is `1=send`, `2=request`, `3=create-permit`. Capability kind is `1=retrieve/write`, `2=manage/owner`, `3=create`. The HTTP API adds resource kind `4=pairing` with capability kind `4=poll` for [browser pairing](api-v1.md#browser-pairing-for-native-clients), and resource kinds `5=device` and `6=device-pairing` with capability kinds `5=device-mint`, `6=device-manage`, and `7=device-claim` for [device grants](api-v1.md#device-grants-creation-authorization-version-3); no existing value changes meaning. Verification reconstructs the exact input and uses `crypto.subtle.verify`. Key rotation retains old keys until every resource using them has expired.
 
 ## Candidate-object creation
 
