@@ -9,12 +9,14 @@ import { OwnerPage } from "./pages/owner-page";
 import { RequestPage } from "./pages/request-page";
 import { RetrievePage } from "./pages/retrieve-page";
 import { SendPage } from "./pages/send-page";
-import { GatePage, HomePage, PairPage, SecurityPage } from "./pages/static-pages";
+import { DeviceConfirmPage } from "./pages/device-confirm-page";
+import { DevicePage } from "./pages/device-page";
+import { DevicePairPage, GatePage, HomePage, PairPage, SecurityPage } from "./pages/static-pages";
 import { WriterPage } from "./pages/writer-page";
 import { PageIntro } from "./ui";
 import { gatePath, type CreationIntent } from "./verification";
 
-export const APP_ROUTES: readonly string[] = ["/", "/send", "/request", "/s", "/m", "/r", "/i", "/gate", "/pair", "/security"];
+export const APP_ROUTES: readonly string[] = ["/", "/send", "/request", "/s", "/m", "/r", "/i", "/gate", "/pair", "/pair/device", "/pair/device/confirm", "/d", "/security"];
 
 const FLOW_NAMES: Readonly<Record<string, string>> = {
   "/": "Home",
@@ -26,6 +28,9 @@ const FLOW_NAMES: Readonly<Record<string, string>> = {
   "/i": "Your request",
   "/gate": "Quick check",
   "/pair": "Approve a terminal",
+  "/pair/device": "Approve a terminal",
+  "/pair/device/confirm": "Approve a terminal",
+  "/d": "Manage a machine",
   "/security": "Security"
 };
 
@@ -43,6 +48,9 @@ export function createAppRouter(fragmentCapture: FragmentCapture) {
       { path: "i", element: <OwnerPage capture={fragmentCapture} /> },
       { path: "gate", element: <GatePage /> },
       { path: "pair", element: <PairPage capture={fragmentCapture} /> },
+      { path: "pair/device", element: <DevicePairPage capture={fragmentCapture} /> },
+      { path: "pair/device/confirm", element: <DeviceConfirmPage /> },
+      { path: "d", element: <DevicePage capture={fragmentCapture} /> },
       { path: "security", element: <SecurityPage /> }
     ]
   }]);

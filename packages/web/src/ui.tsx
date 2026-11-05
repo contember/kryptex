@@ -16,6 +16,8 @@ export interface ShareArtifact {
   /** Label for an action opening this artifact in a new tab. Only set it on links the owner keeps. */
   readonly openLabel?: string;
   readonly required: boolean;
+  /** Overrides the default saved-confirmation wording. */
+  readonly savedLabel?: string;
   readonly title: string;
   readonly value: string;
 }
@@ -200,7 +202,7 @@ function ShareRow({ artifact, saved, onSaved }: { readonly artifact: ShareArtifa
       : null}
     <label className="check-label">
       <input checked={saved} onChange={(event) => { onSaved(event.currentTarget.checked); }} type="checkbox" />
-      <span>{artifact.required ? "Saved" : "Saved or not needed"}</span>
+      <span>{artifact.savedLabel ?? (artifact.required ? "Saved" : "Saved or not needed")}</span>
     </label>
     <span aria-live="polite" className="sr-only">{clipboard.state === "copied" ? `${artifact.title} copied to clipboard.` : ""}</span>
   </li>;

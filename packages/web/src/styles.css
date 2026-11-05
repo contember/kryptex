@@ -205,6 +205,16 @@ input[type="radio"], input[type="checkbox"] { flex: 0 0 auto; width: 18px; heigh
 .status-sheet dd { margin: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; font-weight: 700; }
 .status-sheet dd .mono { color: var(--muted); font-size: 0.78rem; font-weight: 400; }
 
+.hourly-mints { margin: 0 0 24px; display: grid; gap: 8px; }
+.hourly-mints h2 { margin: 0; font-size: 0.95rem; }
+.hourly-mints table { width: 100%; border-collapse: collapse; }
+.hourly-mints th, .hourly-mints td { padding: 6px 0; border-bottom: 1px solid var(--rule); text-align: left; }
+.hourly-mints td { text-align: right; }
+.hourly-mints thead th { color: var(--secondary); font-weight: 400; }
+.hourly-mints thead th:last-child { text-align: right; }
+.hourly-mints tbody th { font-weight: 400; }
+.hourly-mints tfoot th, .hourly-mints tfoot td { border-bottom: 0; font-weight: 700; }
+
 .task-actions { margin: 32px 0; padding-top: 16px; display: grid; gap: 10px; border-top: 1px solid var(--rule-strong); }
 .task-actions h2 { margin: 0; font-size: 0.95rem; }
 .task-actions__row { display: flex; flex-wrap: wrap; gap: 8px; }

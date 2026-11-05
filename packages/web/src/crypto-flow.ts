@@ -1,4 +1,5 @@
 import type { FactorMode } from "@kryptex/contracts/protocol";
+import { decodeDeviceLink, type DeviceLink } from "@kryptex/contracts/device-link";
 import type { RequestStatusResponse } from "@kryptex/contracts/api";
 import { ApiFailure } from "@kryptex/client";
 import {
@@ -65,6 +66,29 @@ export function consumeBundle(capture: FragmentCapture, expectedKind: 1 | 2 | 3 
     return bundle.kind === expectedKind ? bundle : null;
   } catch {
     bundleCache.set(capture, null);
+    return null;
+  } finally {
+    fragment.fill(0);
+  }
+}
+
+const deviceLinkCache = new WeakMap<FragmentCapture, DeviceLink | null>();
+
+/** Reads the `/d` fragment once, wipes the copied bytes, and survives a StrictMode second read. */
+export function consumeDeviceLink(capture: FragmentCapture): DeviceLink | null {
+  const cached = deviceLinkCache.get(capture);
+  if (cached !== undefined) return cached;
+  const fragment = capture.fragmentBytes;
+  if (fragment === null) {
+    deviceLinkCache.set(capture, null);
+    return null;
+  }
+  try {
+    const link = decodeDeviceLink(strictUtf8(fragment));
+    deviceLinkCache.set(capture, link);
+    return link;
+  } catch {
+    deviceLinkCache.set(capture, null);
     return null;
   } finally {
     fragment.fill(0);
