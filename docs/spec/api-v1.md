@@ -245,7 +245,7 @@ Set-Cookie: kx_device_claim_v3=v3.<8 user-code characters>.<base64url(claimToken
 {"state":"approved"}
 ```
 
-The approving page then navigates to the confirmation page. Gate failures use the permit-issuance error codes.
+The approving page then navigates to the confirmation page. Gate failures use the permit-issuance error codes. The `/pair/device` page's Content Security Policy allows connections only to this route and to Turnstile, so a script in the Turnstile document cannot call the claim routes directly.
 
 ### `POST /api/v3/devices/pairings/claim/status`
 
@@ -316,7 +316,7 @@ Native requests only.
 The device object verifies the device-token tag under the authorization lease and backoff. Inside one storage transaction it then rechecks the generation and requires the grant to be unrevoked and unexpired, and handles the request ID:
 
 - minted within the last 120 seconds: returns the recorded mint time and key ID without charging the quota;
-- known but older: generic unavailable;
+- known but older: `403` and `{"error":"creation_permit_required"}`, so that a spent ID never reads as a revoked grant;
 - unknown: when the last 24 hourly counts sum to 50 or more, returns `429` and `{"error":"quota_exhausted"}`; otherwise records the ID, the mint time, and the active issuance key ID, and increments the current hour.
 
 The Worker derives `P` with the recorded key, initializes the permit object with expiry `mintedAt + 120`, and returns:

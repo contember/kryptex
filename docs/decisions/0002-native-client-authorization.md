@@ -51,7 +51,7 @@ The person pairs once per machine and service origin. Approval creates a revocab
 
 Device pairing uses new routes and new pages. The existing pairing routes, the `/pair` page, and their stored records stay byte-identical, and an old CLI keeps using them.
 
-1. `kryptex` generates a random 16-byte device locator and a 32-byte device token, and calls `POST /api/v2/devices/pairings` with them and the requested maximum duration. The service returns a user code, as today.
+1. `kryptex` generates a random 16-byte device locator and a 32-byte device token, and calls `POST /api/v3/devices/pairings` with them and the requested maximum duration. The service returns a user code, as today.
 2. The person opens `/pair/device`. The code is not prefilled: the person types the code their terminal shows. Turnstile runs in this document. The approve route verifies Turnstile, records the approval and a Turnstile-backed permit in the device-pairing object exactly as pairing does, and sets a claim cookie. It hands nothing out until the claim.
 3. A full-page navigation opens a Turnstile-free confirmation page. This repeats the `/gate` to `/send` pattern: the device management capability is a protected asset, and Turnstile must not run in a document that holds one.
 4. The confirmation page shows the duration the terminal asked for and offers **this transfer only** or **this machine until \<date\>**, with no preselection. It can shorten the duration but never extend it. For a device grant, the page generates a random 32-byte management token, sends it with the claim, and shows a **device management link** `/d#…` once, with the same copy and saved confirmation as other links. **This transfer only** mints one permit, as today's pairing does.
@@ -67,7 +67,7 @@ The claim cookie is single-use, HttpOnly, `Secure`, `SameSite=Strict`, scoped to
 
 #### Minting
 
-`POST /api/v2/devices/permits` (native only) takes the device locator, the device token, and a random request ID.
+`POST /api/v3/devices/permits` (native only) takes the device locator, the device token, and a random request ID.
 
 - The device object verifies the tag under the existing authorization lease and backoff. After `crypto.subtle.verify`, the charging transaction rechecks the generation, revoked state, and expiry before it counts the mint, as permit consumption does today.
 - Each request ID is recorded until the grant expires. A known ID within the permit window replays the same permit without a charge, so a lost response is safe to retry. A known ID after the window is rejected. An unknown ID is charged. The exact mint time is kept only for the permit window; after that, only the spent ID remains.
@@ -76,7 +76,7 @@ The claim cookie is single-use, HttpOnly, `Secure`, `SameSite=Strict`, scoped to
 
 #### Status and revocation
 
-`POST /api/v2/devices/status` and `POST /api/v2/devices/revoke` accept either the device token or the management token. Status returns state, expiry, remaining quota, and hourly counts. The `/d` page shows that status and offers revoke, following the shared fragment lifecycle. The device routes join the blinded-locator rate limiter as resource kind 5.
+`POST /api/v3/devices/status` and `POST /api/v3/devices/revoke` accept either the device token or the management token. Status returns state, expiry, remaining quota, and hourly counts. The `/d` page shows that status and offers revoke, following the shared fragment lifecycle. The device routes join the blinded-locator rate limiter as resource kind 5.
 
 #### Expiry, scopes, and rotation
 
