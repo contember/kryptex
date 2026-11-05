@@ -2,6 +2,12 @@ import {
   decodeUserCode,
   encodeUserCode,
   parseCreatePermitRequestJson,
+  parseDeviceAccessRequestJson,
+  parseDevicePairingApproveRequestJson,
+  parseDevicePairingClaimRequestJson,
+  parseDevicePairingRedeemRequestJson,
+  parseDevicePairingStartRequestJson,
+  parseDevicePermitRequestJson,
   parseEmptyRequestJson,
   parsePairingApproveRequestJson,
   parsePairingRedeemRequestJson,
@@ -16,7 +22,15 @@ import {
   parseSendRetrieveRequestJson,
   parseSendShortenRequestJson
 } from "@kryptex/contracts/api";
-import { API_ROUTES, CREATE_PERMIT_HEADER } from "@kryptex/contracts/protocol";
+import {
+  API_ROUTES,
+  CREATE_PERMIT_HEADER,
+  DEVICE_CLAIM_COOKIE,
+  DEVICE_PERMIT_TTL_SECONDS,
+  type ResourceKind
+} from "@kryptex/contracts/protocol";
+import { DeviceDurableObject } from "./device-object.js";
+import { DevicePairingDurableObject } from "./device-pairing-object.js";
 import { PairingDurableObject } from "./pairing-object.js";
 import { CreatePermitDurableObject } from "./permit-object.js";
 import { RequestDurableObject } from "./request-object.js";
@@ -25,6 +39,7 @@ import {
   CREATE_PERMIT_V2_TTL_SECONDS,
   decodeUuid,
   blindedLocator,
+  deriveDevicePermitMaterial,
   derivePermitFromSeed,
   derivePermitMaterial,
   encodeBase64Url,
@@ -35,17 +50,34 @@ import {
 import { checkWorkerEnvironment, type CheckedWorkerEnvironment, type WorkerEnv } from "./env.js";
 import {
   apiError,
+  deviceClaimCookie,
+  expiredDeviceClaimCookie,
   expiredPermitCookie,
   finalizeApiResponse,
   jsonResponse,
   normalizeBindingResponse,
   permitCookie,
   rateLimited,
-  secureAssetResponse
+  secureAssetResponse,
+  unavailable
 } from "./http.js";
-import { decodeCanonicalBase64Url, parseJson, property } from "./strict.js";
+import {
+  decodeCanonicalBase64Url,
+  exactObject,
+  integerProperty,
+  parseJson,
+  property,
+  stringProperty
+} from "./strict.js";
 
-export { CreatePermitDurableObject, PairingDurableObject, RequestDurableObject, SendDurableObject };
+export {
+  CreatePermitDurableObject,
+  DeviceDurableObject,
+  DevicePairingDurableObject,
+  PairingDurableObject,
+  RequestDurableObject,
+  SendDurableObject
+};
 
 const MAX_SMALL_BODY_BYTES = 8_192;
 const MAX_ENVELOPE_BODY_BYTES = 1_500_000;
@@ -53,6 +85,9 @@ export const LOCAL_TURNSTILE_DUMMY_TOKEN = "XXXX.DUMMY.TOKEN.XXXX";
 const MUTATING_ROUTES: ReadonlySet<string> = new Set([
   API_ROUTES.createPermit,
   API_ROUTES.pairingApprove,
+  API_ROUTES.devicePairingApprove,
+  API_ROUTES.devicePairingClaim,
+  API_ROUTES.deviceRevoke,
   API_ROUTES.sendCreate,
   API_ROUTES.sendRetrieve,
   API_ROUTES.sendRevoke,
@@ -64,8 +99,20 @@ const MUTATING_ROUTES: ReadonlySet<string> = new Set([
   API_ROUTES.requestShorten
 ]);
 
-const BROWSER_ONLY_ROUTES: ReadonlySet<string> = new Set([API_ROUTES.createPermit, API_ROUTES.pairingApprove]);
-const NATIVE_ONLY_ROUTES: ReadonlySet<string> = new Set([API_ROUTES.pairingStart, API_ROUTES.pairingRedeem]);
+const BROWSER_ONLY_ROUTES: ReadonlySet<string> = new Set([
+  API_ROUTES.createPermit,
+  API_ROUTES.pairingApprove,
+  API_ROUTES.devicePairingApprove,
+  API_ROUTES.devicePairingClaimStatus,
+  API_ROUTES.devicePairingClaim
+]);
+const NATIVE_ONLY_ROUTES: ReadonlySet<string> = new Set([
+  API_ROUTES.pairingStart,
+  API_ROUTES.pairingRedeem,
+  API_ROUTES.devicePairingStart,
+  API_ROUTES.devicePairingRedeem,
+  API_ROUTES.devicePermit
+]);
 
 type RequestMode = "browser" | "native";
 
@@ -119,10 +166,8 @@ async function readBody(request: Request, maximumBytes: number): Promise<string>
   }
 }
 
-function permitValue(request: Request, mode: RequestMode): string | null {
-  if (mode === "native") {
-    return request.headers.get(CREATE_PERMIT_HEADER);
-  }
+/** Returns the value of a cookie that appears exactly once. */
+function cookieValue(request: Request, name: string): string | null {
   const cookie = request.headers.get("Cookie");
   if (cookie === null) {
     return null;
@@ -130,15 +175,19 @@ function permitValue(request: Request, mode: RequestMode): string | null {
   const values = cookie
     .split(";")
     .map((part) => part.trim())
-    .filter((part) => part.startsWith("kx_create_v2="))
-    .map((part) => part.slice("kx_create_v2=".length));
+    .filter((part) => part.startsWith(`${name}=`))
+    .map((part) => part.slice(name.length + 1));
   return values.length === 1 ? values[0] ?? null : null;
 }
 
-/** A browser presents the permit only as its cookie, a native client only in its header. */
+function permitValue(request: Request, mode: RequestMode): string | null {
+  return mode === "native" ? request.headers.get(CREATE_PERMIT_HEADER) : cookieValue(request, "kx_create_v2");
+}
+
+/** A browser presents a Turnstile permit only as its cookie; a native client presents a Turnstile or device permit in its header. */
 function permitSeed(request: Request, mode: RequestMode): string | null {
   const value = permitValue(request, mode);
-  if (!value?.startsWith("v2.")) {
+  if (!value?.startsWith("v2.") && !(mode === "native" && value?.startsWith("v3."))) {
     return null;
   }
   const seed = value.slice(3);
@@ -268,7 +317,19 @@ async function passEdgeLimit(environment: WorkerEnv, request: Request, route: st
   return edgeLimitAllows(environment.EDGE_RATE_LIMITER, edgeLimitKey(route, request.headers.get("CF-Connecting-IP")));
 }
 
-function bearerLocator(route: string, text: string): { readonly locator: string; readonly resourceKind: 1 | 2 | 4 } | null {
+function bearerLocator(route: string, text: string): { readonly locator: string; readonly resourceKind: ResourceKind } | null {
+  if (route === API_ROUTES.devicePairingApprove || route === API_ROUTES.devicePairingRedeem) {
+    const userCode = route === API_ROUTES.devicePairingApprove
+      ? parseDevicePairingApproveRequestJson(text).userCode
+      : parseDevicePairingRedeemRequestJson(text).userCode;
+    return { locator: encodeBase64Url(pairingLocator(decodeUserCode(userCode))), resourceKind: 6 };
+  }
+  if (route === API_ROUTES.devicePermit) {
+    return { locator: parseDevicePermitRequestJson(text).deviceLocator, resourceKind: 5 };
+  }
+  if (route === API_ROUTES.deviceStatus || route === API_ROUTES.deviceRevoke) {
+    return { locator: parseDeviceAccessRequestJson(text).deviceLocator, resourceKind: 5 };
+  }
   if (route === API_ROUTES.pairingApprove || route === API_ROUTES.pairingRedeem) {
     const userCode = route === API_ROUTES.pairingApprove
       ? parsePairingApproveRequestJson(text).userCode
@@ -301,7 +362,7 @@ function bearerLocator(route: string, text: string): { readonly locator: string;
 
 export async function locatorLimitKey(
   rateLimitKey: Uint8Array,
-  resourceKind: 1 | 2 | 4,
+  resourceKind: ResourceKind,
   locator: string
 ): Promise<string> {
   return blindedLocator(rateLimitKey, resourceKind, decodeCanonicalBase64Url(locator, 16, "locator"));
@@ -310,7 +371,7 @@ export async function locatorLimitKey(
 export async function locatorLimitAllows(
   limiter: EdgeRateLimiter,
   rateLimitKey: Uint8Array,
-  resourceKind: 1 | 2 | 4,
+  resourceKind: ResourceKind,
   locator: string
 ): Promise<boolean> {
   return edgeLimitAllows(limiter, await locatorLimitKey(rateLimitKey, resourceKind, locator));
@@ -434,6 +495,20 @@ function validateRouteBody(route: string, text: string): boolean {
     parsePairingApproveRequestJson(text);
   } else if (route === API_ROUTES.pairingRedeem) {
     parsePairingRedeemRequestJson(text);
+  } else if (route === API_ROUTES.devicePairingStart) {
+    parseDevicePairingStartRequestJson(text);
+  } else if (route === API_ROUTES.devicePairingApprove) {
+    parseDevicePairingApproveRequestJson(text);
+  } else if (route === API_ROUTES.devicePairingClaimStatus) {
+    parseEmptyRequestJson(text);
+  } else if (route === API_ROUTES.devicePairingClaim) {
+    parseDevicePairingClaimRequestJson(text);
+  } else if (route === API_ROUTES.devicePairingRedeem) {
+    parseDevicePairingRedeemRequestJson(text);
+  } else if (route === API_ROUTES.devicePermit) {
+    parseDevicePermitRequestJson(text);
+  } else if (route === API_ROUTES.deviceStatus || route === API_ROUTES.deviceRevoke) {
+    parseDeviceAccessRequestJson(text);
   } else if (route === API_ROUTES.sendCreate) {
     parseSendCreateRequestJson(text);
   } else if (route === API_ROUTES.sendRetrieve) {
@@ -599,6 +674,242 @@ async function handlePairingRedeem(text: string, environment: WorkerEnv, checked
     serverTime: unixSeconds(),
     state
   });
+}
+
+function devicePairingStub(environment: WorkerEnv, userCode: string): DurableObjectStub {
+  return stubFor(environment.DEVICE_PAIRING_OBJECTS, `device-pairing:${userCode.replace("-", "")}`);
+}
+
+function deviceStub(environment: WorkerEnv, deviceLocator: string): DurableObjectStub {
+  return stubFor(environment.DEVICE_OBJECTS, `device:${deviceLocator}`);
+}
+
+interface DeviceClaimCredential {
+  readonly claimToken: string;
+  readonly userCode: string;
+}
+
+/** Reads the claim cookie `v3.<8 user-code characters>.<base64url claim token>`; anything else is no credential. */
+function deviceClaimCredential(request: Request): DeviceClaimCredential | null {
+  const value = cookieValue(request, DEVICE_CLAIM_COOKIE);
+  const match = value === null ? null : /^v3\.([0-9A-HJKMNP-TV-Z]{4})([0-9A-HJKMNP-TV-Z]{4})\.([A-Za-z0-9_-]{43})$/u.exec(value);
+  const [, head, tail, claimToken] = match ?? [];
+  if (head === undefined || tail === undefined || claimToken === undefined) {
+    return null;
+  }
+  const userCode = `${head}-${tail}`;
+  try {
+    decodeUserCode(userCode);
+    decodeCanonicalBase64Url(claimToken, 32, "claim token");
+  } catch {
+    return null;
+  }
+  return { claimToken, userCode };
+}
+
+type DeviceClaimResult =
+  | { readonly scope: "transfer" }
+  | {
+      readonly deviceExpiresAt: number;
+      readonly deviceLocator: string;
+      readonly deviceTag: string;
+      readonly keyId: string;
+      readonly manageTag: string;
+      readonly scope: "device";
+      readonly state: "claiming" | "claimed";
+    };
+
+function parseDeviceClaimResult(text: string): DeviceClaimResult {
+  const context = "device claim result";
+  const value = parseJson(text);
+  if (typeof value === "object" && value !== null && property(value, "scope", context) === "transfer") {
+    exactObject(value, ["scope"], context);
+    return { scope: "transfer" };
+  }
+  const object = exactObject(value, ["deviceExpiresAt", "deviceLocator", "deviceTag", "keyId", "manageTag", "scope", "state"], context);
+  const state = property(object, "state", context);
+  if (property(object, "scope", context) !== "device" || (state !== "claiming" && state !== "claimed")) {
+    throw new Error("device claim result is invalid");
+  }
+  return {
+    deviceExpiresAt: integerProperty(object, "deviceExpiresAt", context),
+    deviceLocator: stringProperty(object, "deviceLocator", context),
+    deviceTag: stringProperty(object, "deviceTag", context),
+    keyId: stringProperty(object, "keyId", context),
+    manageTag: stringProperty(object, "manageTag", context),
+    scope: "device",
+    state
+  };
+}
+
+async function handleDevicePairingStart(text: string, environment: WorkerEnv): Promise<Response> {
+  const input = parseDevicePairingStartRequestJson(text);
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const codeBytes = new Uint8Array(5);
+    crypto.getRandomValues(codeBytes);
+    const userCode = encodeUserCode(codeBytes);
+    const response = await invoke(devicePairingStub(environment, userCode), "init", { ...input, userCode });
+    if (response.status !== 409) {
+      return response;
+    }
+  }
+  return apiError("internal_error", 500);
+}
+
+async function handleDevicePairingApprove(
+  text: string,
+  environment: WorkerEnv,
+  checked: CheckedWorkerEnvironment,
+  siteverifyFetch: typeof fetch
+): Promise<{ readonly response: Response; readonly cookie?: string }> {
+  const input = parseDevicePairingApproveRequestJson(text);
+  const issuance = await issuePermit(input.requestId, input.turnstileResponse, environment, checked, siteverifyFetch);
+  if (issuance.kind !== "initialized") {
+    return { response: issuance.response };
+  }
+  const claimToken = randomBase64Url(32);
+  const response = await invokeWithRetry(devicePairingStub(environment, input.userCode), "approve", {
+    claimToken,
+    keyId: issuance.keyId,
+    permitExpiresAt: issuance.permitExpiresAt,
+    requestId: input.requestId,
+    userCode: input.userCode
+  });
+  if (!response.ok) {
+    return { response };
+  }
+  const context = "device pairing approval";
+  const pairingExpiresAt = integerProperty(
+    exactObject(parseJson(await response.text()), ["pairingExpiresAt", "state"], context),
+    "pairingExpiresAt",
+    context
+  );
+  return {
+    cookie: deviceClaimCookie(input.userCode.replace("-", ""), claimToken, Math.max(0, pairingExpiresAt - unixSeconds())),
+    response: jsonResponse({ state: "approved" })
+  };
+}
+
+async function handleDeviceClaimStatus(request: Request, text: string, environment: WorkerEnv): Promise<Response> {
+  parseEmptyRequestJson(text);
+  const credential = deviceClaimCredential(request);
+  if (credential === null) {
+    return unavailable();
+  }
+  return invoke(devicePairingStub(environment, credential.userCode), "claim-status", credential);
+}
+
+async function handleDeviceClaim(
+  request: Request,
+  text: string,
+  environment: WorkerEnv
+): Promise<{ readonly response: Response; readonly cookie?: string }> {
+  const choice = parseDevicePairingClaimRequestJson(text);
+  const credential = deviceClaimCredential(request);
+  if (credential === null) {
+    return { response: unavailable() };
+  }
+  const pairing = devicePairingStub(environment, credential.userCode);
+  const claimed = await invoke(pairing, "claim", { ...credential, ...choice });
+  if (!claimed.ok) {
+    return { response: claimed };
+  }
+  const result = parseDeviceClaimResult(await claimed.text());
+  if (result.scope === "transfer") {
+    return { cookie: expiredDeviceClaimCookie(), response: jsonResponse({ scope: "transfer" }) };
+  }
+  if (result.state === "claiming") {
+    const initialized = await invokeWithRetry(deviceStub(environment, result.deviceLocator), "init", {
+      deviceTag: result.deviceTag,
+      expiresAt: result.deviceExpiresAt,
+      keyId: result.keyId,
+      manageTag: result.manageTag
+    });
+    if (!initialized.ok) {
+      return { response: initialized };
+    }
+    const confirmed = await invokeWithRetry(pairing, "confirm", {});
+    if (!confirmed.ok) {
+      return { response: confirmed };
+    }
+  }
+  return {
+    cookie: expiredDeviceClaimCookie(),
+    response: jsonResponse({ deviceExpiresAt: result.deviceExpiresAt, deviceLocator: result.deviceLocator, scope: "device" })
+  };
+}
+
+async function handleDevicePairingRedeem(text: string, environment: WorkerEnv, checked: CheckedWorkerEnvironment): Promise<Response> {
+  const input = parseDevicePairingRedeemRequestJson(text);
+  const response = await invoke(devicePairingStub(environment, input.userCode), "redeem", input);
+  if (!response.ok) {
+    return response;
+  }
+  const context = "device pairing redemption";
+  const value = parseJson(await response.text());
+  const state = typeof value === "object" && value !== null ? property(value, "state", context) : undefined;
+  if (state === "pending") {
+    const object = exactObject(value, ["pairingExpiresAt", "state"], context);
+    return jsonResponse({ pairingExpiresAt: integerProperty(object, "pairingExpiresAt", context), state });
+  }
+  if (state === "device") {
+    const object = exactObject(value, ["deviceExpiresAt", "state"], context);
+    return jsonResponse({ deviceExpiresAt: integerProperty(object, "deviceExpiresAt", context), state });
+  }
+  const object = exactObject(value, ["keyId", "permitExpiresAt", "requestId", "state"], context);
+  const issuanceKey = checked.permitIssuanceKeys.get(stringProperty(object, "keyId", context));
+  if (state !== "transfer" || issuanceKey === undefined) {
+    return apiError("internal_error", 500);
+  }
+  const material = await derivePermitMaterial(issuanceKey, decodeUuid(stringProperty(object, "requestId", context)));
+  return jsonResponse({
+    permit: `v2.${encodeBase64Url(material.permitSeed)}`,
+    permitExpiresAt: integerProperty(object, "permitExpiresAt", context),
+    serverTime: unixSeconds(),
+    state
+  });
+}
+
+/** Charges the grant inside the device object, then initializes the one permit the request ID may mint. */
+async function handleDevicePermit(text: string, environment: WorkerEnv, checked: CheckedWorkerEnvironment): Promise<Response> {
+  const input = parseDevicePermitRequestJson(text);
+  const minted = await invoke(deviceStub(environment, input.deviceLocator), "mint", input);
+  if (!minted.ok) {
+    return minted;
+  }
+  const context = "device permit mint";
+  const object = exactObject(parseJson(await minted.text()), ["keyId", "mintedAt"], context);
+  const issuanceKey = checked.permitIssuanceKeys.get(stringProperty(object, "keyId", context));
+  if (issuanceKey === undefined) {
+    return apiError("internal_error", 500);
+  }
+  const material = await deriveDevicePermitMaterial(
+    issuanceKey,
+    decodeCanonicalBase64Url(input.deviceLocator, 16, "device locator"),
+    decodeUuid(input.requestId)
+  );
+  const body = {
+    locator: encodeBase64Url(material.locator),
+    permitExpiresAt: integerProperty(object, "mintedAt", context) + DEVICE_PERMIT_TTL_SECONDS,
+    token: encodeBase64Url(material.token)
+  };
+  const initialized = await invokeWithRetry(stubFor(environment.CREATE_PERMIT_OBJECTS, body.locator), "init", body);
+  if (!initialized.ok) {
+    return initialized;
+  }
+  return jsonResponse({
+    permit: `v3.${encodeBase64Url(material.permitSeed)}`,
+    permitExpiresAt: body.permitExpiresAt,
+    serverTime: unixSeconds()
+  });
+}
+
+async function handleDeviceAccess(route: string, text: string, environment: WorkerEnv): Promise<Response> {
+  const input = parseDeviceAccessRequestJson(text);
+  const body = "manageToken" in input
+    ? { capability: "manage", deviceLocator: input.deviceLocator, token: input.manageToken }
+    : { capability: "device", deviceLocator: input.deviceLocator, token: input.deviceToken };
+  return invoke(deviceStub(environment, input.deviceLocator), route === API_ROUTES.deviceStatus ? "status" : "revoke", body);
 }
 
 async function handlePermitStatus(request: Request, mode: RequestMode, text: string, environment: WorkerEnv): Promise<Response> {
@@ -817,6 +1128,29 @@ export async function handleApiRequest(
     if (route === API_ROUTES.pairingRedeem) {
       return finalizeApiResponse(await handlePairingRedeem(text, environment, checked), checked.expectedOrigin);
     }
+    if (route === API_ROUTES.devicePairingStart) {
+      return finalizeApiResponse(await handleDevicePairingStart(text, environment), checked.expectedOrigin);
+    }
+    if (route === API_ROUTES.devicePairingApprove) {
+      const result = await handleDevicePairingApprove(text, environment, checked, siteverifyFetch);
+      return finalizeApiResponse(result.response, checked.expectedOrigin, result.cookie);
+    }
+    if (route === API_ROUTES.devicePairingClaimStatus) {
+      return finalizeApiResponse(await handleDeviceClaimStatus(request, text, environment), checked.expectedOrigin);
+    }
+    if (route === API_ROUTES.devicePairingClaim) {
+      const result = await handleDeviceClaim(request, text, environment);
+      return finalizeApiResponse(result.response, checked.expectedOrigin, result.cookie);
+    }
+    if (route === API_ROUTES.devicePairingRedeem) {
+      return finalizeApiResponse(await handleDevicePairingRedeem(text, environment, checked), checked.expectedOrigin);
+    }
+    if (route === API_ROUTES.devicePermit) {
+      return finalizeApiResponse(await handleDevicePermit(text, environment, checked), checked.expectedOrigin);
+    }
+    if (route === API_ROUTES.deviceStatus || route === API_ROUTES.deviceRevoke) {
+      return finalizeApiResponse(await handleDeviceAccess(route, text, environment), checked.expectedOrigin);
+    }
     if (
       route === API_ROUTES.sendCreate ||
       route === API_ROUTES.sendRetrieve ||
@@ -853,12 +1187,17 @@ export async function handleApiRequest(
   }
 }
 
+/** Turnstile runs only on these pages, so none of them may ever hold a protected capability. */
+export function usesGatePolicy(pathname: string): boolean {
+  return pathname === "/gate" || pathname === "/pair" || pathname === "/pair/device";
+}
+
 export default {
   async fetch(request: Request, environment: WorkerEnv): Promise<Response> {
     const pathname = new URL(request.url).pathname;
     if (pathname.startsWith("/api/")) {
       return handleApiRequest(request, environment, fetch);
     }
-    return secureAssetResponse(await environment.ASSETS.fetch(request), pathname === "/gate" || pathname === "/pair");
+    return secureAssetResponse(await environment.ASSETS.fetch(request), usesGatePolicy(pathname));
   }
 } satisfies ExportedHandler<WorkerEnv>;

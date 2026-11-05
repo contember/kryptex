@@ -1,3 +1,4 @@
+import type { CapabilityKind, ResourceKind } from "@kryptex/contracts/protocol";
 import { decodeCanonicalBase64Url } from "./strict.js";
 
 const encoder = new TextEncoder();
@@ -5,6 +6,7 @@ const encoder = new TextEncoder();
 const CAPABILITY_PREFIX = encoder.encode("kryptex/v1/server-capability-tag");
 const RATE_LIMIT_PREFIX = encoder.encode("kryptex/v1/rate-limit-locator");
 const PERMIT_ISSUANCE_LABEL = "kryptex/v1/create-permit/issuance";
+const DEVICE_PERMIT_ISSUANCE_LABEL = "kryptex/v3/device-permit/issuance";
 const PERMIT_LOCATOR_LABEL = "kryptex/v1/create-permit/locator";
 const PERMIT_TOKEN_LABEL = "kryptex/v1/create-permit/token";
 
@@ -76,8 +78,8 @@ export async function hmacVerify(key: Uint8Array, tag: Uint8Array, message: Uint
 }
 
 export function capabilityMessage(
-  resourceKind: 1 | 2 | 3 | 4,
-  capabilityKind: 1 | 2 | 3 | 4,
+  resourceKind: ResourceKind,
+  capabilityKind: CapabilityKind,
   locator: Uint8Array,
   token: Uint8Array
 ): Uint8Array {
@@ -86,8 +88,8 @@ export function capabilityMessage(
 
 export async function capabilityTag(
   key: Uint8Array,
-  resourceKind: 1 | 2 | 3 | 4,
-  capabilityKind: 1 | 2 | 3 | 4,
+  resourceKind: ResourceKind,
+  capabilityKind: CapabilityKind,
   locator: Uint8Array,
   token: Uint8Array
 ): Promise<string> {
@@ -97,8 +99,8 @@ export async function capabilityTag(
 export async function verifyCapabilityTag(
   key: Uint8Array,
   tag: string,
-  resourceKind: 1 | 2 | 3 | 4,
-  capabilityKind: 1 | 2 | 3 | 4,
+  resourceKind: ResourceKind,
+  capabilityKind: CapabilityKind,
   locator: Uint8Array,
   token: Uint8Array
 ): Promise<boolean> {
@@ -108,7 +110,7 @@ export async function verifyCapabilityTag(
 
 export async function blindedLocator(
   key: Uint8Array,
-  resourceKind: 1 | 2 | 3 | 4,
+  resourceKind: ResourceKind,
   locator: Uint8Array
 ): Promise<string> {
   const message = concatenate([RATE_LIMIT_PREFIX, new Uint8Array([0, resourceKind]), locator]);
@@ -132,17 +134,33 @@ async function hkdfExpand(prk: Uint8Array, label: string, length: number): Promi
   return block.slice(0, length);
 }
 
-export async function derivePermitMaterial(issuanceKey: Uint8Array, requestIdBytes: Uint8Array): Promise<PermitMaterial> {
-  const permitSeed = await hmacSign(
-    issuanceKey,
-    concatenate([encoder.encode(PERMIT_ISSUANCE_LABEL), new Uint8Array([0]), requestIdBytes])
-  );
+async function permitMaterial(issuanceKey: Uint8Array, input: Uint8Array): Promise<PermitMaterial> {
+  const permitSeed = await hmacSign(issuanceKey, input);
   const derived = await derivePermitFromSeed(permitSeed);
   return {
     locator: derived.locator,
     permitSeed,
     token: derived.token
   };
+}
+
+export async function derivePermitMaterial(issuanceKey: Uint8Array, requestIdBytes: Uint8Array): Promise<PermitMaterial> {
+  return permitMaterial(
+    issuanceKey,
+    concatenate([encoder.encode(PERMIT_ISSUANCE_LABEL), new Uint8Array([0]), requestIdBytes])
+  );
+}
+
+/** The device locator in the input keeps device permits apart from Turnstile permits minted for the same request ID. */
+export async function deriveDevicePermitMaterial(
+  issuanceKey: Uint8Array,
+  deviceLocator: Uint8Array,
+  requestIdBytes: Uint8Array
+): Promise<PermitMaterial> {
+  return permitMaterial(
+    issuanceKey,
+    concatenate([encoder.encode(DEVICE_PERMIT_ISSUANCE_LABEL), new Uint8Array([0]), deviceLocator, requestIdBytes])
+  );
 }
 
 export async function derivePermitFromSeed(seed: Uint8Array): Promise<{ readonly locator: Uint8Array; readonly token: Uint8Array }> {
@@ -153,7 +171,7 @@ export async function derivePermitFromSeed(seed: Uint8Array): Promise<{ readonly
   };
 }
 
-/** The pairing capability-tag locator: the 5 user-code bytes followed by 11 zero bytes. */
+/** The pairing and device-pairing capability-tag locator: the 5 user-code bytes followed by 11 zero bytes. */
 export function pairingLocator(codeBytes: Uint8Array): Uint8Array {
   const locator = new Uint8Array(16);
   locator.set(codeBytes);

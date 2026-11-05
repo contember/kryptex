@@ -29,7 +29,9 @@
       { "name": "SEND_OBJECTS", "class_name": "SendDurableObject" },
       { "name": "REQUEST_OBJECTS", "class_name": "RequestDurableObject" },
       { "name": "CREATE_PERMIT_OBJECTS", "class_name": "CreatePermitDurableObject" },
-      { "name": "PAIRING_OBJECTS", "class_name": "PairingDurableObject" }
+      { "name": "PAIRING_OBJECTS", "class_name": "PairingDurableObject" },
+      { "name": "DEVICE_PAIRING_OBJECTS", "class_name": "DevicePairingDurableObject" },
+      { "name": "DEVICE_OBJECTS", "class_name": "DeviceDurableObject" }
     ]
   },
   "migrations": [
@@ -40,6 +42,10 @@
     {
       "tag": "v2",
       "new_sqlite_classes": ["PairingDurableObject"]
+    },
+    {
+      "tag": "v3",
+      "new_sqlite_classes": ["DevicePairingDurableObject", "DeviceDurableObject"]
     }
   ],
   "r2_buckets": [

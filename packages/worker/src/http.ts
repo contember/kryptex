@@ -1,4 +1,5 @@
 import type { ApiErrorCode } from "@kryptex/contracts/api";
+import { API_ROUTES, DEVICE_CLAIM_COOKIE } from "@kryptex/contracts/protocol";
 import { CREATE_PERMIT_V2_TTL_SECONDS, unixSeconds } from "./core.js";
 
 const JSON_CONTENT_TYPE = "application/json; charset=utf-8";
@@ -48,6 +49,15 @@ export function expiredPermitCookie(): string {
 
 export function permitCookie(seed: string): string {
   return `kx_create_v2=v2.${seed}; Max-Age=${CREATE_PERMIT_V2_TTL_SECONDS}; Path=/api/; Secure; HttpOnly; SameSite=Strict`;
+}
+
+/** The claim cookie reaches only the two claim routes and lives no longer than its pairing. */
+export function deviceClaimCookie(compactUserCode: string, claimToken: string, maxAgeSeconds: number): string {
+  return `${DEVICE_CLAIM_COOKIE}=v3.${compactUserCode}.${claimToken}; Max-Age=${maxAgeSeconds}; Path=${API_ROUTES.devicePairingClaim}; Secure; HttpOnly; SameSite=Strict`;
+}
+
+export function expiredDeviceClaimCookie(): string {
+  return `${DEVICE_CLAIM_COOKIE}=; Max-Age=0; Path=${API_ROUTES.devicePairingClaim}; Secure; HttpOnly; SameSite=Strict`;
 }
 
 const APPLICATION_CSP = [

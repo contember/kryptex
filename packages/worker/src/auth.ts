@@ -1,4 +1,4 @@
-import { FAILED_ACCESS_SATURATION } from "@kryptex/contracts/protocol";
+import { FAILED_ACCESS_SATURATION, type CapabilityKind, type ResourceKind } from "@kryptex/contracts/protocol";
 import { decodeCanonicalBase64Url } from "./strict.js";
 import {
   AUTH_FAILURE_SATURATION,
@@ -8,6 +8,8 @@ import {
   type AuthLease,
   type AuthResult,
   type CapabilitySnapshot,
+  type DevicePairingRecord,
+  type DeviceRecord,
   type PairingRecord,
   type PermitRecord,
   type RequestRecord,
@@ -16,12 +18,12 @@ import {
 import { randomBase64Url, unixSeconds, verifyCapabilityTag, ZERO_TAG } from "./core.js";
 import type { CheckedWorkerEnvironment } from "./env.js";
 
-type StoredRecord = SendRecord | RequestRecord | PermitRecord | PairingRecord;
+type StoredRecord = SendRecord | RequestRecord | PermitRecord | PairingRecord | DevicePairingRecord | DeviceRecord;
 
 interface AuthenticationInput {
-  readonly capabilityKind: 1 | 2 | 3 | 4;
+  readonly capabilityKind: CapabilityKind;
   readonly locator: Uint8Array;
-  readonly resourceKind: 1 | 2 | 3 | 4;
+  readonly resourceKind: ResourceKind;
   readonly token: Uint8Array;
 }
 
@@ -35,43 +37,35 @@ export type ReservationResult =
   | { readonly kind: "rate_limited" }
   | { readonly kind: "reserved"; readonly reservation: AuthenticationReservation };
 
-function snapshotFor(record: StoredRecord | undefined, capabilityKind: 1 | 2 | 3 | 4, activeKeyId: string): CapabilitySnapshot {
+function snapshotFor(record: StoredRecord | undefined, capabilityKind: CapabilityKind, activeKeyId: string): CapabilitySnapshot {
   if (record === undefined) {
     return { generation: -1, keyId: activeKeyId, tag: ZERO_TAG };
   }
-  if (record.kind === "send") {
-    return {
-      generation: record.generation,
-      keyId: record.authKeyId,
-      tag: capabilityKind === 1 ? record.retrieveTag ?? ZERO_TAG : record.manageTag
-    };
-  }
-  if (record.kind === "request") {
-    return {
-      generation: record.generation,
-      keyId: record.authKeyId,
-      tag: capabilityKind === 1 ? record.writeTag ?? ZERO_TAG : record.ownerTag
-    };
-  }
-  return { generation: record.generation, keyId: record.authKeyId, tag: record.tag };
+  return { generation: record.generation, keyId: record.authKeyId, tag: currentTag(record, capabilityKind) ?? ZERO_TAG };
 }
 
 /** Counts only a wrong access token, so a lost race never reads to the owner as someone probing the link. */
 function withFailedAccess(record: StoredRecord): StoredRecord | null {
-  if (record.kind === "permit" || record.kind === "pairing" || record.failedAccessAttempts >= FAILED_ACCESS_SATURATION) {
+  if ((record.kind !== "send" && record.kind !== "request") || record.failedAccessAttempts >= FAILED_ACCESS_SATURATION) {
     return null;
   }
   return { ...record, failedAccessAttempts: record.failedAccessAttempts + 1 };
 }
 
 /** Only a passphrase-derived retrieve or write token can be guessed online; every other token is 128 bits or more of randomness. */
-function guessableCapability(record: StoredRecord | undefined, capabilityKind: 1 | 2 | 3 | 4): boolean {
+function guessableCapability(record: StoredRecord | undefined, capabilityKind: CapabilityKind): boolean {
   return capabilityKind === 1 && (record?.kind === "send" || record?.kind === "request") && record.factorMode === 1;
 }
 
-function currentTag(record: StoredRecord | undefined, capabilityKind: 1 | 2 | 3 | 4): string | null | undefined {
+function currentTag(record: StoredRecord | undefined, capabilityKind: CapabilityKind): string | null | undefined {
   if (record === undefined) {
     return undefined;
+  }
+  if (record.kind === "device_pairing") {
+    return capabilityKind === 7 ? record.approval?.claimTag ?? null : record.pollTag;
+  }
+  if (record.kind === "device") {
+    return capabilityKind === 6 ? record.manageTag : record.deviceTag;
   }
   if (record.kind === "send") {
     return capabilityKind === 1 ? record.retrieveTag : record.manageTag;
@@ -122,7 +116,7 @@ export async function authenticate(
 
 export function reserveAuthentication(
   storage: DurableObjectStorage,
-  capabilityKind: 1 | 2 | 3 | 4,
+  capabilityKind: CapabilityKind,
   activeKeyId: string,
   attemptId: string,
   clock: () => number
@@ -155,7 +149,7 @@ export function reserveAuthentication(
 
 export function finishAuthentication(
   storage: DurableObjectStorage,
-  capabilityKind: 1 | 2 | 3 | 4,
+  capabilityKind: CapabilityKind,
   reservation: AuthenticationReservation,
   verified: boolean,
   clock: () => number

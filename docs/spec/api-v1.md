@@ -271,7 +271,7 @@ Browser requests only, with the claim cookie.
 - `transfer` records the choice. Redemption then returns the version 2 permit recorded at approval.
 - `device` records the choice, the management-token tag, and `deviceExpiresAt = serverNow + days × 86400` in state `claiming`. The Worker then initializes the device object if it is empty, and confirms the claim, which moves the pairing to `claimed`.
 
-A repeated claim with the same cookie and an identical choice repeats the success and completes an interrupted `claiming`. A different choice returns the generic unavailable response. Success expires the cookie and returns:
+The first claim requires an unexpired pairing. A repeated claim with the same cookie and an identical choice repeats the success, and completes an interrupted `claiming`, for as long as the pairing record is retained. A different choice returns the generic unavailable response. Success expires the cookie and returns:
 
 ```json
 {"scope":"transfer"}
@@ -286,7 +286,7 @@ Native requests only.
 {"deviceToken":"<base64url-32>","userCode":"ABCD-EFGH"}
 ```
 
-The device-pairing object verifies the poll tag under the authorization lease and backoff. A pending, approved-but-unclaimed, or `claiming` pairing returns:
+The device-pairing object verifies the poll tag under the authorization lease and backoff. A pending, approved-but-unclaimed, or `claiming` pairing returns the following; for `claiming`, `pairingExpiresAt` may already have passed:
 
 ```json
 {"pairingExpiresAt":1787227800,"state":"pending"}
