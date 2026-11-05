@@ -4,6 +4,11 @@ import {
   parseCreatePermitResponse,
   parseCreatePermitStatusResponse,
   parseCreateResourceResponse,
+  parseDevicePairingClaimResponse,
+  parseDevicePairingClaimStatusResponse,
+  parseDevicePairingRedeemResponse,
+  parseDevicePermitResponse,
+  parseDeviceStatusResponse,
   parsePairingApproveResponse,
   parsePairingRedeemResponse,
   parsePairingStartResponse,
@@ -22,6 +27,19 @@ import {
   type CreatePermitResponse,
   type CreatePermitStatusResponse,
   type CreateResourceResponse,
+  type DeviceAccessRequest,
+  type DevicePairingApproveRequest,
+  type DevicePairingApproveResponse,
+  type DevicePairingClaimRequest,
+  type DevicePairingClaimResponse,
+  type DevicePairingClaimStatusResponse,
+  type DevicePairingRedeemRequest,
+  type DevicePairingRedeemResponse,
+  type DevicePairingStartRequest,
+  type DevicePairingStartResponse,
+  type DevicePermitRequest,
+  type DevicePermitResponse,
+  type DeviceStatusResponse,
   type PairingApproveRequest,
   type PairingApproveResponse,
   type PairingRedeemRequest,
@@ -168,7 +186,8 @@ export class KryptexClient {
       }
       try {
         const code = parseApiJsonText(text, parseApiErrorResponse).error;
-        const gateRetry = code === "gate_unavailable" && (route === API_ROUTES.createPermit || route === API_ROUTES.pairingApprove);
+        const gateRetry = code === "gate_unavailable" &&
+          (route === API_ROUTES.createPermit || route === API_ROUTES.pairingApprove || route === API_ROUTES.devicePairingApprove);
         throw new ApiFailure(code, response.status >= 500 ? ambiguousAfterDispatch : gateRetry, stateCheckedAt);
       } catch (error) {
         if (error instanceof ApiFailure) throw error;
@@ -221,6 +240,33 @@ export class KryptexClient {
   }
   redeemPairing(input: PairingRedeemRequest): Promise<PairingRedeemResponse> {
     return this.#json(API_ROUTES.pairingRedeem, input, parsePairingRedeemResponse, false);
+  }
+  startDevicePairing(input: DevicePairingStartRequest): Promise<DevicePairingStartResponse> {
+    return this.#json(API_ROUTES.devicePairingStart, input, parsePairingStartResponse, false);
+  }
+  approveDevicePairing(input: DevicePairingApproveRequest): Promise<DevicePairingApproveResponse> {
+    return this.#json(API_ROUTES.devicePairingApprove, input, parsePairingApproveResponse, true);
+  }
+  /** Browser only: the claim cookie set by approval is ambient. */
+  devicePairingClaimStatus(): Promise<DevicePairingClaimStatusResponse> {
+    return this.#json(API_ROUTES.devicePairingClaimStatus, {}, parseDevicePairingClaimStatusResponse, false);
+  }
+  /** Repeating an identical claim is safe, so a lost response may be retried. */
+  claimDevicePairing(input: DevicePairingClaimRequest): Promise<DevicePairingClaimResponse> {
+    return this.#json(API_ROUTES.devicePairingClaim, input, parseDevicePairingClaimResponse, true);
+  }
+  redeemDevicePairing(input: DevicePairingRedeemRequest): Promise<DevicePairingRedeemResponse> {
+    return this.#json(API_ROUTES.devicePairingRedeem, input, parseDevicePairingRedeemResponse, false);
+  }
+  /** Retrying with the same request ID returns the same permit without charging the quota again. */
+  mintDevicePermit(input: DevicePermitRequest): Promise<DevicePermitResponse> {
+    return this.#json(API_ROUTES.devicePermit, input, parseDevicePermitResponse, true);
+  }
+  deviceStatus(input: DeviceAccessRequest): Promise<DeviceStatusResponse> {
+    return this.#json(API_ROUTES.deviceStatus, input, parseDeviceStatusResponse, false);
+  }
+  revokeDevice(input: DeviceAccessRequest): Promise<RevokeResponse> {
+    return this.#json(API_ROUTES.deviceRevoke, input, parseRevokeResponse, true);
   }
   createSend(input: SendCreateRequest, permit?: string): Promise<CreateResourceResponse> {
     return this.#json(API_ROUTES.sendCreate, input, parseCreateResourceResponse, true, permit);

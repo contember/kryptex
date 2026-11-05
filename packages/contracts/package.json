@@ -8,6 +8,10 @@
       "types": "./src/api.ts",
       "import": "./src/api.ts"
     },
+    "./device-link": {
+      "types": "./src/device-link.ts",
+      "import": "./src/device-link.ts"
+    },
     "./envelopes": {
       "types": "./src/envelopes.ts",
       "import": "./src/envelopes.ts"
