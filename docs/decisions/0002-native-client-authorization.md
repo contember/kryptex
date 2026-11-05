@@ -106,7 +106,7 @@ One Turnstile solve now funds up to quota × lifetime creations, for example 1,5
 
 #### CLI and migration
 
-- A versioned device file per origin, `devices/<sha256(canonical origin)>.json` in the state directory, mode `0600`, under the existing directory ownership and permission checks. It holds the origin, locator, token, scope, and expiry. It is never printed, and `list` does not show it.
+- A versioned device file per origin, `devices/<sha256(canonical origin)>.json` in the state directory, mode `0600`, under the existing directory ownership and permission checks. It holds the origin, locator, token, and expiry. It is never printed, and `list` does not show it.
 - New operations with a valid device file mint a permit with a request ID recorded before the call, then continue to `creating` without a `pairing` phase. The first `create` then returns `hand_over_write_link` directly.
 - `rate_limited`, network failures, and `5xx` from the mint route are retryable and keep the device file; concurrent mints from one machine meet the per-kind authorization lease and retry. Only the generic unavailable response means the grant is revoked or expired: the CLI deletes the device file and starts a pairing.
 - In device mode, `creation_permit_required` from permit status or creation mints again with a fresh request ID instead of starting a pairing.

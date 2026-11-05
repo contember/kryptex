@@ -15,9 +15,9 @@ The generated second key is the recommended protection. Its instruction says: **
 
 ## Shared fragment lifecycle
 
-The `/s`, `/m`, `/r`, and `/i` shells all follow one rule. Before parsing or rendering secret-related UI, the shell copies the fragment into memory and synchronously removes it with `history.replaceState`. It never persists the copied bytes.
+The `/s`, `/m`, `/r`, `/i`, and `/d` shells all follow one rule. Before parsing or rendering secret-related UI, the shell copies the fragment into memory and synchronously removes it with `history.replaceState`. It never persists the copied bytes.
 
-After removal, Reload, Back, crash recovery, and a duplicated scrubbed tab cannot reconstruct the capability. The page tells the user to reopen the original link. This applies to recipient, management, writer, and owner pages. No flow stores decrypted values or fragment material in `localStorage`, `sessionStorage`, IndexedDB, Cache Storage, or a service worker.
+After removal, Reload, Back, crash recovery, and a duplicated scrubbed tab cannot reconstruct the capability. The page tells the user to reopen the original link. This applies to recipient, management, writer, owner, and device management pages. No flow stores decrypted values or fragment material in `localStorage`, `sessionStorage`, IndexedDB, Cache Storage, or a service worker.
 
 ## Home
 
