@@ -14,70 +14,77 @@ The transfer slip is the product-specific interaction pattern. It appears only a
 
 A small split-seal mark may connect the recipient link and second factor inside this slip. Do not repeat it throughout the application. It is drawn with CSS, not an image asset.
 
+## Family
+
+Kryptex is a sibling of the Fabrika console and wears its design language: IBM Plex, one brand blue, quiet tiles on a floor, status as a lamp, and category as a mono chip. Token values are the console's own, so the two products read as one family. Kryptex keeps its own wordmark and never draws Fabrika's mark.
+
 ## Rejected defaults
 
 - No dashboard sidebar or persistent lifecycle rail. Use one focused task per route.
-- No neon-on-black security aesthetic. Use archival paper and graphite in light mode, muted ledger surfaces in dark mode.
+- No neon-on-black security aesthetic. Light mode is the console's pale floor with white controls; dark mode is its near-black floor with one-step-lighter tiles.
 - No grid of generic cards. Use sections that read as one custody document and detach only for capability receipts.
 - No decorative shields or lock icons. Use the split seal, explicit labels, and state text.
 - No rounded pill controls. Controls are compact, squared, and tactile.
+- No coloured side border on a rounded surface. Mark state with a lamp, a tint, or text colour.
 
 ## Palette
 
 Light primitives:
 
 ```text
---ledger-canvas: #f4f0e7
---ledger-raised: #faf7f0
---ledger-inset: #ebe5da
---ink-primary: #1f2624
---ink-secondary: #4e5955
---ink-tertiary: #56615d
---ink-muted: #5e6864
---rule-soft: rgb(31 38 36 / 10%)
---rule-standard: rgb(31 38 36 / 18%)
---rule-emphasis: rgb(31 38 36 / 32%)
---control-border: #777f7b
---seal: #16745e
---seal-soft: #d9ebe5
---brass: #815217
---burn: #a23e32
---burn-soft: #f3ded9
+--floor: #f6f7f9
+--recess: #f1f3f6
+--tile: rgb(14 20 32 / 4.5%)
+--plate-raised: #ffffff
+--rule-soft / --rule / --rule-strong: rgb(14 20 32 / 5% / 10% / 18%)
+--ink: #0e1117
+--ink-2: #343d4a
+--ink-3: #4b5563
+--brand: #2544c2
+--blueprint: #2544c2
+--control: #ffffff
+--control-rule: #7f8896
+--lamp-ok: #177a4a
+--lamp-run: #a8630a (text: #8a5409)
+--lamp-stop: #bf2f2f
 ```
 
 Dark primitives:
 
 ```text
---ledger-canvas: #171b1a
---ledger-raised: #1e2422
---ledger-inset: #121615
---ink-primary: #ebe8df
---ink-secondary: #bcc2bd
---ink-tertiary: #a7afa9
---ink-muted: #959e98
---rule-soft: rgb(235 232 223 / 8%)
---rule-standard: rgb(235 232 223 / 15%)
---rule-emphasis: rgb(235 232 223 / 28%)
---control-border: #6f7974
---seal: #54aa91
---seal-soft: #203a33
---brass: #c39455
---burn: #d87568
---burn-soft: #432824
+--floor: #080a0d
+--recess: #0a0d11
+--tile: #15191f
+--plate-raised: #1b2027
+--rule-soft / --rule / --rule-strong: rgb(255 255 255 / 5.5% / 10% / 18%)
+--ink: #f1f3f6
+--ink-2: #b0b2b8
+--ink-3: #85878e
+--brand: #2544c2
+--blueprint: #9dabe4
+--control: #11151a
+--control-rule: #666e7a
+--lamp-ok: #3fc084
+--lamp-run: #efa93f
+--lamp-stop: #f4736f
 ```
 
-Color communicates action and state. Seal green means required factor input is present and well-formed; it does not claim server authorization. Brass means time or attention. Burn red is reserved for destructive or failed state. Status never relies on color alone. Muted colors remain text-safe at normal sizes; translucent rules and soft fills are decorative only.
+The brand blue at full strength fills only the page's one constructive button and the wordmark in light mode. Links, the chosen option, and focus use the lighter blueprint mixes. Lamps are status only: green means a step is complete or a value is well-formed (it does not claim server authorization), amber means time or attention, red is reserved for destructive or failed state. Status never relies on colour alone. Washes and translucent rules are decorative only.
+
+The theme follows the operating system through `prefers-color-scheme`.
 
 ## Depth and surfaces
 
-Use borders and subtle surface shifts only. Do not use drop shadows. The page is `ledger-canvas`, capability receipts and overlays are `ledger-raised`, and inputs are `ledger-inset`. Quiet document rules use soft, standard, and emphasis tokens only as decoration. Every unfocused interactive control uses `control-border`, which has at least 3:1 contrast against adjacent permitted surfaces. Focus uses a 2px seal outline with a 2px canvas offset.
+Depth is quiet surface shifts, not borders or shadows. The page is `floor`; transfer slips, summaries, and revealed content are `tile`; inputs and share values are `control`. Hairline rules separate rows inside a tile. The confirmation dialog is the one surface that floats, and so the one with a shadow. Every unfocused interactive control uses `control-rule`, which keeps at least 3:1 contrast against adjacent surfaces; this is darker than the console's hairline on purpose. Focus is a 2px blueprint outline, or a blueprint border with a 3px soft ring on text fields.
 
 ## Typography
 
-- Prose and controls: self-hosted Atkinson Hyperlegible, weights 400 and 700.
-- Capabilities, fingerprints, times, counters, and technical metadata: system `ui-monospace` with tabular numbers.
-- Headings use weight and tracking, not oversized display typography.
+- Prose and controls: self-hosted IBM Plex Sans (variable, Latin subset).
+- Capabilities, fingerprints, times, counters, chips, and technical metadata: self-hosted IBM Plex Mono with tabular numbers.
+- Step labels and plate labels are small, letter-spaced capitals.
+- Headings use weight and tight tracking, not oversized display typography.
 - Secret values are monospace only when the content is already code-like; arbitrary prose remains in the primary typeface.
+- Below 640px, body text is 15px and inputs use 16px so phones do not zoom into them; wider screens use the console's 14px.
 
 No remote fonts are permitted.
 
@@ -85,10 +92,11 @@ No remote fonts are permitted.
 
 - Base unit: 4px.
 - Control gaps: 8px.
-- Component padding: 12px or 16px.
+- Component padding: 16px on phones, 24px inline on wider screens.
 - Section separation: 24px or 32px.
 - Major flow separation: 48px.
-- Radii: 4px controls, 8px sections, 12px dialogs only.
+- Radii: 4px controls, 6px tiles, 10px dialogs only.
+- Controls are 44px tall on phones and 36px from 640px up.
 - Maximum reading width: 720px. Capability receipts may extend to 880px on wide screens.
 
 ## Navigation
@@ -105,7 +113,7 @@ Each task route shows one form or one current state. Do not expose protocol stag
 - `SecretField`: concealed/revealed text with explicit copy action.
 - `PolicySummary`: plain-language TTL and retrieval contract.
 - `BurnAction`: destructive control with typed confirmation for active resources.
-- `StatusLine`: icon-free state marker using text, rule, and semantic color.
+- `StatusLine`: icon-free state marker: a lamp (a dot with a soft halo) and words that say what it means.
 
 Every interactive component implements default, hover, active, focus-visible, disabled, loading, success, and error states where applicable.
 
