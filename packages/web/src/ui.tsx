@@ -87,7 +87,7 @@ export function FieldHint({ children }: { readonly children: ReactNode }) {
 }
 
 export function AmbiguousNotice({ children }: { readonly children: ReactNode }) {
-  return <Notice alert={false}><strong>We could not confirm the result.</strong><div>{children}</div></Notice>;
+  return <Notice alert><strong>We could not confirm the result.</strong><div>{children}</div></Notice>;
 }
 
 export function ExpiryNote({ expiresAt, label = "Expires" }: { readonly expiresAt: number; readonly label?: string }) {
@@ -313,11 +313,14 @@ export function LinkProblem({ capture, flow }: { readonly capture: FragmentCaptu
   </div>;
 }
 
-/** Moves focus to a notice that appears after an action, so the result is announced and in view on a phone. */
+/**
+ * An alert answers something the person just did and needs them to act, so it takes focus and comes
+ * into view on a phone. A status notice can appear on its own, so it never moves focus.
+ */
 function Notice({ alert, children }: { readonly alert: boolean; readonly children: ReactNode }) {
   const notice = useRef<HTMLDivElement>(null);
-  useEffect(() => { notice.current?.focus(); }, []);
-  return <div className="operation-notice" ref={notice} role={alert ? "alert" : "status"} tabIndex={-1}>{children}</div>;
+  useEffect(() => { if (alert) notice.current?.focus(); }, [alert]);
+  return <div className="operation-notice" ref={notice} role={alert ? "alert" : "status"} tabIndex={alert ? -1 : undefined}>{children}</div>;
 }
 
 /** `creating` words the unavailable state for a create form, where no link exists yet to be unavailable. */
@@ -330,7 +333,7 @@ export function OperationNotice({ state, retry, creating = false }: { readonly s
     </Notice>;
   }
   if (state === "unknown") {
-    return <Notice alert={false} key="unknown">
+    return <Notice alert key="unknown">
       <strong>We could not confirm the result.</strong>
       <p>It may have gone through anyway. Check before you try again, so you do not repeat it.</p>
       {retry === undefined ? null : <button className="secondary-button" onClick={retry} type="button">Check again</button>}

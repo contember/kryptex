@@ -21,6 +21,14 @@ const PROTECTION_SUMMARY: Readonly<Record<Protection, string>> = {
   "second-key": "The other person also needs the second key that Kryptex makes"
 };
 
+/** Only the write link offers the share sheet: the second key must travel another way, and the pickup link stays with the owner. */
+export function requestShareArtifacts(links: { readonly write: string; readonly secondKey: string | null; readonly pickup: string }): readonly ShareArtifact[] {
+  const artifacts: ShareArtifact[] = [{ channel: "Send this to the person who should answer. They can fill it in once.", id: "write", required: true, shareable: true, title: "Write link", value: links.write }];
+  if (links.secondKey !== null) artifacts.push({ channel: "Send this a different way than the write link: in a call, in person, or in a chat on another device.", id: "factor", required: true, title: "Second key", value: links.secondKey });
+  artifacts.push({ channel: "Keep this for yourself. Open it to wait for the answer. The page checks on its own, and the answer can be opened only once.", id: "pickup", openLabel: "Open", required: true, title: "Pickup link", value: links.pickup });
+  return artifacts;
+}
+
 export function RequestPage() {
   const client = useClient();
   const [title, setTitle] = useState("");
@@ -55,9 +63,11 @@ export function RequestPage() {
   }
 
   function finishCreate(value: PendingRequest, serverExpiresAt: number): void {
-    const next: ShareArtifact[] = [{ channel: "Send this to the person who should answer. They can fill it in once.", id: "write", required: true, shareable: true, title: "Write link", value: artifactUrl("/r", { factorMode: value.factor.mode, kind: 3, recipientPublicKey: value.publicKey, requestLocator: value.locator, salt: value.factor.salt, serverExpiresAt, writeSeed: value.writeSeed }) }];
-    if (value.factor.secondKey !== null) next.push({ channel: "Send this a different way than the write link: in a call, in person, or in a chat on another device.", id: "factor", required: true, title: "Second key", value: value.factor.secondKey });
-    next.push({ channel: "Keep this for yourself. Open it to wait for the answer. The page checks on its own, and the answer can be opened only once.", id: "pickup", openLabel: "Open", required: true, title: "Pickup link", value: artifactUrl("/i", { kind: 4, ownerSeed: value.ownerSeed, requestLocator: value.locator, serverExpiresAt }) });
+    const next = requestShareArtifacts({
+      pickup: artifactUrl("/i", { kind: 4, ownerSeed: value.ownerSeed, requestLocator: value.locator, serverExpiresAt }),
+      secondKey: value.factor.secondKey,
+      write: artifactUrl("/r", { factorMode: value.factor.mode, kind: 3, recipientPublicKey: value.publicKey, requestLocator: value.locator, salt: value.factor.salt, serverExpiresAt, writeSeed: value.writeSeed })
+    });
     setReconciling(false); setPending(null); setArtifacts(next); setExpiresAt(serverExpiresAt); setState("done");
   }
 

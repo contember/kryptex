@@ -28,6 +28,14 @@ const PROTECTION_SUMMARY: Readonly<Record<Protection, string>> = {
   "second-key": "The recipient also needs the second key that Kryptex makes"
 };
 
+/** Only the recipient link offers the share sheet: the second key must travel another way, and the management link stays with the sender. */
+export function sendShareArtifacts(links: { readonly recipient: string; readonly secondKey: string | null; readonly management: string }): readonly ShareArtifact[] {
+  const artifacts: ShareArtifact[] = [{ channel: "Send this to the person who should get the secret.", id: "recipient", required: true, shareable: true, title: "Recipient link", value: links.recipient }];
+  if (links.secondKey !== null) artifacts.push({ channel: "Send this a different way than the link: in a call, in person, or in a chat on another device. Never put it in the same message.", id: "factor", required: true, title: "Second key", value: links.secondKey });
+  artifacts.push({ channel: "Keep this for yourself. It shows when the secret was opened and lets you shorten its time or revoke it.", id: "management", required: false, title: "Management link", value: links.management });
+  return artifacts;
+}
+
 export function SendPage() {
   const client = useClient();
   const [mode, setMode] = useState<"text" | "fields">("text");
@@ -60,9 +68,11 @@ export function SendPage() {
   function selectTtl(value: number): void { if (isTtlSeconds(value)) setTtl(value); }
 
   function finishCreate(value: PendingSend, serverExpiresAt: number): void {
-    const next: ShareArtifact[] = [{ channel: "Send this to the person who should get the secret.", id: "recipient", required: true, shareable: true, title: "Recipient link", value: artifactUrl("/s", { factorMode: value.factor.mode, kind: 1, salt: value.factor.salt, sendSeed: value.sendSeed, serverExpiresAt }) }];
-    if (value.factor.secondKey !== null) next.push({ channel: "Send this a different way than the link: in a call, in person, or in a chat on another device. Never put it in the same message.", id: "factor", required: true, title: "Second key", value: value.factor.secondKey });
-    next.push({ channel: "Keep this for yourself. It shows when the secret was opened and lets you shorten its time or revoke it.", id: "management", required: false, title: "Management link", value: artifactUrl("/m", { kind: 2, locator: value.locator, manageSeed: value.manageSeed, serverExpiresAt }) });
+    const next = sendShareArtifacts({
+      management: artifactUrl("/m", { kind: 2, locator: value.locator, manageSeed: value.manageSeed, serverExpiresAt }),
+      recipient: artifactUrl("/s", { factorMode: value.factor.mode, kind: 1, salt: value.factor.salt, sendSeed: value.sendSeed, serverExpiresAt }),
+      secondKey: value.factor.secondKey
+    });
     setReconciling(false); setPending(null); setArtifacts(next); setExpiresAt(serverExpiresAt); setState("done");
   }
 
