@@ -421,6 +421,17 @@ describe("request", () => {
     }
   });
 
+  it("runs an exec request recorded with a project root by an earlier version", async () => {
+    const handle = await createRequest("--exec", "--", "true");
+    const path = join(state, `${handle}.json`);
+    const recorded = readFileSync(path, "utf8");
+    const legacy = recorded.replace("\"projectRoot\":null", `"projectRoot":${JSON.stringify(project)}`);
+    expect(legacy).not.toBe(recorded);
+    writeFileSync(path, legacy);
+    await service.submit(await pairAndCreate(handle), answers);
+    expect(await kryptex("wait", handle)).toMatchObject({ exitCode: 0, output: { delivered: { command: "true" }, state: "delivered" } });
+  });
+
   it("never acts on an env request recorded without a project root", async () => {
     const handle = await createRequest("--env-file", ".env", "--env-dialect", "literal");
     const path = join(state, `${handle}.json`);
