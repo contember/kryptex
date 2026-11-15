@@ -16,9 +16,9 @@ interface DraftField { readonly help: string; readonly label: string; readonly r
 interface PendingRequest { readonly factor: FactorMaterial; readonly locator: Uint8Array<ArrayBuffer>; readonly ownerSeed: Uint8Array<ArrayBuffer>; readonly publicKey: Uint8Array<ArrayBuffer>; readonly request: RequestCreateRequest; readonly writeSeed: Uint8Array<ArrayBuffer>; }
 
 const PROTECTION_SUMMARY: Readonly<Record<Protection, string>> = {
-  "link-only": "Anyone who has the write link can answer — nothing else is needed",
-  "passphrase": "The other person also needs the passphrase you chose",
-  "second-key": "The other person also needs the second key Kryptex generates"
+  "link-only": "Anyone who has the write link can answer. Nothing else is needed.",
+  "passphrase": "The other person also needs the passphrase you pick",
+  "second-key": "The other person also needs the second key that Kryptex makes"
 };
 
 export function RequestPage() {
@@ -56,8 +56,8 @@ export function RequestPage() {
 
   function finishCreate(value: PendingRequest, serverExpiresAt: number): void {
     const next: ShareArtifact[] = [{ channel: "Send this to the person who should answer. They can fill it in once.", id: "write", required: true, title: "Write link", value: artifactUrl("/r", { factorMode: value.factor.mode, kind: 3, recipientPublicKey: value.publicKey, requestLocator: value.locator, salt: value.factor.salt, serverExpiresAt, writeSeed: value.writeSeed }) }];
-    if (value.factor.secondKey !== null) next.push({ channel: "Send through a different channel than the write link — a call, a chat on another device, in person.", id: "factor", required: true, title: "Second key", value: value.factor.secondKey });
-    next.push({ channel: "Keep this for yourself. Open it to watch for the answer — the page refreshes on its own and releasing the answer works once.", id: "pickup", openLabel: "Open", required: true, title: "Pickup link", value: artifactUrl("/i", { kind: 4, ownerSeed: value.ownerSeed, requestLocator: value.locator, serverExpiresAt }) });
+    if (value.factor.secondKey !== null) next.push({ channel: "Send this a different way than the write link: in a call, in person, or in a chat on another device.", id: "factor", required: true, title: "Second key", value: value.factor.secondKey });
+    next.push({ channel: "Keep this for yourself. Open it to wait for the answer. The page checks on its own, and the answer can be opened only once.", id: "pickup", openLabel: "Open", required: true, title: "Pickup link", value: artifactUrl("/i", { kind: 4, ownerSeed: value.ownerSeed, requestLocator: value.locator, serverExpiresAt }) });
     setReconciling(false); setPending(null); setArtifacts(next); setExpiresAt(serverExpiresAt); setState("done");
   }
 
@@ -125,15 +125,15 @@ export function RequestPage() {
   if (artifacts !== null) {
     const complete = artifacts.every((artifact) => saved[artifact.id] === true);
     return <div className="task-page task-page--wide">
-      <PageIntro step="Step 2 of 2 · hand over" title="The request is ready">
-        <p>The other person fills it in once. Their answer is encrypted for your pickup link alone — the service cannot read it either.</p>
+      <PageIntro step="Step 2 of 2 · share" title="Your request is ready">
+        <p>The other person can answer once. Only your pickup link can open the answer. Kryptex cannot read it either.</p>
       </PageIntro>
       <ShareSlip
         artifacts={artifacts}
         note={expiresAt === null ? null : <ExpiryNote expiresAt={expiresAt} />}
         onSaved={(id, value) => { setSaved({ ...saved, [id]: value }); }}
         saved={saved}
-        title="Request sealed"
+        title="Send and keep these"
       >
         <Link className="secondary-button" reloadDocument to={gatePath("request")}>Create another request</Link>
       </ShareSlip>
@@ -143,7 +143,7 @@ export function RequestPage() {
 
   return <div className="task-page task-page--narrow">
     <PageIntro step="Step 1 of 2 · describe" title="Request a secret">
-      <p>Describe what you need. The other person answers through an encrypted form, so nothing sensitive travels by mail or chat.</p>
+      <p>Say what you need. The other person fills in an encrypted form, so the secret never travels by email or chat.</p>
     </PageIntro>
 
     <div className="simple-form">
@@ -154,7 +154,7 @@ export function RequestPage() {
 
       <div className="field-block">
         <label><span>Instructions</span><textarea onChange={(event) => { setInstructions(event.currentTarget.value); }} placeholder="Optional. Explain where to find the values, or how you will use them." rows={3} value={instructions} /></label>
-        <FieldHint>Shown above the form as plain text. Do not put secrets here — this text travels with the link.</FieldHint>
+        <FieldHint>Shown above the form. Anyone who can open the request can read it, so do not put secrets here.</FieldHint>
       </div>
 
       <section className="request-items">
@@ -175,7 +175,7 @@ export function RequestPage() {
                 {field.type === "instruction"
                   ? <FieldHint>This item only shows its label. It does not collect an answer.</FieldHint>
                   : <>
-                    <label className="field-block"><span>Help</span><input onChange={(event) => { updateField(index, "help", event.currentTarget.value); }} placeholder="Optional hint shown under the field" value={field.help} /></label>
+                    <label className="field-block"><span>Hint</span><input onChange={(event) => { updateField(index, "help", event.currentTarget.value); }} placeholder="Optional. Shown under the field." value={field.help} /></label>
                     <label className="check-label"><input checked={field.required} onChange={(event) => { updateField(index, "required", event.currentTarget.checked); }} type="checkbox" /><span>Required</span></label>
                   </>}
                 {fields.length > 1 ? <div className="field-block__actions"><button className="quiet-button danger-text" onClick={() => { setFields(fields.filter((_item, fieldIndex) => fieldIndex !== index)); }} type="button">Remove this item</button></div> : null}
@@ -195,29 +195,30 @@ export function RequestPage() {
             {TTL_CHOICES.map((choice) => <option key={choice} value={choice}>{formatTtl(choice)}</option>)}
           </select>
         </label>
-        <FieldHint>When the time is up, the service closes access and starts deleting the stored request and answer. Failed deletion is retried.</FieldHint>
+        <FieldHint>After this, the links stop working and Kryptex starts deleting the request and any answer. Failed deletion is retried.</FieldHint>
       </div>
 
-      <PolicySummary items={[`Access ends after ${formatTtl(ttl)}`, "One answer only — the write link stops working once it is used", PROTECTION_SUMMARY[protection]]} />
+      <PolicySummary items={[`Access ends after ${formatTtl(ttl)}`, "One answer only. The write link stops working after that.", PROTECTION_SUMMARY[protection]]} />
 
       <AdvancedDisclosure summary="Protection">
         <ProtectionOptions onChange={setProtection} value={protection} />
         {protection === "passphrase" ? <PassphraseFields confirmation={confirmation} message={phrase.message} onConfirmation={setConfirmation} onPassphrase={setPassphrase} passphrase={passphrase} strength={phrase.strength} valid={phrase.valid} /> : null}
       </AdvancedDisclosure>
 
-      <button className="primary-button full-button" disabled={!draft.valid || (protection === "passphrase" && !phrase.valid) || state === "working" || verificationExpired} onClick={() => { void create(); }} type="button">{reconciling ? "Confirming…" : state === "working" ? "Creating…" : "Create request"}</button>
-      <p className="fine-print">Creating checks that you are human once. The request itself never reaches that check.</p>
+      <button className="primary-button full-button" disabled={!draft.valid || (protection === "passphrase" && !phrase.valid) || state === "working" || verificationExpired} onClick={() => { void create(); }} type="button">{reconciling ? "Checking…" : state === "working" ? "Encrypting…" : "Encrypt and create request"}</button>
+      <p className="fine-print">The human check you passed covers one request. It never sees what you write.</p>
     </div>
 
     {reconciling
-      ? <StatusMessage tone="warning"><strong>Confirming the result.</strong> Keep this tab open. The encrypted attempt lives only in this page and cannot be rebuilt if you leave.</StatusMessage>
+      ? <StatusMessage tone="warning"><strong>Checking whether the request was created.</strong> Keep this tab open. If you leave now, the request cannot be recovered.</StatusMessage>
       : verificationExpired
         ? <div className="operation-notice">
           <strong>The human check expired.</strong>
-          <p>Copy your draft somewhere safe first — leaving this page clears it.</p>
-          <a className="primary-button" href={gatePath("request")}>Check again</a>
+          <p>Copy your text somewhere safe first. Leaving this page clears it.</p>
+          <a className="primary-button" href={gatePath("request")}>Do the check again</a>
         </div>
-        : <OperationNotice state={state} />}
-    <NavigationGuard description="Leaving now permanently loses the key this page needs to confirm the attempt." title="Keep confirming this request?" when={pending !== null} />
+        : <OperationNotice creating state={state} />}
+    <NavigationGuard description="If you leave now, the request cannot be recovered." title="Stay until the request is confirmed?" when={pending !== null} />
+
   </div>;
 }

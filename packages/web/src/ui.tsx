@@ -84,7 +84,8 @@ export function ExpiryNote({ expiresAt, label = "Expires" }: { readonly expiresA
 
 export function PolicySummary({ items, action }: { readonly items: readonly string[]; readonly action?: ReactNode }) {
   return <div className="policy-summary">
-    <div><p className="eyebrow">This transfer</p><ul>{items.map((item) => <li key={item}>{item}</li>)}</ul></div>
+    <div><p className="eyebrow">Summary</p>
+<ul>{items.map((item) => <li key={item}>{item}</li>)}</ul></div>
     {action}
   </div>;
 }
@@ -103,22 +104,22 @@ export function ProtectionOptions({ value, onChange }: { readonly value: Protect
     <label>
       <input checked={value === "second-key"} name="protection" onChange={() => { onChange("second-key"); }} type="radio" />
       <span>
-        <strong>Separate second key</strong>
-        <small>Recommended. Kryptex generates a short key. Send it through an independently secured channel, never with the link. Two apps on the same device or account may not be independent.</small>
+        <strong>Second key (recommended)</strong>
+        <small>Kryptex makes a short key that is also needed to open it. Send the key a different way than the link, for example in a call or in person. Two apps on the same device or account may not be independent of each other.</small>
       </span>
     </label>
     <label>
       <input checked={value === "passphrase"} name="protection" onChange={() => { onChange("passphrase"); }} type="radio" />
       <span>
         <strong>Passphrase</strong>
-        <small>You choose a passphrase and tell the other person separately. Argon2id raises guessing cost but cannot make a weak passphrase safe.</small>
+        <small>You pick a passphrase and tell the other person yourself, not in the same message as the link. Argon2id makes every guess slow, but a weak passphrase can still be guessed.</small>
       </span>
     </label>
     <label>
       <input checked={value === "link-only"} name="protection" onChange={() => { onChange("link-only"); }} type="radio" />
       <span>
         <strong>Link only</strong>
-        <small>Nothing else is needed to open it. The link is a bearer credential. Anyone who has it can try to open the content.</small>
+        <small>Nothing else is needed. The link works like a key (a bearer credential): anyone who has it can open it.</small>
       </span>
     </label>
   </fieldset>;
@@ -135,7 +136,7 @@ export function PassphraseFields({ passphrase, confirmation, onPassphrase, onCon
       <span>Repeat passphrase</span>
       <input autoComplete="off" onChange={(event) => { onConfirmation(event.currentTarget.value); }} spellCheck={false} type="password" value={confirmation} />
     </label>
-    {!touched ? <FieldHint>At least 8 characters. The other person needs it to open the secret, so agree on a channel for telling them.</FieldHint>
+    {!touched ? <FieldHint>At least 8 characters. The other person needs it too, so plan how you will tell them.</FieldHint>
       : valid && strength === "weak" ? <StatusMessage tone="warning">{message}</StatusMessage>
         : valid ? <StatusMessage tone="success">{message}</StatusMessage>
           : <FieldHint>{message}</FieldHint>}
@@ -161,7 +162,7 @@ export function FactorInput({ mode, value, onChange }: { readonly mode: 1 | 2; r
   if (mode === 1) {
     return <div className="field-block">
       <label><span>Passphrase</span><input autoComplete="off" onChange={(event) => { onChange(event.currentTarget.value); }} spellCheck={false} type="password" value={value} /></label>
-      <FieldHint>The sender chose this passphrase and should have told you through a separate channel — not in the same message as the link.</FieldHint>
+      <FieldHint>The person who sent you the link picked this passphrase. They should tell you separately, not in the same message as the link.</FieldHint>
     </div>;
   }
   const compact = compactFactor(value);
@@ -169,9 +170,9 @@ export function FactorInput({ mode, value, onChange }: { readonly mode: 1 | 2; r
   return <div className="field-block">
     <label><span>Second key</span><input autoComplete="off" className="mono" onChange={(event) => { onChange(event.currentTarget.value); }} placeholder="XXXXX-XXXXX-XXXXX-XXXXX-XXXXXX" spellCheck={false} type="text" value={value} /></label>
     {compact.length === 0
-      ? <FieldHint>Kryptex gave this key to the sender along with the link. They should have sent it to you a different way. Case, spacing, and dashes do not matter.</FieldHint>
-      : recognized ? <span className="field-hint field-hint--good">The key has the expected shape. Opening it proves whether it is the right one.</span>
-        : <FieldHint>Not a complete key yet — it is 26 characters, usually in five groups. Paste or type the whole thing.</FieldHint>}
+      ? <FieldHint>The person who sent you the link should give you this key a different way, for example in a call. Capitals, spaces and dashes do not matter.</FieldHint>
+      : recognized ? <span className="field-hint field-hint--good">This looks like a whole key. You will find out if it is the right one when you open.</span>
+        : <FieldHint>Not complete yet. A key has 26 characters, usually in five groups.</FieldHint>}
   </div>;
 }
 
@@ -196,7 +197,7 @@ function ShareRow({ artifact, saved, onSaved }: { readonly artifact: ShareArtifa
     </div>
     {clipboard.state === "manual"
       ? <label className="field-block manual-copy">
-        <span>Copying was blocked — select and copy this manually</span>
+        <span>Copying did not work. Select the text and copy it yourself.</span>
         <input className="mono" onFocus={(event) => { event.currentTarget.select(); }} readOnly value={artifact.value} />
       </label>
       : null}
@@ -220,7 +221,7 @@ export function ShareSlip({ title, note, artifacts, saved, onSaved, children }: 
       </div>
     </header>
     <div className="share-slip__lead">
-      <p>Store every part before you leave. Kryptex keeps no copy of these, so this page cannot show them again.</p>
+      <p>Save each part before you leave this page. Kryptex keeps no copy, so it cannot show them again.</p>
       {note}
     </div>
     <ol className="share-slip__rows">
@@ -228,7 +229,7 @@ export function ShareSlip({ title, note, artifacts, saved, onSaved, children }: 
     </ol>
     <footer className="share-slip__footer">
       <p className={complete ? "share-slip__progress share-slip__progress--complete" : "share-slip__progress"}>
-        <span aria-live="polite">{stored} of {artifacts.length} parts stored</span>
+        <span aria-live="polite">{stored} of {artifacts.length} parts saved</span>
       </p>
       {complete ? children : null}
     </footer>
@@ -242,7 +243,7 @@ export function SecretField({ label, value, codeLike = true }: { readonly label:
     <div className="secret-output__head">
       <strong>{label}</strong>
       <div className="secret-output__actions">
-        <button className="secondary-button" onClick={() => { setRevealed((current) => !current); }} type="button">{revealed ? "Hide" : "Reveal"}</button>
+        <button className="secondary-button" onClick={() => { setRevealed((current) => !current); }} type="button">{revealed ? "Hide" : "Show"}</button>
         {revealed ? <button className="secondary-button" onClick={() => { clipboard.copy(value); }} type="button">{clipboard.state === "copied" ? "Copied" : "Copy"}</button> : null}
       </div>
     </div>
@@ -251,7 +252,7 @@ export function SecretField({ label, value, codeLike = true }: { readonly label:
         <output className={codeLike ? "mono" : undefined}>{value}</output>
         {clipboard.state === "manual"
           ? <label className="field-block manual-copy">
-            <span>Copying was blocked — select and copy this manually</span>
+            <span>Copying did not work. Select the text and copy it yourself.</span>
             <input className={codeLike ? "mono" : undefined} onFocus={(event) => { event.currentTarget.select(); }} readOnly value={value} />
           </label>
           : null}
@@ -263,35 +264,38 @@ export function SecretField({ label, value, codeLike = true }: { readonly label:
 
 export function FragmentNotice({ capture }: { readonly capture: FragmentCapture }) {
   return capture.hadFragment && capture.fragmentBytes !== null
-    ? <p className="fragment-notice">The private part of this link was removed from the address bar and kept in memory only. Reopen the original link if you reload this page.</p>
-    : <StatusMessage tone="warning">The private part of this link is missing. Open the original link again — copying only the visible address is not enough.</StatusMessage>;
+    ? <p className="fragment-notice">Reloading this page will not work. To come back, open the original link again.</p>
+    : <StatusMessage tone="warning">This link is incomplete, or the page was reloaded. Open the original link again, with everything after the <span className="mono">#</span>.</StatusMessage>;
 }
 
-export function OperationNotice({ state, retry }: { readonly state: OperationState; readonly retry?: () => void }) {
+/** `creating` words the unavailable state for a create form, where no link exists yet to be unavailable. */
+export function OperationNotice({ state, retry, creating = false }: { readonly state: OperationState; readonly retry?: () => void; readonly creating?: boolean }) {
   if (state === "waiting") {
     return <div className="operation-notice">
-      <strong>Nothing is ready yet.</strong>
-      <p>Nobody has answered so far. Come back later and check again.</p>
+      <strong>No answer yet.</strong>
+      <p>Nobody has answered so far. Check again later.</p>
       {retry === undefined ? null : <button className="secondary-button" onClick={retry} type="button">Check again</button>}
     </div>;
   }
   if (state === "unknown") {
     return <div className="operation-notice">
       <strong>We could not confirm the result.</strong>
-      <p>The action may already have completed. Check the status before trying again — a retry can use up another open.</p>
+      <p>It may have gone through anyway. Check before you try again, so you do not repeat it.</p>
       {retry === undefined ? null : <button className="secondary-button" onClick={retry} type="button">Check again</button>}
     </div>;
   }
   if (state === "unavailable") {
     return <div className="operation-notice">
-      <strong>Unavailable.</strong>
-      <p>The link may be expired, already used, revoked, or incomplete. Kryptex cannot tell you which — that is deliberate.</p>
+      <strong>{creating ? "Nothing was created." : "This link does not work."}</strong>
+      <p>{creating
+        ? "Kryptex could not create it. What you wrote is still on this page. Try again in a moment."
+        : "It may have expired, been used up or revoked, or be incomplete. A wrong passphrase or second key looks the same. Kryptex does not say which, on purpose."}</p>
     </div>;
   }
   if (state === "rate_limited") {
     return <div className="operation-notice">
-      <strong>Too many attempts.</strong>
-      <p>Each wrong passphrase or second key delays the next try, and the delay grows with every failure — up to an hour. Wait, then try again with the exact value.</p>
+      <strong>Too many tries.</strong>
+      <p>After each wrong passphrase or second key, the wait before the next try gets longer, up to an hour. Wait a while, then try again.</p>
     </div>;
   }
   return null;
@@ -346,7 +350,8 @@ export function NavigationGuard({ when, requiredWording = "the required parts", 
   function stay(): void { dialogRef.current?.close(); reset(); }
   return <dialog className="confirm-dialog" onCancel={(event) => { event.preventDefault(); stay(); }} ref={dialogRef}>
     <h2>{title ?? `Save ${requiredWording} first?`}</h2>
-    <p>{description ?? "Kryptex keeps no copy of these links. Once this page closes, nothing can bring them back."}</p>
+    <p>{description ?? "Kryptex keeps no copy. Once you leave this page, they cannot be shown again."}</p>
+
     <div>
       <button autoFocus className="primary-button" onClick={stay} type="button">Stay on this page</button>
       <button className="danger-button" onClick={() => { blocker.proceed(); }} type="button">Leave anyway</button>

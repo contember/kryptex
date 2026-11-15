@@ -59,8 +59,8 @@ export function WriterPage({ capture }: { readonly capture: FragmentCapture }) {
   const started = Object.values(answers).some((value) => value.length > 0);
 
   return <div className="task-page task-page--narrow">
-    <PageIntro title="Someone is asking you for information">
-      <p>Reading the request sends nothing. Your answer is encrypted in this browser and can only be opened by the person who created the request.</p>
+    <PageIntro title="Someone asked you for information">
+      <p>Reading the request sends nothing. Your answer is encrypted on this device, and only the person who asked can open it. Kryptex cannot read it.</p>
     </PageIntro>
     <FragmentNotice capture={capture} />
 
@@ -73,13 +73,13 @@ export function WriterPage({ capture }: { readonly capture: FragmentCapture }) {
           ? <button className="primary-button full-button" disabled={state === "working"} onClick={() => { void inspect(); }} type="button">{state === "working" ? "Opening…" : "Open the request"}</button>
           : capture.fragmentBytes === null
             ? null
-            : <StatusMessage tone="danger">This link is not a valid Kryptex request link. Ask for the whole link again — messengers often cut off the part after the <span className="mono">#</span>.</StatusMessage>}
+            : <StatusMessage tone="danger">This link does not work. Ask for the whole link again. Some apps cut off the part after the <span className="mono">#</span>.</StatusMessage>}
       </div>
       : <>
         <section className="requester-content">
           <p className="eyebrow">Provided by requester</p>
           <h2>{opened.schema.title}</h2>
-          {sealed ? <StatusMessage tone="warning">Your answers are sealed into one encrypted response. Editing is off, and any retry sends exactly the same bytes.</StatusMessage> : null}
+          {sealed ? <StatusMessage tone="warning">Your answers are encrypted and locked, so you can no longer edit them. Trying again sends exactly the same answer.</StatusMessage> : null}
           <div className="simple-form">
             {opened.schema.fields.map((field) => field.type === "instruction"
               ? <div className="requester-note" key={field.id}>
@@ -103,18 +103,19 @@ export function WriterPage({ capture }: { readonly capture: FragmentCapture }) {
             {sealed ? null : started && !answerValidation.valid ? <StatusMessage tone="warning">{answerValidation.message}</StatusMessage> : <FieldHint>{started ? answerValidation.message : "Fill in the answers. Nothing is sent while you type."}</FieldHint>}
             <label className="check-label">
               <input checked={confirmed} disabled={sealed} onChange={(event) => { setConfirmed(event.currentTarget.checked); }} type="checkbox" />
-              <span>I checked my answers. Only one response can win, and this link stops working once a response is accepted.</span>
+              <span>I checked my answers. Only one answer can be accepted, and this link stops working after that.</span>
             </label>
-            <button className="primary-button full-button" disabled={!answerValidation.valid || !confirmed || state === "working"} onClick={() => { void submit(); }} type="button">{state === "working" ? "Sending…" : envelope === null ? "Send the answer" : "Send the identical answer again"}</button>
+            <button className="primary-button full-button" disabled={!answerValidation.valid || !confirmed || state === "working"} onClick={() => { void submit(); }} type="button">{state === "working" ? "Sending…" : envelope === null ? "Send the answer" : "Send the same answer again"}</button>
           </div>
           : <>
             {receiptMatch === true ? <StatusMessage tone="success">Answer sent. The person who asked can now open it once. Nothing else is needed from you.</StatusMessage> : null}
             <div className="fingerprint">
               <span>Receipt for your answer</span>
               <strong>{receipt}</strong>
-              <p>{receiptMatch === true ? "The service returned the same receipt, so both sides hold identical ciphertext." : receiptMatch === false ? "The service returned a different receipt. Treat the submission as unconfirmed and keep this value." : "The submission is unconfirmed. Keep this value."} Compare all 64 characters through a separate channel if it matters. A match only proves both browsers hold the same ciphertext bytes — it does not authenticate the writer, the plaintext, or the service.</p>
+              <p>{receiptMatch === true ? "Kryptex returned the same receipt, so it stored exactly the encrypted answer you sent." : receiptMatch === false ? "Kryptex returned a different receipt. Treat the answer as not confirmed and keep this code." : "The answer is not confirmed yet. Keep this code."} If it matters, compare all 64 characters with the person who asked, another way than the link (a call, for example). A match proves only that you both have the same encrypted answer. It does not prove who wrote it, what it says, or that the service behaved.</p>
             </div>
-            {state === "unknown" ? <button className="secondary-button" onClick={() => { void submit(); }} type="button">Send the identical answer again</button> : null}
+            {state === "unknown" ? <button className="secondary-button" onClick={() => { void submit(); }} type="button">Send the same answer again</button> : null}
+
           </>}
       </>}
     <OperationNotice state={state} />

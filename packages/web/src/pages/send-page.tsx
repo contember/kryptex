@@ -21,9 +21,9 @@ interface PendingSend {
 }
 
 const PROTECTION_SUMMARY: Readonly<Record<Protection, string>> = {
-  "link-only": "Anyone who has the link can open it — nothing else is needed",
-  "passphrase": "The recipient also needs the passphrase you chose",
-  "second-key": "The recipient also needs the second key Kryptex generates"
+  "link-only": "Anyone who has the link can open it. Nothing else is needed.",
+  "passphrase": "The recipient also needs the passphrase you pick",
+  "second-key": "The recipient also needs the second key that Kryptex makes"
 };
 
 export function SendPage() {
@@ -58,9 +58,9 @@ export function SendPage() {
   function selectTtl(value: number): void { if (isTtlSeconds(value)) setTtl(value); }
 
   function finishCreate(value: PendingSend, serverExpiresAt: number): void {
-    const next: ShareArtifact[] = [{ channel: "Send this link to the recipient.", id: "recipient", required: true, title: "Recipient link", value: artifactUrl("/s", { factorMode: value.factor.mode, kind: 1, salt: value.factor.salt, sendSeed: value.sendSeed, serverExpiresAt }) }];
-    if (value.factor.secondKey !== null) next.push({ channel: "Send through a different channel — a call, a chat on another device, in person. Never append it to the link.", id: "factor", required: true, title: "Second key", value: value.factor.secondKey });
-    next.push({ channel: "Keep this for yourself. It lets you check the status, shorten the expiry, or revoke the secret.", id: "management", required: false, title: "Management link", value: artifactUrl("/m", { kind: 2, locator: value.locator, manageSeed: value.manageSeed, serverExpiresAt }) });
+    const next: ShareArtifact[] = [{ channel: "Send this to the person who should get the secret.", id: "recipient", required: true, title: "Recipient link", value: artifactUrl("/s", { factorMode: value.factor.mode, kind: 1, salt: value.factor.salt, sendSeed: value.sendSeed, serverExpiresAt }) }];
+    if (value.factor.secondKey !== null) next.push({ channel: "Send this a different way than the link: in a call, in person, or in a chat on another device. Never put it in the same message.", id: "factor", required: true, title: "Second key", value: value.factor.secondKey });
+    next.push({ channel: "Keep this for yourself. It shows when the secret was opened and lets you shorten its time or revoke it.", id: "management", required: false, title: "Management link", value: artifactUrl("/m", { kind: 2, locator: value.locator, manageSeed: value.manageSeed, serverExpiresAt }) });
     setReconciling(false); setPending(null); setArtifacts(next); setExpiresAt(serverExpiresAt); setState("done");
   }
 
@@ -131,15 +131,15 @@ export function SendPage() {
   if (artifacts !== null) {
     const complete = artifacts.every((artifact) => saved[artifact.id] === true);
     return <div className="task-page task-page--wide">
-      <PageIntro step="Step 2 of 2 · hand over" title="The secret is sealed">
-        <p>Kryptex stored an encrypted envelope it cannot read. Everything needed to open it is on this page and nowhere else.</p>
+      <PageIntro step="Step 2 of 2 · share" title="Your secret is ready">
+        <p>Kryptex stored it encrypted and cannot read it. What opens it is on this page and nowhere else.</p>
       </PageIntro>
       <ShareSlip
         artifacts={artifacts}
         note={expiresAt === null ? null : <ExpiryNote expiresAt={expiresAt} />}
         onSaved={(id, value) => { setSaved({ ...saved, [id]: value }); }}
         saved={saved}
-        title="Secret sealed"
+        title="Send and keep these"
       >
         <Link className="secondary-button" reloadDocument to={gatePath("send")}>Send another secret</Link>
       </ShareSlip>
@@ -148,24 +148,24 @@ export function SendPage() {
   }
 
   return <div className="task-page task-page--narrow">
-    <PageIntro step="Step 1 of 2 · compose" title="Send a secret">
-      <p>Write the secret below. This browser encrypts it before anything leaves the page, so the service never sees the readable text.</p>
+    <PageIntro step="Step 1 of 2 · write" title="Send a secret">
+      <p>Your browser encrypts the secret before anything is sent. Kryptex never sees what you write.</p>
     </PageIntro>
 
     <div className="simple-form">
       <fieldset className="compact-options">
         <legend>What are you sending?</legend>
-        <label><input checked={mode === "text"} name="content" onChange={() => { setMode("text"); }} type="radio" /><span>One text</span></label>
-        <label><input checked={mode === "fields"} name="content" onChange={() => { setMode("fields"); }} type="radio" /><span>Labelled values</span></label>
+        <label><input checked={mode === "text"} name="content" onChange={() => { setMode("text"); }} type="radio" /><span>A single text</span></label>
+        <label><input checked={mode === "fields"} name="content" onChange={() => { setMode("fields"); }} type="radio" /><span>Several labelled values</span></label>
       </fieldset>
 
       {mode === "text"
         ? <div className="field-block">
           <label><span>Secret</span><textarea autoComplete="off" onChange={(event) => { setText(event.currentTarget.value); }} rows={7} spellCheck={false} value={text} /></label>
-          {started && !draft.valid ? <StatusMessage tone="warning">{draft.message}</StatusMessage> : <FieldHint>{started ? draft.message : "Paste a password, token, or note. Nothing is sent while you type."}</FieldHint>}
+          {started && !draft.valid ? <StatusMessage tone="warning">{draft.message}</StatusMessage> : <FieldHint>{started ? draft.message : "Paste a password, a code or a note. Nothing is sent while you type."}</FieldHint>}
         </div>
         : <div className="field-block">
-          <span className="field-block__label">Secret values</span>
+          <span className="field-block__label">Values</span>
           <div className="inline-fields">
             {fields.map((field, index) => <div key={index}>
               <label><span>Label</span><input onChange={(event) => { updateField(index, "label", event.currentTarget.value); }} placeholder="Database password" value={field.label} /></label>
@@ -183,13 +183,13 @@ export function SendPage() {
                       {VALUE_FIELD_TYPES.map((type) => <option key={type} value={type}>{formatFieldType(type)}</option>)}
                     </select>
                   </label>
-                  <FieldHint>A secret is hidden while you type and reaches the recipient in monospace. A long type gives you a multi-line box for keys, certificates, or config blocks.</FieldHint>
+                  <FieldHint>A secret stays hidden while you type. Pick a long type for keys, certificates or anything with several lines.</FieldHint>
                 </div>
               </details>
             </div>)}
           </div>
           <div className="field-block__actions">
-            <button className="secondary-button" disabled={fields.length >= 32} onClick={() => { setFields([...fields, { label: "", type: "secret", value: "" }]); }} type="button">Add value</button>
+            <button className="secondary-button" disabled={fields.length >= 32} onClick={() => { setFields([...fields, { label: "", type: "secret", value: "" }]); }} type="button">Add another value</button>
           </div>
           {started && !draft.valid ? <StatusMessage tone="warning">{draft.message}</StatusMessage> : <FieldHint>{started ? draft.message : "Each value gets its own label, so the recipient knows what is what."}</FieldHint>}
         </div>}
@@ -200,7 +200,7 @@ export function SendPage() {
             {TTL_CHOICES.map((choice) => <option key={choice} value={choice}>{formatTtl(choice)}</option>)}
           </select>
         </label>
-        <FieldHint>When the time is up, the service stops releasing the data and starts deleting the stored ciphertext. Failed deletion is retried. Shorter is safer.</FieldHint>
+        <FieldHint>After this, the link stops working and Kryptex starts deleting the encrypted copy. Failed deletion is retried. Shorter is safer.</FieldHint>
       </div>
 
       <PolicySummary items={[`Access ends after ${formatTtl(ttl)}`, formatOpenAllowance(retrievals), PROTECTION_SUMMARY[protection]]} />
@@ -210,23 +210,24 @@ export function SendPage() {
         {protection === "passphrase" ? <PassphraseFields confirmation={confirmation} message={phrase.message} onConfirmation={setConfirmation} onPassphrase={setPassphrase} passphrase={passphrase} strength={phrase.strength} valid={phrase.valid} /> : null}
         <div className="field-block">
           <label><span>Maximum opens</span><input max={10} min={1} onChange={(event) => { setRetrievals(event.currentTarget.valueAsNumber); }} type="number" value={retrievals} /></label>
-          <FieldHint>Counts released copies, not people who read them. One is right unless the recipient may need a retry.</FieldHint>
+          <FieldHint>This counts each time the encrypted secret is sent to a browser, not how many people read it. Keep 1 unless the recipient may need a second try.</FieldHint>
         </div>
       </AdvancedDisclosure>
 
-      <button className="primary-button full-button" disabled={!draft.valid || (protection === "passphrase" && !phrase.valid) || state === "working" || verificationExpired} onClick={() => { void create(); }} type="button">{reconciling ? "Confirming…" : state === "working" ? "Sealing…" : "Seal and create link"}</button>
-      <p className="fine-print">Sealing checks that you are human once. The secret itself never reaches that check.</p>
+      <button className="primary-button full-button" disabled={!draft.valid || (protection === "passphrase" && !phrase.valid) || state === "working" || verificationExpired} onClick={() => { void create(); }} type="button">{reconciling ? "Checking…" : state === "working" ? "Encrypting…" : "Encrypt and create link"}</button>
+      <p className="fine-print">The human check you passed covers one link. It never sees your secret.</p>
     </div>
 
     {reconciling
-      ? <StatusMessage tone="warning"><strong>Confirming the result.</strong> Keep this tab open. The encrypted attempt lives only in this page and cannot be rebuilt if you leave.</StatusMessage>
+      ? <StatusMessage tone="warning"><strong>Checking whether the link was created.</strong> Keep this tab open. If you leave now, the link cannot be recovered.</StatusMessage>
       : verificationExpired
         ? <div className="operation-notice">
           <strong>The human check expired.</strong>
-          <p>Copy your draft somewhere safe first — leaving this page clears it.</p>
-          <a className="primary-button" href={gatePath("send")}>Check again</a>
+          <p>Copy your text somewhere safe first. Leaving this page clears it.</p>
+          <a className="primary-button" href={gatePath("send")}>Do the check again</a>
         </div>
-        : <OperationNotice state={state} />}
-    <NavigationGuard description="Leaving now permanently loses the key this page needs to confirm the attempt." title="Keep confirming this secret?" when={pending !== null} />
+        : <OperationNotice creating state={state} />}
+    <NavigationGuard description="If you leave now, the link cannot be recovered." title="Stay until the link is confirmed?" when={pending !== null} />
+
   </div>;
 }

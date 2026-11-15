@@ -33,18 +33,18 @@ export function RetrievePage({ capture }: { readonly capture: FragmentCapture })
   if (payload !== null) {
     return <div className="task-page task-page--narrow">
       <PageIntro title="Here is the secret">
-        <p>Copy what you need now. Reloading this page will not show it again{remaining === null ? "" : `, and the link has ${formatOpens(remaining)}`}.</p>
+        <p>Copy what you need now. Reloading this page will not show it again.{remaining === null ? "" : ` The link has ${formatOpens(remaining)}.`}</p>
       </PageIntro>
       {payload.kind === "text"
         ? <SecretField codeLike={false} label="Secret text" value={payload.text} />
         : payload.fields.map((field) => <SecretField codeLike={isSensitiveField(field.type)} key={field.label} label={field.label} value={field.value} />)}
-      <StatusMessage tone="warning">Whatever you save is yours to protect from here on. Expiry closes access and starts stored-ciphertext deletion; it cannot take back what was already released.</StatusMessage>
+      <StatusMessage tone="warning">From now on, keeping it safe is up to you. Expiry or revoking cannot take back a secret that was already opened.</StatusMessage>
     </div>;
   }
 
   return <div className="task-page task-page--narrow">
     <PageIntro title="Someone sent you a secret">
-      <p>The content is encrypted. Nothing is released until you ask for it below, and the sender allows only a limited number of opens.</p>
+      <p>It stays encrypted until you open it below. The sender allowed only a limited number of opens, and opening uses one.</p>
     </PageIntro>
     <FragmentNotice capture={capture} />
     <div className="simple-form">
@@ -54,7 +54,8 @@ export function RetrievePage({ capture }: { readonly capture: FragmentCapture })
       {bundle?.kind !== 1
         ? capture.fragmentBytes === null
           ? null
-          : <StatusMessage tone="danger">This link is not a valid Kryptex secret link. Ask the sender to send the whole link again — messengers often cut off the part after the <span className="mono">#</span>.</StatusMessage>
+          : <StatusMessage tone="danger">This link does not work. Ask the sender for the whole link again. Some apps cut off the part after the <span className="mono">#</span>.</StatusMessage>
+
         : state === "unknown"
           ? <AmbiguousNotice>
             <p>An open may already have been counted. Trying again can use up another one.</p>
