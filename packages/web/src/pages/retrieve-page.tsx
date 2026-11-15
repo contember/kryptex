@@ -5,7 +5,7 @@ import { useClient } from "../client-context";
 import { checkedResponseExpiry, classifyConsumingFailure, consumeBundle, factorFromInput } from "../crypto-flow";
 import { formatOpens, isSensitiveField } from "../format";
 import type { FragmentCapture } from "../fragment";
-import { AmbiguousNotice, FactorInput, FragmentNotice, OperationNotice, PageIntro, SecretField, StatusMessage, normalizedFactorInput, type OperationState } from "../ui";
+import { AmbiguousNotice, FactorInput, FragmentNotice, LinkProblem, OperationNotice, PageIntro, SecretField, StatusMessage, normalizedFactorInput, type OperationState } from "../ui";
 
 export function RetrievePage({ capture }: { readonly capture: FragmentCapture }) {
   const client = useClient();
@@ -32,7 +32,7 @@ export function RetrievePage({ capture }: { readonly capture: FragmentCapture })
 
   if (payload !== null) {
     return <div className="task-page task-page--narrow">
-      <PageIntro title="Here is the secret">
+      <PageIntro arrive title="Here is the secret">
         <p>Copy what you need now. Reloading this page will not show it again.{remaining === null ? "" : ` The link has ${formatOpens(remaining)}.`}</p>
       </PageIntro>
       {payload.kind === "text"
@@ -42,26 +42,25 @@ export function RetrievePage({ capture }: { readonly capture: FragmentCapture })
     </div>;
   }
 
+  if (bundle?.kind !== 1) return <LinkProblem capture={capture} flow="link" />;
+  const needsFactor = bundle.factorMode !== 0;
+
   return <div className="task-page task-page--narrow">
     <PageIntro title="Someone sent you a secret">
       <p>It stays encrypted until you open it below. The sender allowed only a limited number of opens, and opening uses one.</p>
     </PageIntro>
     <FragmentNotice capture={capture} />
-    <div className="simple-form">
-      {bundle?.kind === 1 && bundle.factorMode !== 0
+    <form className="simple-form" onSubmit={(event) => { event.preventDefault(); if (state !== "working" && state !== "unknown" && (!needsFactor || factor.trim().length > 0)) void open(); }}>
+      {needsFactor
         ? <FactorInput mode={bundle.factorMode === 1 ? 1 : 2} onChange={setFactor} value={factor} />
         : null}
-      {bundle?.kind !== 1
-        ? capture.fragmentBytes === null
-          ? null
-          : <StatusMessage tone="danger">This link does not work. Ask the sender for the whole link again. Some apps cut off the part after the <span className="mono">#</span>.</StatusMessage>
-        : state === "unknown"
-          ? <AmbiguousNotice>
-            <p>An open may already have been counted. Trying again can use up another one.</p>
-            <button className="primary-button" onClick={() => { void open(); }} type="button">Try again anyway</button>
-          </AmbiguousNotice>
-          : <button className="primary-button full-button" disabled={state === "working" || (bundle.factorMode !== 0 && factor.trim().length === 0)} onClick={() => { void open(); }} type="button">{state === "working" ? "Opening…" : "Open the secret"}</button>}
-    </div>
+      {state === "unknown"
+        ? <AmbiguousNotice>
+          <p>An open may already have been counted. Trying again can use up another one.</p>
+          <button className="primary-button" onClick={() => { void open(); }} type="button">Try again anyway</button>
+        </AmbiguousNotice>
+        : <button className="primary-button full-button" disabled={state === "working" || (needsFactor && factor.trim().length === 0)} type="submit">{state === "working" ? "Opening…" : "Open the secret"}</button>}
+    </form>
     <OperationNotice state={state === "unknown" ? "idle" : state} />
   </div>;
 }

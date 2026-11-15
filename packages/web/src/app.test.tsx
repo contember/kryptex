@@ -1,12 +1,12 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import type { ReactNode } from "react";
 import { RouterProvider, createMemoryRouter } from "react-router";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { APP_ROUTES } from "./app";
-import { RequestPage } from "./pages/request-page";
-import { SendPage } from "./pages/send-page";
+import { RequestPage, requestShareArtifacts } from "./pages/request-page";
+import { SendPage, sendShareArtifacts } from "./pages/send-page";
 import { PairPage } from "./pages/static-pages";
-import { OperationNotice, ProtectionOptions, SecretField, ShareSlip } from "./ui";
+import { LinkProblem, OperationNotice, ProtectionOptions, SecretField, ShareSlip } from "./ui";
 import { creationPath, gatePath, parseCreationIntent } from "./verification";
 
 function render(element: ReactNode): string {
@@ -26,4 +26,39 @@ describe("real route surface", () => {
   it("defaults a write link to link-only protection and a sent secret to a second key", () => { const request = render(<RequestPage />); const send = render(<SendPage />); expect(request).toContain("Anyone who has the write link can answer"); expect(request).not.toContain("The other person also needs the second key"); expect(send).toContain("The recipient also needs the second key"); });
   it("offers an open action only on artifacts that carry one", () => { const markup = render(<ShareSlip artifacts={[{ channel: "Send it", id: "write", required: true, title: "Write link", value: "WRITE-URL" }, { channel: "Keep it", id: "pickup", openLabel: "Open", required: true, title: "Pickup link", value: "PICKUP-URL" }]} onSaved={() => undefined} saved={{}} title="Request sealed" />); expect(markup).toContain('href="PICKUP-URL"'); expect(markup).toContain('target="_blank"'); expect(markup).toContain('rel="noopener noreferrer"'); expect(markup).toContain(">Open</a>"); expect(markup).not.toContain('href="WRITE-URL"'); });
   it("states the limits of every protection mode", () => { const markup = renderToStaticMarkup(<ProtectionOptions onChange={() => undefined} value="second-key" />); expect(markup).toContain("same device or account may not be independent"); expect(markup).toContain("a weak passphrase can still be guessed"); expect(markup).toContain("bearer credential"); });
+  it("offers copy while a value stays concealed", () => { const markup = renderToStaticMarkup(<SecretField label="API key" value="must-not-render" />); expect(markup).toContain(">Copy</button>"); expect(markup).toContain(">Show</button>"); expect(markup).not.toContain("must-not-render"); });
+  it("offers maximum opens as a fixed choice from 1 to 10", () => { const send = render(<SendPage />); expect(send).not.toContain('type="number"'); expect(send).toContain('<option value="10">10</option>'); });
+  it("says why the create button is disabled", () => { expect(render(<SendPage />)).toContain("Write or paste the secret."); expect(render(<RequestPage />)).toContain("Give the request a title."); });
+  it("marks only the links for the other person as shareable", () => {
+    const send = sendShareArtifacts({ management: "MANAGEMENT-URL", recipient: "RECIPIENT-URL", secondKey: "KEY-ONLY" });
+    const request = requestShareArtifacts({ pickup: "PICKUP-URL", secondKey: "KEY-ONLY", write: "WRITE-URL" });
+    expect(send.map((artifact) => artifact.id)).toEqual(["recipient", "factor", "management"]);
+    expect(request.map((artifact) => artifact.id)).toEqual(["write", "factor", "pickup"]);
+    expect(send.filter((artifact) => artifact.shareable === true).map((artifact) => artifact.id)).toEqual(["recipient"]);
+    expect(request.filter((artifact) => artifact.shareable === true).map((artifact) => artifact.id)).toEqual(["write"]);
+  });
+  describe("with a share sheet", () => {
+    afterEach(() => { vi.unstubAllGlobals(); });
+    function shareRows(artifacts: Parameters<typeof ShareSlip>[0]["artifacts"]): string[] {
+      vi.stubGlobal("navigator", { share: () => Promise.resolve() });
+      const markup = render(<ShareSlip artifacts={artifacts} onSaved={() => undefined} saved={{}} title="Secret" />);
+      return markup.split('<li class="share-row').slice(1);
+    }
+    it("renders Share on the recipient link and nowhere else in the real send list", () => {
+      const rows = shareRows(sendShareArtifacts({ management: "MANAGEMENT-URL", recipient: "RECIPIENT-URL", secondKey: "KEY-ONLY" }));
+      expect(rows).toHaveLength(3);
+      expect(rows[0]).toContain("RECIPIENT-URL"); expect(rows[0]).toContain(">Share</button>");
+      expect(rows[1]).toContain("KEY-ONLY"); expect(rows[1]).not.toContain(">Share</button>");
+      expect(rows[2]).toContain("MANAGEMENT-URL"); expect(rows[2]).not.toContain(">Share</button>");
+    });
+    it("renders Share on the write link and nowhere else in the real request list", () => {
+      const rows = shareRows(requestShareArtifacts({ pickup: "PICKUP-URL", secondKey: "KEY-ONLY", write: "WRITE-URL" }));
+      expect(rows).toHaveLength(3);
+      expect(rows[0]).toContain("WRITE-URL"); expect(rows[0]).toContain(">Share</button>");
+      expect(rows[1]).toContain("KEY-ONLY"); expect(rows[1]).not.toContain(">Share</button>");
+      expect(rows[2]).toContain("PICKUP-URL"); expect(rows[2]).not.toContain(">Share</button>");
+    });
+  });
+  it("renders no Share without a share sheet", () => { const markup = render(<ShareSlip artifacts={sendShareArtifacts({ management: "MANAGEMENT-URL", recipient: "RECIPIENT-URL", secondKey: null })} onSaved={() => undefined} saved={{}} title="Secret" />); expect(markup).toContain("RECIPIENT-URL"); expect(markup).not.toContain(">Share</button>"); });
+  it("replaces a link page whose private part is missing", () => { const markup = render(<LinkProblem capture={{ canonicalPathname: "/s", fragmentBytes: null, hadFragment: false }} flow="link" />); expect(markup).toContain("This link is incomplete"); expect(markup).toContain('href="/"'); expect(markup).not.toContain("Someone sent you a secret"); });
 });

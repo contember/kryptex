@@ -20,11 +20,21 @@ interface PendingSend {
   readonly sendSeed: Uint8Array<ArrayBuffer>;
 }
 
+const OPEN_CHOICES: readonly number[] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+
 const PROTECTION_SUMMARY: Readonly<Record<Protection, string>> = {
   "link-only": "Anyone who has the link can open it. Nothing else is needed.",
   "passphrase": "The recipient also needs the passphrase you pick",
   "second-key": "The recipient also needs the second key that Kryptex makes"
 };
+
+/** Only the recipient link offers the share sheet: the second key must travel another way, and the management link stays with the sender. */
+export function sendShareArtifacts(links: { readonly recipient: string; readonly secondKey: string | null; readonly management: string }): readonly ShareArtifact[] {
+  const artifacts: ShareArtifact[] = [{ channel: "Send this to the person who should get the secret.", id: "recipient", required: true, shareable: true, title: "Recipient link", value: links.recipient }];
+  if (links.secondKey !== null) artifacts.push({ channel: "Send this a different way than the link: in a call, in person, or in a chat on another device. Never put it in the same message.", id: "factor", required: true, title: "Second key", value: links.secondKey });
+  artifacts.push({ channel: "Keep this for yourself. It shows when the secret was opened and lets you shorten its time or revoke it.", id: "management", required: false, title: "Management link", value: links.management });
+  return artifacts;
+}
 
 export function SendPage() {
   const client = useClient();
@@ -58,9 +68,11 @@ export function SendPage() {
   function selectTtl(value: number): void { if (isTtlSeconds(value)) setTtl(value); }
 
   function finishCreate(value: PendingSend, serverExpiresAt: number): void {
-    const next: ShareArtifact[] = [{ channel: "Send this to the person who should get the secret.", id: "recipient", required: true, title: "Recipient link", value: artifactUrl("/s", { factorMode: value.factor.mode, kind: 1, salt: value.factor.salt, sendSeed: value.sendSeed, serverExpiresAt }) }];
-    if (value.factor.secondKey !== null) next.push({ channel: "Send this a different way than the link: in a call, in person, or in a chat on another device. Never put it in the same message.", id: "factor", required: true, title: "Second key", value: value.factor.secondKey });
-    next.push({ channel: "Keep this for yourself. It shows when the secret was opened and lets you shorten its time or revoke it.", id: "management", required: false, title: "Management link", value: artifactUrl("/m", { kind: 2, locator: value.locator, manageSeed: value.manageSeed, serverExpiresAt }) });
+    const next = sendShareArtifacts({
+      management: artifactUrl("/m", { kind: 2, locator: value.locator, manageSeed: value.manageSeed, serverExpiresAt }),
+      recipient: artifactUrl("/s", { factorMode: value.factor.mode, kind: 1, salt: value.factor.salt, sendSeed: value.sendSeed, serverExpiresAt }),
+      secondKey: value.factor.secondKey
+    });
     setReconciling(false); setPending(null); setArtifacts(next); setExpiresAt(serverExpiresAt); setState("done");
   }
 
@@ -127,11 +139,13 @@ export function SendPage() {
 
   const draft = validateSendDraft(mode, text, fields);
   const started = mode === "text" ? text.length > 0 : fields.some((field) => field.value.length > 0);
+  /** Said under the disabled button, where a phone user is looking when nothing happens. */
+  const blocked = !draft.valid ? draft.message : protection === "passphrase" && !phrase.valid ? `Passphrase: ${phrase.message}` : null;
 
   if (artifacts !== null) {
     const complete = artifacts.every((artifact) => saved[artifact.id] === true);
     return <div className="task-page task-page--wide">
-      <PageIntro step="Step 2 of 2 · share" title="Your secret is ready">
+      <PageIntro arrive step="Step 2 of 2 · share" title="Your secret is ready">
         <p>Kryptex stored it encrypted and cannot read it. What opens it is on this page and nowhere else.</p>
       </PageIntro>
       <ShareSlip
@@ -209,12 +223,17 @@ export function SendPage() {
         <ProtectionOptions onChange={setProtection} value={protection} />
         {protection === "passphrase" ? <PassphraseFields confirmation={confirmation} message={phrase.message} onConfirmation={setConfirmation} onPassphrase={setPassphrase} passphrase={passphrase} strength={phrase.strength} valid={phrase.valid} /> : null}
         <div className="field-block">
-          <label><span>Maximum opens</span><input max={10} min={1} onChange={(event) => { setRetrievals(event.currentTarget.valueAsNumber); }} type="number" value={retrievals} /></label>
+          <label><span>Maximum opens</span>
+            <select onChange={(event) => { setRetrievals(Number(event.currentTarget.value)); }} value={retrievals}>
+              {OPEN_CHOICES.map((choice) => <option key={choice} value={choice}>{choice}</option>)}
+            </select>
+          </label>
           <FieldHint>This counts each time the encrypted secret is sent to a browser, not how many people read it. Keep 1 unless the recipient may need a second try.</FieldHint>
         </div>
       </AdvancedDisclosure>
 
-      <button className="primary-button full-button" disabled={!draft.valid || (protection === "passphrase" && !phrase.valid) || state === "working" || verificationExpired} onClick={() => { void create(); }} type="button">{reconciling ? "Checking…" : state === "working" ? "Encrypting…" : "Encrypt and create link"}</button>
+      <button aria-describedby={blocked === null ? undefined : "create-blocked"} className="primary-button full-button" disabled={blocked !== null || state === "working" || verificationExpired} onClick={() => { void create(); }} type="button">{reconciling ? "Checking…" : state === "working" ? "Encrypting…" : "Encrypt and create link"}</button>
+      {blocked === null || verificationExpired ? null : <p className="blocked-reason" id="create-blocked">{blocked}</p>}
       <p className="fine-print">The human check you passed covers one link. It never sees your secret.</p>
     </div>
 

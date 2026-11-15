@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode, RefObject, SyntheticEvent } from "react";
-import { useBlocker } from "react-router";
+import { Link, useBlocker } from "react-router";
 
 import { formatExactTime, formatTimeLeft } from "./format";
 import type { FragmentCapture } from "./fragment";
@@ -16,6 +16,8 @@ export interface ShareArtifact {
   /** Label for an action opening this artifact in a new tab. Only set it on links the owner keeps. */
   readonly openLabel?: string;
   readonly required: boolean;
+  /** Offer the system share sheet. Only for links meant for the other person, never for the second key. */
+  readonly shareable?: boolean;
   /** Overrides the default saved-confirmation wording. */
   readonly savedLabel?: string;
   readonly title: string;
@@ -52,10 +54,21 @@ function useCopy(): { readonly copy: (value: string) => void; readonly state: Co
   return { copy, state };
 }
 
-export function PageIntro({ title, step, children }: { readonly title: string; readonly step?: string; readonly children: ReactNode }) {
+/**
+ * `arrive` marks a view that replaces the one the person acted on (a created link, an opened secret).
+ * The scroll position of the old view would otherwise drop them mid-page, so it scrolls to the top
+ * and moves focus to the heading for screen readers.
+ */
+export function PageIntro({ title, step, children, arrive = false }: { readonly title: string; readonly step?: string; readonly children: ReactNode; readonly arrive?: boolean }) {
+  const heading = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    if (!arrive) return;
+    window.scrollTo(0, 0);
+    heading.current?.focus({ preventScroll: true });
+  }, [arrive]);
   return <header className="page-intro">
     {step === undefined ? null : <p className="eyebrow">{step}</p>}
-    <h1>{title}</h1>
+    <h1 ref={heading} tabIndex={arrive ? -1 : undefined}>{title}</h1>
     <div>{children}</div>
   </header>;
 }
@@ -74,7 +87,7 @@ export function FieldHint({ children }: { readonly children: ReactNode }) {
 }
 
 export function AmbiguousNotice({ children }: { readonly children: ReactNode }) {
-  return <div className="operation-notice"><strong>We could not confirm the result.</strong><div>{children}</div></div>;
+  return <Notice alert><strong>We could not confirm the result.</strong><div>{children}</div></Notice>;
 }
 
 export function ExpiryNote({ expiresAt, label = "Expires" }: { readonly expiresAt: number; readonly label?: string }) {
@@ -160,18 +173,20 @@ export function normalizedFactorInput(mode: 0 | 1 | 2, value: string): string {
 export function FactorInput({ mode, value, onChange }: { readonly mode: 1 | 2; readonly value: string; readonly onChange: (value: string) => void }) {
   if (mode === 1) {
     return <div className="field-block">
-      <label><span>Passphrase</span><input autoComplete="off" onChange={(event) => { onChange(event.currentTarget.value); }} spellCheck={false} type="password" value={value} /></label>
+      <label><span>Passphrase</span><input autoCapitalize="off" autoComplete="off" autoCorrect="off" autoFocus enterKeyHint="go" onChange={(event) => { onChange(event.currentTarget.value); }} spellCheck={false} type="password" value={value} /></label>
       <FieldHint>The person who sent you the link picked this passphrase. They should tell you separately, not in the same message as the link.</FieldHint>
     </div>;
   }
   const compact = compactFactor(value);
   const recognized = compact.length > 0 && isValidCrockfordFactor(compact);
   return <div className="field-block">
-    <label><span>Second key</span><input autoComplete="off" className="mono" onChange={(event) => { onChange(event.currentTarget.value); }} placeholder="XXXXX-XXXXX-XXXXX-XXXXX-XXXXXX" spellCheck={false} type="text" value={value} /></label>
+    <label><span>Second key</span><input autoCapitalize="characters" autoComplete="off" autoCorrect="off" autoFocus className="mono" enterKeyHint="go" onChange={(event) => { onChange(event.currentTarget.value); }} placeholder="XXXXX-XXXXX-XXXXX-XXXXX-XXXXXX" spellCheck={false} type="text" value={value} /></label>
     {compact.length === 0
       ? <FieldHint>The person who sent you the link should give you this key a different way, for example in a call. Capitals, spaces and dashes do not matter.</FieldHint>
       : recognized ? <span className="field-hint field-hint--good">This looks like a whole key. You will find out if it is the right one when you open.</span>
-        : <FieldHint>Not complete yet. A key has 26 characters, usually in five groups.</FieldHint>}
+        : compact.replaceAll("-", "").length >= 26
+          ? <FieldHint>Something in this key cannot be right. Check each character against the key you were given.</FieldHint>
+          : <FieldHint>Not complete yet. A key has 26 characters, usually in five groups.</FieldHint>}
   </div>;
 }
 
@@ -179,8 +194,17 @@ function SplitSeal({ joined }: { readonly joined: boolean }) {
   return <span aria-hidden="true" className={joined ? "share-seal share-seal--joined" : "share-seal"}><span /><span /></span>;
 }
 
+/** The system share sheet hands the link to an app the person picks, like a paste would. Kryptex sees nothing. */
+function canShare(): boolean {
+  return typeof navigator !== "undefined" && "share" in navigator;
+}
+
 function ShareRow({ artifact, saved, onSaved }: { readonly artifact: ShareArtifact; readonly saved: boolean; readonly onSaved: (value: boolean) => void }) {
   const clipboard = useCopy();
+  const [shareAvailable] = useState(canShare);
+  function share(): void {
+    navigator.share({ url: artifact.value }).then(() => { onSaved(true); }).catch(() => undefined);
+  }
   return <li className={saved ? "share-row share-row--saved" : "share-row"}>
     <div className="share-row__head">
       <strong>{artifact.title}</strong>
@@ -190,6 +214,9 @@ function ShareRow({ artifact, saved, onSaved }: { readonly artifact: ShareArtifa
     <div className="share-row__value">
       <code className="mono">{artifact.value}</code>
       <button className="secondary-button" onClick={() => { clipboard.copy(artifact.value); }} type="button">{clipboard.state === "copied" ? "Copied" : "Copy"}</button>
+      {artifact.shareable === true && shareAvailable
+        ? <button className="secondary-button" onClick={share} type="button">Share</button>
+        : null}
       {artifact.openLabel === undefined
         ? null
         : <a className="secondary-button" href={artifact.value} rel="noopener noreferrer" target="_blank">{artifact.openLabel}</a>}
@@ -243,7 +270,7 @@ export function SecretField({ label, value, codeLike = true }: { readonly label:
       <strong>{label}</strong>
       <div className="secret-output__actions">
         <button className="secondary-button" onClick={() => { setRevealed((current) => !current); }} type="button">{revealed ? "Hide" : "Show"}</button>
-        {revealed ? <button className="secondary-button" onClick={() => { clipboard.copy(value); }} type="button">{clipboard.state === "copied" ? "Copied" : "Copy"}</button> : null}
+        <button className="secondary-button" onClick={() => { clipboard.copy(value); }} type="button">{clipboard.state === "copied" ? "Copied" : "Copy"}</button>
       </div>
     </div>
     {revealed
@@ -255,9 +282,12 @@ export function SecretField({ label, value, codeLike = true }: { readonly label:
             <input className={codeLike ? "mono" : undefined} onFocus={(event) => { event.currentTarget.select(); }} readOnly value={value} />
           </label>
           : null}
-        <span aria-live="polite" className="sr-only">{clipboard.state === "copied" ? `${label} copied.` : clipboard.state === "manual" ? "Automatic copy failed." : ""}</span>
       </>
-      : <span aria-hidden="true" className="concealed">•••• •••• ••••</span>}
+      : <>
+        <span aria-hidden="true" className="concealed">•••• •••• ••••</span>
+        {clipboard.state === "manual" ? <p className="field-hint">Copying did not work. Press Show, then select the text and copy it yourself.</p> : null}
+      </>}
+    <span aria-live="polite" className="sr-only">{clipboard.state === "copied" ? `${label} copied.` : clipboard.state === "manual" ? "Automatic copy failed." : ""}</span>
   </div>;
 }
 
@@ -267,35 +297,61 @@ export function FragmentNotice({ capture }: { readonly capture: FragmentCapture 
     : <StatusMessage tone="warning">This link is incomplete, or the page was reloaded. Open the original link again, with everything after the <span className="mono">#</span>.</StatusMessage>;
 }
 
+/**
+ * Replaces a whole link page when the part after `#` is missing or cannot be read, so the heading
+ * does not promise a secret or a request that this page cannot reach.
+ */
+export function LinkProblem({ capture, flow }: { readonly capture: FragmentCapture; readonly flow: string }) {
+  const missing = capture.fragmentBytes === null;
+  return <div className="task-page task-page--narrow">
+    <PageIntro title={missing ? "This link is incomplete" : "This link does not work"}>
+      {missing
+        ? <p>{capture.hadFragment ? "The page was reloaded, and the private part of the link is not kept. " : ""}Open the original link again, with everything after the <span className="mono">#</span>. Some apps cut that part off, so copy the whole link if you can.</p>
+        : <p>Check that you have the whole {flow}, or ask for it again. Some apps cut off the part after the <span className="mono">#</span>.</p>}
+    </PageIntro>
+    <Link className="secondary-button" to="/">Back to the start</Link>
+  </div>;
+}
+
+/**
+ * An alert answers something the person just did and needs them to act, so it takes focus and comes
+ * into view on a phone. A status notice can appear on its own, so it never moves focus.
+ */
+function Notice({ alert, children }: { readonly alert: boolean; readonly children: ReactNode }) {
+  const notice = useRef<HTMLDivElement>(null);
+  useEffect(() => { if (alert) notice.current?.focus(); }, [alert]);
+  return <div className="operation-notice" ref={notice} role={alert ? "alert" : "status"} tabIndex={alert ? -1 : undefined}>{children}</div>;
+}
+
 /** `creating` words the unavailable state for a create form, where no link exists yet to be unavailable. */
 export function OperationNotice({ state, retry, creating = false }: { readonly state: OperationState; readonly retry?: () => void; readonly creating?: boolean }) {
   if (state === "waiting") {
-    return <div className="operation-notice">
+    return <Notice alert={false} key="waiting">
       <strong>No answer yet.</strong>
       <p>Nobody has answered so far. Check again later.</p>
       {retry === undefined ? null : <button className="secondary-button" onClick={retry} type="button">Check again</button>}
-    </div>;
+    </Notice>;
   }
   if (state === "unknown") {
-    return <div className="operation-notice">
+    return <Notice alert key="unknown">
       <strong>We could not confirm the result.</strong>
       <p>It may have gone through anyway. Check before you try again, so you do not repeat it.</p>
       {retry === undefined ? null : <button className="secondary-button" onClick={retry} type="button">Check again</button>}
-    </div>;
+    </Notice>;
   }
   if (state === "unavailable") {
-    return <div className="operation-notice">
+    return <Notice alert key="unavailable">
       <strong>{creating ? "Nothing was created." : "This link does not work."}</strong>
       <p>{creating
         ? "Kryptex could not create it. What you wrote is still on this page. Try again in a moment."
         : "It may have expired, been used up or revoked, or be incomplete. A wrong passphrase or second key looks the same. Kryptex does not say which, on purpose."}</p>
-    </div>;
+    </Notice>;
   }
   if (state === "rate_limited") {
-    return <div className="operation-notice">
+    return <Notice alert key="rate_limited">
       <strong>Too many tries.</strong>
       <p>After each wrong passphrase or second key, the wait before the next try gets longer, up to an hour for a passphrase. Wait a while, then try again.</p>
-    </div>;
+    </Notice>;
   }
   return null;
 }
@@ -303,11 +359,12 @@ export function OperationNotice({ state, retry, creating = false }: { readonly s
 export function ConfirmDialog({ open, title, description, confirmLabel, onCancel, onConfirm, restoreFocus }: { readonly open: boolean; readonly title: string; readonly description: string; readonly confirmLabel: string; readonly onCancel: () => void; readonly onConfirm: () => void; readonly restoreFocus: RefObject<HTMLButtonElement | null> }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [confirmation, setConfirmation] = useState("");
+  const matches = confirmation.trim().toUpperCase() === confirmLabel;
   useEffect(() => { const dialog = dialogRef.current; if (dialog === null) return; if (open && !dialog.open) dialog.showModal(); if (!open && dialog.open) dialog.close(); }, [open]);
   function close(): void { setConfirmation(""); onCancel(); window.setTimeout(() => restoreFocus.current?.focus(), 0); }
   function submit(event: SyntheticEvent<HTMLFormElement, SubmitEvent>): void {
     event.preventDefault();
-    if (confirmation !== confirmLabel) return;
+    if (!matches) return;
     setConfirmation("");
     onConfirm();
     dialogRef.current?.close();
@@ -319,11 +376,11 @@ export function ConfirmDialog({ open, title, description, confirmLabel, onCancel
       <p>{description}</p>
       <label className="field-block">
         <span>Type <strong>{confirmLabel}</strong> to confirm</span>
-        <input autoFocus className="mono" onChange={(event) => { setConfirmation(event.currentTarget.value); }} value={confirmation} />
+        <input autoCapitalize="characters" autoComplete="off" autoCorrect="off" autoFocus className="mono" enterKeyHint="done" onChange={(event) => { setConfirmation(event.currentTarget.value); }} spellCheck={false} value={confirmation} />
       </label>
       <div>
         <button className="secondary-button" onClick={close} type="button">Cancel</button>
-        <button className="danger-button" disabled={confirmation !== confirmLabel} type="submit">{confirmLabel}</button>
+        <button className="danger-button" disabled={!matches} type="submit">{confirmLabel}</button>
       </div>
     </form>
   </dialog>;
