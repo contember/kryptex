@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { chmodSync, existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { ApiFailure } from "@kryptex/client";
 import type {
   CreatePermitStatusResponse,
@@ -46,7 +46,7 @@ import {
   randomBytes,
   sealRequestResponse
 } from "@kryptex/crypto";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { run, type CommandResult, type Runtime } from "./cli.js";
 import type { NativeClient } from "./flow.js";
 
@@ -300,6 +300,7 @@ class FakeService implements NativeClient {
 }
 
 let project: string;
+let cwd: string;
 let state: string;
 let service: FakeService;
 let stderr: Buffer[];
@@ -307,6 +308,7 @@ let printed: string[];
 
 beforeEach(() => {
   project = realpathSync(mkdtempSync(join(tmpdir(), "kryptex-flow-")));
+  cwd = project;
   state = join(project, ".state");
   execFileSync("git", ["init", "-q"], { cwd: project });
   writeFileSync(join(project, ".gitignore"), ".env\n.state/\nhandoff.txt\n");
@@ -330,7 +332,7 @@ afterEach(() => {
 function runtime(): Runtime {
   return {
     clientFor: () => service,
-    cwd: project,
+    cwd,
     environment: { KRYPTEX_ORIGIN: "https://kryptex.example", KRYPTEX_STATE_DIR: state },
     now: () => service.clock,
     sleep: (milliseconds) => {
@@ -399,6 +401,34 @@ describe("request", () => {
     expect(await kryptex("wait", handle)).toMatchObject({ exitCode: 0, output: { delivered: { command: "sh", exitCode: 0, keys: ["API_KEY", "REGION"] } } });
     expect(Buffer.concat(stderr).toString("utf8")).toBe("key=[redacted:API_KEY] region=[]\n");
     expect(printed.join("\n")).not.toContain(SECRET);
+  });
+
+  it("runs a command outside a Git work tree, where an env file is refused", async () => {
+    const outside = realpathSync(mkdtempSync(join(tmpdir(), "kryptex-outside-")));
+    vi.stubEnv("GIT_CEILING_DIRECTORIES", dirname(outside));
+    try {
+      writeFileSync(join(outside, "form.json"), readFileSync(join(project, "form.json")));
+      cwd = outside;
+      const refused = await kryptex("request", "create", "--spec", "form.json", "--env-file", ".env", "--env-dialect", "literal");
+      expect(refused).toMatchObject({ exitCode: 1, output: { error: "target_invalid" } });
+
+      const handle = await createRequest("--exec", "--", "sh", "-c", `test "$(pwd -P)" = '${outside}'`);
+      await service.submit(await pairAndCreate(handle), answers);
+      expect(await kryptex("wait", handle)).toMatchObject({ exitCode: 0, output: { delivered: { command: "sh", exitCode: 0 }, state: "delivered" } });
+    } finally {
+      vi.unstubAllEnvs();
+      rmSync(outside, { force: true, recursive: true });
+    }
+  });
+
+  it("never acts on an env request recorded without a project root", async () => {
+    const handle = await createRequest("--env-file", ".env", "--env-dialect", "literal");
+    const path = join(state, `${handle}.json`);
+    const recorded = readFileSync(path, "utf8");
+    const rootless = recorded.replace(/"projectRoot":"[^"]*"/u, "\"projectRoot\":null");
+    expect(rootless).not.toBe(recorded);
+    writeFileSync(path, rootless);
+    expect(await kryptex("wait", handle)).toMatchObject({ exitCode: 1, output: { error: "state_invalid" } });
   });
 
   it("keeps the answer and retries the command after a failed run", async () => {
