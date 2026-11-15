@@ -24,8 +24,8 @@ From this directory:
 
 ```sh
 bun install --frozen-lockfile
-cpu-lease run -n 1 -- bun run generate
-cpu-lease run -n 1 -- bun run check
+bun run generate
+bun run check
 ```
 
 `generate` rewrites only `vectors/v1/*.json`. `check` derives the values again,

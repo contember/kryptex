@@ -120,7 +120,6 @@ interface CommonRecord {
   readonly deviceDays: DeviceGrantDays;
   readonly handle: string;
   readonly origin: string;
-  readonly projectRoot: string;
   readonly version: 1;
 }
 
@@ -128,6 +127,8 @@ export interface RequestRecord extends CommonRecord {
   readonly fields: readonly StoredField[];
   readonly kind: "request";
   readonly phase: RequestPhase;
+  /** The Git top level, resolved only for an `env` sink; `null` for `exec`, which writes no file. */
+  readonly projectRoot: string | null;
   readonly sink: RequestSink;
   readonly title: string;
   readonly ttl: TtlSeconds;
@@ -144,6 +145,7 @@ export interface SendRecord extends CommonRecord {
   readonly kind: "send";
   readonly maxRetrievals: number;
   readonly phase: SendPhase;
+  readonly projectRoot: string;
   readonly source: SendSource;
   readonly ttl: TtlSeconds;
 }
@@ -367,17 +369,21 @@ export function parseRecord(value: unknown): OperationRecord {
     deviceDays: hasDeviceDays ? deviceDays(field(object, "deviceDays"), "deviceDays") : DEFAULT_DEVICE_GRANT_DAYS,
     handle: stringValue(field(object, "handle"), "handle"),
     origin: stringValue(field(object, "origin"), "origin"),
-    projectRoot: stringValue(field(object, "projectRoot"), "projectRoot"),
     version: RECORD_VERSION
   };
   if (field(object, "version") !== RECORD_VERSION) throw new ShapeError("version");
   if (kind === "request") {
+    const sink = parseSink(field(object, "sink"));
+    const root = field(object, "projectRoot");
+    // Records written before exec stopped resolving a root keep a string root on an exec sink.
+    const projectRoot = sink.kind === "exec" && root === null ? null : stringValue(root, "projectRoot");
     return {
       ...common,
       fields: arrayValue(field(object, "fields"), "fields").map(parseStoredField),
       kind,
       phase: parseRequestPhase(field(object, "phase")),
-      sink: parseSink(field(object, "sink")),
+      projectRoot,
+      sink,
       title: stringValue(field(object, "title"), "title"),
       ttl: ttl(field(object, "ttl"))
     };
@@ -389,6 +395,7 @@ export function parseRecord(value: unknown): OperationRecord {
     kind,
     maxRetrievals: integerValue(field(object, "maxRetrievals"), "maxRetrievals"),
     phase: parseSendPhase(field(object, "phase")),
+    projectRoot: stringValue(field(object, "projectRoot"), "projectRoot"),
     source: {
       dialect: literal(field(source, "dialect"), ["expand", "literal"], "source.dialect"),
       keys: stringList(field(source, "keys"), "source.keys"),

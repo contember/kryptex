@@ -223,7 +223,7 @@ An optional field left empty is not written, so an existing assignment stays. A 
 
 ### `--exec`
 
-The command and its arguments are fixed at creation and recorded. After a verified pickup, the CLI runs the command once in the creation directory with the inherited environment plus one variable per answered target. Optional unanswered fields are set to the empty string. Standard input is closed.
+The command and its arguments are fixed at creation and recorded. `--exec` writes no file, so the path rules do not apply: it works outside a Git work tree and records no project root. After a verified pickup, the CLI runs the command once in the creation directory with the inherited environment plus one variable per answered target. Optional unanswered fields are set to the empty string. Standard input is closed.
 
 The child's standard output and standard error are both forwarded to the CLI's standard error after redaction: every exact byte occurrence of each non-empty answer value is replaced with `[redacted:<TARGET>]`. Redaction is streamed with a carry buffer one byte shorter than the longest value, so occurrences split across reads are caught. It does not catch transformed values, such as encodings, substrings, or values split by the child itself; a command that prints transformed secrets will leak them.
 

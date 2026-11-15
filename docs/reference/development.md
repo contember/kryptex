@@ -89,12 +89,14 @@ The Send and Request actions navigate to `/gate` before opening a secret form. C
 Run every root gate before proposing a change:
 
 ```sh
-cpu-lease run -n 2 -- bun run check:vectors
-cpu-lease run -n 2 -- bun run lint
-cpu-lease run -n 2 -- bun run typecheck
-cpu-lease run -n 2 -- bun run test
-cpu-lease run -n 4 -- bun run build
+bun run check:vectors
+bun run lint
+bun run typecheck
+bun run test
+bun run build
 ```
+
+On a machine shared with other jobs, wrap these commands in whatever CPU limiter you use; nothing in the repository requires one.
 
 `check:vectors` installs the separately pinned vector-tool dependencies before validating the frozen version 1 vectors. The Worker build is a Wrangler dry run; it does not deploy.
 

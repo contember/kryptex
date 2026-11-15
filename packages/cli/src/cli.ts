@@ -219,10 +219,11 @@ async function requestCreate(args: readonly string[], runtime: Runtime): Promise
   if (exec === (values["env-file"] !== undefined)) throw new UsageError("Pass exactly one of --env-file or --exec.");
   if (exec !== (command !== null && command.length > 0)) throw new UsageError("--exec needs a command after --, and only --exec takes one.");
   if (exec && values["env-dialect"] !== undefined) throw new UsageError("--env-dialect applies only to --env-file.");
-  const root = projectRoot(runtime.cwd);
+  let root: string | null = null;
   let sink: RequestSink;
   if (values["env-file"] !== undefined) {
     const dialect = parseDialect(values["env-dialect"]);
+    root = projectRoot(runtime.cwd);
     const path = projectPath(root, runtime.cwd, values["env-file"]);
     const existing = readProjectFile(checkProjectPath(root, path, { existence: "either", output: true }));
     if (existing !== null) checkDotenvTargets(existing, spec.fields.flatMap((entry) => entry.target === null ? [] : [entry.target]));

@@ -103,16 +103,22 @@ function targets(fields: readonly StoredField[]): readonly string[] {
   return fields.flatMap((entry) => entry.target === null ? [] : [entry.target]);
 }
 
+/** The project root of an env sink; the record parser rejects an env sink without one. */
+function envRoot(record: RequestRecord): string {
+  if (record.projectRoot === null) throw new CliError("state_invalid");
+  return record.projectRoot;
+}
+
 /** Confirms the output can take the answer before anything consumes it on the service. */
 export function preflightSink(record: RequestRecord): void {
   if (record.sink.kind !== "env") return;
-  const absolute = checkProjectPath(record.projectRoot, record.sink.path, { existence: "either", output: true });
+  const absolute = checkProjectPath(envRoot(record), record.sink.path, { existence: "either", output: true });
   const existing = readProjectFile(absolute);
   if (existing !== null) checkDotenvTargets(existing, targets(record.fields));
 }
 
 function destinationLockName(record: RequestRecord, sink: Extract<RequestSink, { readonly kind: "env" }>): string {
-  return `dest-${createHash("sha256").update(`${record.projectRoot}\0${sink.path}`).digest("hex")}`;
+  return `dest-${createHash("sha256").update(`${envRoot(record)}\0${sink.path}`).digest("hex")}`;
 }
 
 async function deliver(context: FlowContext, record: RequestRecord, values: ReadonlyMap<string, string>): Promise<Delivered> {
@@ -122,7 +128,7 @@ async function deliver(context: FlowContext, record: RequestRecord, values: Read
     const answered = new Map([...values].filter(([, value]) => value.length > 0));
     const release = acquireLock(context.store, destinationLockName(record, sink));
     try {
-      const absolute = checkProjectPath(record.projectRoot, sink.path, { existence: "either", output: true });
+      const absolute = checkProjectPath(envRoot(record), sink.path, { existence: "either", output: true });
       replaceProjectFile(absolute, upsertDotenv(readProjectFile(absolute) ?? "", answered, sink.dialect));
     } finally {
       release();
