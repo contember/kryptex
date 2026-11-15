@@ -22,5 +22,5 @@ Kryptex is a capability-based, end-to-end encrypted secret transfer service.
 - Keep TypeScript strict. Do not use `any`, type casts, `@ts-ignore`, or `@ts-expect-error`.
 - Dependencies must be pinned to exact versions.
 - Unit tests stay inside the package they exercise.
-- Run full builds through `cpu-lease`.
+- Run the repository gates in `docs/reference/development.md` before proposing a change.
 - This is a public repository. Do not reference private projects, clients, URLs, or incidents.
