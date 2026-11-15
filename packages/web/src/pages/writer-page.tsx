@@ -1,11 +1,11 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { RequestResponsePayload, RequestSchemaPayload } from "@kryptex/contracts/payloads";
 import { decodeBase64Url, decryptRequestSchemaEnvelope, deriveRequestWriteKeys, encodeBase64Url, receiptBase64Url, receiptDisplay, sealRequestResponse } from "@kryptex/crypto";
 import { useClient } from "../client-context";
 import { checkedResponseExpiry, classifyReadFailure, classifySubmitFailure, consumeBundle, exactEnvelopeForRetry, factorFromInput } from "../crypto-flow";
 import { isMultilineField, isSensitiveField } from "../format";
 import type { FragmentCapture } from "../fragment";
-import { FactorInput, FieldHint, FragmentNotice, OperationNotice, PageIntro, StatusMessage, normalizedFactorInput, type OperationState } from "../ui";
+import { FactorInput, FieldHint, FragmentNotice, LinkProblem, OperationNotice, PageIntro, StatusMessage, normalizedFactorInput, type OperationState } from "../ui";
 import { validateRequestAnswers } from "../validation";
 
 interface OpenedSchema { readonly clientNotAfter: number; readonly digest: Uint8Array<ArrayBuffer>; readonly schema: RequestSchemaPayload; readonly serverExpiresAt: number; readonly writeToken: string; }
@@ -21,6 +21,8 @@ export function WriterPage({ capture }: { readonly capture: FragmentCapture }) {
   const [receiptMatch, setReceiptMatch] = useState<boolean | null>(null);
   const [confirmed, setConfirmed] = useState(false);
   const [state, setState] = useState<OperationState>("idle");
+  const result = useRef<HTMLDivElement>(null);
+  useEffect(() => { if (receipt !== null) result.current?.focus(); }, [receipt]);
 
   async function inspect(): Promise<void> {
     if (bundle?.kind !== 3) return;
@@ -58,6 +60,8 @@ export function WriterPage({ capture }: { readonly capture: FragmentCapture }) {
   const sealed = envelope !== null;
   const started = Object.values(answers).some((value) => value.length > 0);
 
+  if (bundle?.kind !== 3) return <LinkProblem capture={capture} flow="link" />;
+
   return <div className="task-page task-page--narrow">
     <PageIntro title="Someone asked you for information">
       <p>Reading the request sends nothing. Your answer is encrypted on this device, and only the person who asked can open it. Kryptex cannot read it.</p>
@@ -65,16 +69,12 @@ export function WriterPage({ capture }: { readonly capture: FragmentCapture }) {
     <FragmentNotice capture={capture} />
 
     {opened === null
-      ? <div className="simple-form">
-        {bundle?.kind === 3 && bundle.factorMode !== 0
+      ? <form className="simple-form" onSubmit={(event) => { event.preventDefault(); if (state !== "working") void inspect(); }}>
+        {bundle.factorMode !== 0
           ? <FactorInput mode={bundle.factorMode === 1 ? 1 : 2} onChange={setFactor} value={factor} />
           : null}
-        {bundle?.kind === 3
-          ? <button className="primary-button full-button" disabled={state === "working"} onClick={() => { void inspect(); }} type="button">{state === "working" ? "Opening…" : "Open the request"}</button>
-          : capture.fragmentBytes === null
-            ? null
-            : <StatusMessage tone="danger">This link does not work. Ask for the whole link again. Some apps cut off the part after the <span className="mono">#</span>.</StatusMessage>}
-      </div>
+        <button className="primary-button full-button" disabled={state === "working"} type="submit">{state === "working" ? "Opening…" : "Open the request"}</button>
+      </form>
       : <>
         <section className="requester-content">
           <p className="eyebrow">Provided by requester</p>
@@ -90,8 +90,8 @@ export function WriterPage({ capture }: { readonly capture: FragmentCapture }) {
                 <label>
                   <span>{field.label}{field.required ? "" : " (optional)"}</span>
                   {isMultilineField(field.type)
-                    ? <textarea disabled={sealed} onChange={(event) => { setAnswers({ ...answers, [field.id]: event.currentTarget.value }); }} rows={4} spellCheck={!isSensitiveField(field.type)} value={answers[field.id] ?? ""} />
-                    : <input autoComplete="off" disabled={sealed} onChange={(event) => { setAnswers({ ...answers, [field.id]: event.currentTarget.value }); }} spellCheck={!isSensitiveField(field.type)} type={isSensitiveField(field.type) ? "password" : "text"} value={answers[field.id] ?? ""} />}
+                    ? <textarea autoCapitalize={isSensitiveField(field.type) ? "off" : undefined} autoCorrect={isSensitiveField(field.type) ? "off" : undefined} disabled={sealed} onChange={(event) => { setAnswers({ ...answers, [field.id]: event.currentTarget.value }); }} rows={4} spellCheck={!isSensitiveField(field.type)} value={answers[field.id] ?? ""} />
+                    : <input autoCapitalize={isSensitiveField(field.type) ? "off" : undefined} autoComplete="off" autoCorrect={isSensitiveField(field.type) ? "off" : undefined} disabled={sealed} onChange={(event) => { setAnswers({ ...answers, [field.id]: event.currentTarget.value }); }} spellCheck={!isSensitiveField(field.type)} type={isSensitiveField(field.type) ? "password" : "text"} value={answers[field.id] ?? ""} />}
                 </label>
                 {field.help.length === 0 ? null : <span className="field-hint field-hint--requester">{field.help}</span>}
               </div>)}
@@ -105,9 +105,10 @@ export function WriterPage({ capture }: { readonly capture: FragmentCapture }) {
               <input checked={confirmed} disabled={sealed} onChange={(event) => { setConfirmed(event.currentTarget.checked); }} type="checkbox" />
               <span>I checked my answers. Only one answer can be accepted, and this link stops working after that.</span>
             </label>
-            <button className="primary-button full-button" disabled={!answerValidation.valid || !confirmed || state === "working"} onClick={() => { void submit(); }} type="button">{state === "working" ? "Sending…" : envelope === null ? "Send the answer" : "Send the same answer again"}</button>
+            <button className="primary-button full-button" aria-describedby={answerValidation.valid && !confirmed ? "submit-blocked" : undefined} disabled={!answerValidation.valid || !confirmed || state === "working"} onClick={() => { void submit(); }} type="button">{state === "working" ? "Sending…" : envelope === null ? "Send the answer" : "Send the same answer again"}</button>
+            {answerValidation.valid && !confirmed ? <p className="blocked-reason" id="submit-blocked">Tick the box above to confirm your answers.</p> : null}
           </div>
-          : <>
+          : <div className="writer-result" ref={result} tabIndex={-1}>
             {receiptMatch === true ? <StatusMessage tone="success">Answer sent. The person who asked can now open it once. Nothing else is needed from you.</StatusMessage> : null}
             <div className="fingerprint">
               <span>Receipt for your answer</span>
@@ -115,7 +116,7 @@ export function WriterPage({ capture }: { readonly capture: FragmentCapture }) {
               <p>{receiptMatch === true ? "Kryptex returned the same receipt as this page computed." : receiptMatch === false ? "Kryptex returned a different receipt. Treat the answer as not confirmed and keep this code." : "The answer is not confirmed yet. Keep this code."} If it matters, compare all 64 characters with the person who asked, another way than the link (a call, for example). A match proves only that you both have the same encrypted answer. It does not prove who wrote it, what it says, or that the service behaved.</p>
             </div>
             {state === "unknown" ? <button className="secondary-button" onClick={() => { void submit(); }} type="button">Send the same answer again</button> : null}
-          </>}
+          </div>}
       </>}
     <OperationNotice state={state} />
   </div>;

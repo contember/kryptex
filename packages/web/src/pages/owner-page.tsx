@@ -7,7 +7,7 @@ import { useClient } from "../client-context";
 import { artifactUrl, checkedResponseExpiry, consumeBundle, shortenedExpiryRequest, shouldPollRequestStatus } from "../crypto-flow";
 import { describeRequestState, formatExactTime, formatTimeLeft, isSensitiveField } from "../format";
 import type { FragmentCapture } from "../fragment";
-import { AmbiguousNotice, BurnAction, FieldHint, FragmentNotice, OperationNotice, PageIntro, SecretField, ShareSlip, StatusMessage, StatusSheet, useNowSeconds, type OperationState } from "../ui";
+import { AmbiguousNotice, BurnAction, FieldHint, FragmentNotice, LinkProblem, OperationNotice, PageIntro, SecretField, ShareSlip, StatusMessage, StatusSheet, useNowSeconds, type OperationState } from "../ui";
 
 type PickupRecovery = "none" | "checking" | "retry" | "lost";
 
@@ -27,6 +27,15 @@ export function OwnerPage({ capture }: { readonly capture: FragmentCapture }) {
   const [replacementSaved, setReplacementSaved] = useState(false);
   const [shortenUnavailable, setShortenUnavailable] = useState(false);
   const now = useNowSeconds();
+  const answerWaiting = status?.state === "submitted" && payload === null;
+
+  /** Someone waiting in another tab sees the answer arrive in the tab title. The title holds no secret. */
+  useEffect(() => {
+    if (!answerWaiting) return;
+    const previous = document.title;
+    document.title = "Answer ready | Kryptex";
+    return () => { document.title = previous; };
+  }, [answerWaiting]);
 
   async function credentials() {
     if (bundle?.kind !== 4) throw new Error("Invalid pickup bundle");
@@ -168,7 +177,7 @@ export function OwnerPage({ capture }: { readonly capture: FragmentCapture }) {
 
   if (payload !== null) {
     return <div className="task-page task-page--narrow">
-      <PageIntro title={payload.schema.title}>
+      <PageIntro arrive title={payload.schema.title}>
         <p>The answer is open now and cannot be opened again. Copy what you need. Reloading this page will not show it again.</p>
       </PageIntro>
       {payload.answers.map((answer) => {
@@ -182,6 +191,8 @@ export function OwnerPage({ capture }: { readonly capture: FragmentCapture }) {
       </div>
     </div>;
   }
+
+  if (bundle?.kind !== 4) return <LinkProblem capture={capture} flow="pickup link" />;
 
   const description = status === null ? null : describeRequestState(status.state);
   const pickupAction = status?.state !== "submitted"

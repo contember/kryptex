@@ -196,16 +196,18 @@ export function PairPage({ capture }: { readonly capture: FragmentCapture }) {
     <PageIntro title="Approve a terminal">
       <p>A command-line tool is asking for permission to create one transfer. Approve only a code that your own terminal shows. Approving gives that terminal one permission to create a transfer.</p>
     </PageIntro>
-    <div className="field-block">
-      <label><span>Code shown in your terminal</span><input autoComplete="off" className="mono" onChange={(event) => { setCode(event.currentTarget.value); }} placeholder="XXXX-XXXX" spellCheck={false} type="text" value={code} /></label>
-      {code.length > 0 && userCode === null ? <FieldHint>A code is 8 characters, usually written as two groups of four.</FieldHint> : null}
-    </div>
-    <div ref={container} />
-    {state === "ready" || state === "retry"
-      ? <button className="primary-button full-button" disabled={userCode === null || token === null} onClick={approve} type="button">
-        {state === "retry" ? "Try the same approval again" : "Approve this terminal"}
-      </button>
-      : null}
+    <form onSubmit={(event) => { event.preventDefault(); if (state === "ready" || state === "retry") approve(); }}>
+      <div className="field-block">
+        <label><span>Code shown in your terminal</span><input autoCapitalize="characters" autoComplete="off" autoCorrect="off" autoFocus={code.length === 0} className="mono" enterKeyHint="go" onChange={(event) => { setCode(event.currentTarget.value); }} placeholder="XXXX-XXXX" spellCheck={false} type="text" value={code} /></label>
+        {code.length > 0 && userCode === null ? <FieldHint>A code is 8 characters, usually written as two groups of four.</FieldHint> : null}
+      </div>
+      <div ref={container} />
+      {state === "ready" || state === "retry"
+        ? <button className="primary-button full-button" disabled={userCode === null || token === null} type="submit">
+          {state === "retry" ? "Try the same approval again" : "Approve this terminal"}
+        </button>
+        : null}
+    </form>
     {state === "ready" && token === null ? <StatusMessage>Waiting for the check…</StatusMessage> : null}
     {state === "working" ? <StatusMessage>Approving…</StatusMessage> : null}
     {state === "retry" ? <StatusMessage tone="warning">The approval could not be confirmed.</StatusMessage> : null}
@@ -261,16 +263,18 @@ export function DevicePairPage({ capture }: { readonly capture: FragmentCapture 
     <PageIntro title="Approve a terminal">
       <p>A command-line tool is asking for permission to create transfers. Type the code that your own terminal shows. Approving can give that terminal standing permission to create transfers.</p>
     </PageIntro>
-    <div className="field-block">
-      <label><span>Code shown in your terminal</span><input autoComplete="off" className="mono" onChange={(event) => { setCode(event.currentTarget.value); }} placeholder="XXXX-XXXX" spellCheck={false} type="text" value={code} /></label>
-      {code.length > 0 && userCode === null ? <FieldHint>A code is 8 characters, usually written as two groups of four.</FieldHint> : null}
-    </div>
-    <div ref={container} />
-    {state === "ready" || state === "retry"
-      ? <button className="primary-button full-button" disabled={userCode === null || token === null} onClick={approve} type="button">
-        {state === "retry" ? "Try the same approval again" : "Continue"}
-      </button>
-      : null}
+    <form onSubmit={(event) => { event.preventDefault(); if (state === "ready" || state === "retry") approve(); }}>
+      <div className="field-block">
+        <label><span>Code shown in your terminal</span><input autoCapitalize="characters" autoComplete="off" autoCorrect="off" autoFocus={code.length === 0} className="mono" enterKeyHint="go" onChange={(event) => { setCode(event.currentTarget.value); }} placeholder="XXXX-XXXX" spellCheck={false} type="text" value={code} /></label>
+        {code.length > 0 && userCode === null ? <FieldHint>A code is 8 characters, usually written as two groups of four.</FieldHint> : null}
+      </div>
+      <div ref={container} />
+      {state === "ready" || state === "retry"
+        ? <button className="primary-button full-button" disabled={userCode === null || token === null} type="submit">
+          {state === "retry" ? "Try the same approval again" : "Continue"}
+        </button>
+        : null}
+    </form>
     {state === "ready" && token === null ? <StatusMessage>Waiting for the check…</StatusMessage> : null}
     {state === "working" ? <StatusMessage>Approving…</StatusMessage> : null}
     {state === "retry" ? <StatusMessage tone="warning">The approval could not be confirmed.</StatusMessage> : null}

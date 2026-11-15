@@ -55,7 +55,7 @@ export function RequestPage() {
   }
 
   function finishCreate(value: PendingRequest, serverExpiresAt: number): void {
-    const next: ShareArtifact[] = [{ channel: "Send this to the person who should answer. They can fill it in once.", id: "write", required: true, title: "Write link", value: artifactUrl("/r", { factorMode: value.factor.mode, kind: 3, recipientPublicKey: value.publicKey, requestLocator: value.locator, salt: value.factor.salt, serverExpiresAt, writeSeed: value.writeSeed }) }];
+    const next: ShareArtifact[] = [{ channel: "Send this to the person who should answer. They can fill it in once.", id: "write", required: true, shareable: true, title: "Write link", value: artifactUrl("/r", { factorMode: value.factor.mode, kind: 3, recipientPublicKey: value.publicKey, requestLocator: value.locator, salt: value.factor.salt, serverExpiresAt, writeSeed: value.writeSeed }) }];
     if (value.factor.secondKey !== null) next.push({ channel: "Send this a different way than the write link: in a call, in person, or in a chat on another device.", id: "factor", required: true, title: "Second key", value: value.factor.secondKey });
     next.push({ channel: "Keep this for yourself. Open it to wait for the answer. The page checks on its own, and the answer can be opened only once.", id: "pickup", openLabel: "Open", required: true, title: "Pickup link", value: artifactUrl("/i", { kind: 4, ownerSeed: value.ownerSeed, requestLocator: value.locator, serverExpiresAt }) });
     setReconciling(false); setPending(null); setArtifacts(next); setExpiresAt(serverExpiresAt); setState("done");
@@ -121,11 +121,13 @@ export function RequestPage() {
 
   const draft = validateRequestDraft(title, instructions, fields);
   const started = title.length > 0 || instructions.length > 0;
+  /** Said under the disabled button, where a phone user is looking when nothing happens. */
+  const blocked = !draft.valid ? draft.message : protection === "passphrase" && !phrase.valid ? `Passphrase: ${phrase.message}` : null;
 
   if (artifacts !== null) {
     const complete = artifacts.every((artifact) => saved[artifact.id] === true);
     return <div className="task-page task-page--wide">
-      <PageIntro step="Step 2 of 2 · share" title="Your request is ready">
+      <PageIntro arrive step="Step 2 of 2 · share" title="Your request is ready">
         <p>The other person can answer once. Only your pickup link can open the answer. Kryptex cannot read it either.</p>
       </PageIntro>
       <ShareSlip
@@ -205,7 +207,8 @@ export function RequestPage() {
         {protection === "passphrase" ? <PassphraseFields confirmation={confirmation} message={phrase.message} onConfirmation={setConfirmation} onPassphrase={setPassphrase} passphrase={passphrase} strength={phrase.strength} valid={phrase.valid} /> : null}
       </AdvancedDisclosure>
 
-      <button className="primary-button full-button" disabled={!draft.valid || (protection === "passphrase" && !phrase.valid) || state === "working" || verificationExpired} onClick={() => { void create(); }} type="button">{reconciling ? "Checking…" : state === "working" ? "Encrypting…" : "Encrypt and create request"}</button>
+      <button aria-describedby={blocked === null ? undefined : "create-blocked"} className="primary-button full-button" disabled={blocked !== null || state === "working" || verificationExpired} onClick={() => { void create(); }} type="button">{reconciling ? "Checking…" : state === "working" ? "Encrypting…" : "Encrypt and create request"}</button>
+      {blocked === null || verificationExpired ? null : <p className="blocked-reason" id="create-blocked">{blocked}</p>}
       <p className="fine-print">The human check you passed covers one request. It never sees what you write.</p>
     </div>
 

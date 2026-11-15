@@ -5,7 +5,7 @@ import { useClient } from "../client-context";
 import { artifactUrl, checkedResponseExpiry, consumeBundle, shortenedExpiryRequest } from "../crypto-flow";
 import { describeSendState, formatExactTime, formatFailedAttempts, formatOpened, formatTimeLeft } from "../format";
 import type { FragmentCapture } from "../fragment";
-import { BurnAction, FieldHint, FragmentNotice, OperationNotice, PageIntro, ShareSlip, StatusMessage, StatusSheet, useNowSeconds, type OperationState } from "../ui";
+import { BurnAction, FieldHint, FragmentNotice, LinkProblem, OperationNotice, PageIntro, ShareSlip, StatusMessage, StatusSheet, useNowSeconds, type OperationState } from "../ui";
 
 interface StatusRow {
   readonly label: string;
@@ -80,6 +80,8 @@ export function ManagementPage({ capture }: { readonly capture: FragmentCapture 
     try { const keys = await deriveSendManagementKeys(bundle.manageSeed); await client.revokeSend({ locator: encodeBase64Url(bundle.locator), manageToken: encodeBase64Url(keys.manageToken) }); await refresh(); }
     catch { setState("unknown"); }
   }
+
+  if (bundle?.kind !== 2) return <LinkProblem capture={capture} flow="management link" />;
 
   const description = status === null ? null : describeSendState(status.state);
   const rows = status === null || description === null ? null : statusRows(status, description.label, now);
