@@ -47,8 +47,8 @@ describe("human-readable protocol state", () => {
 describe("shared value-type vocabulary", () => {
   it("offers the same four value types to send and request composers", () => {
     expect(VALUE_FIELD_TYPES).toEqual(["secret", "text", "long-secret", "long-text"]);
-    expect(VALUE_FIELD_TYPES.map(formatFieldType)).toEqual(["Secret", "Plain text", "Long secret — multi-line", "Long text — multi-line"]);
-    expect(formatFieldType("instruction")).toBe("Instruction — label only");
+    expect(VALUE_FIELD_TYPES.map(formatFieldType)).toEqual(["Secret", "Plain text", "Long secret (several lines)", "Long text (several lines)"]);
+    expect(formatFieldType("instruction")).toBe("Note only (no answer)");
   });
 
   it("derives entry shape and sensitivity from the type alone", () => {

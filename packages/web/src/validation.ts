@@ -39,48 +39,48 @@ function invalidDraft(message: string): DraftValidation {
 export function validateSendDraft(mode: "text" | "fields", text: string, fields: readonly SendField[]): DraftValidation {
   if (mode === "text") {
     const bytes = utf8ByteLength(text);
-    if (bytes < 1) return invalidDraft("Enter a secret.");
-    if (bytes > MAX_VALUE_UTF8_BYTES) return invalidDraft(`Secret text must be at most ${MAX_VALUE_UTF8_BYTES} UTF-8 bytes.`);
-    return validDraft(`${bytes} UTF-8 bytes`);
+    if (bytes < 1) return invalidDraft("Write or paste the secret.");
+    if (bytes > MAX_VALUE_UTF8_BYTES) return invalidDraft(`The secret is too long. The limit is ${MAX_VALUE_UTF8_BYTES} bytes.`);
+    return validDraft("Nothing is sent until you create the link.");
   }
-  if (fields.length < 1 || fields.length > MAX_FIELDS) return invalidDraft(`Use 1 through ${MAX_FIELDS} fields.`);
+  if (fields.length < 1 || fields.length > MAX_FIELDS) return invalidDraft(`Add between 1 and ${MAX_FIELDS} values.`);
   for (const field of fields) {
     const labelBytes = utf8ByteLength(field.label);
     const valueBytes = utf8ByteLength(field.value);
-    if (labelBytes < 1) return invalidDraft("Every field needs a label.");
-    if (labelBytes > MAX_LABEL_UTF8_BYTES) return invalidDraft(`Field labels must be at most ${MAX_LABEL_UTF8_BYTES} UTF-8 bytes.`);
-    if (valueBytes < 1) return invalidDraft("Every field needs a value.");
-    if (valueBytes > MAX_VALUE_UTF8_BYTES) return invalidDraft(`Field values must be at most ${MAX_VALUE_UTF8_BYTES} UTF-8 bytes.`);
+    if (labelBytes < 1) return invalidDraft("Every value needs a label.");
+    if (labelBytes > MAX_LABEL_UTF8_BYTES) return invalidDraft(`One of the labels is too long. The limit is ${MAX_LABEL_UTF8_BYTES} bytes.`);
+    if (valueBytes < 1) return invalidDraft("Fill in every value, or remove the empty one.");
+    if (valueBytes > MAX_VALUE_UTF8_BYTES) return invalidDraft(`One of the values is too long. The limit is ${MAX_VALUE_UTF8_BYTES} bytes.`);
   }
-  return validDraft(`${fields.length} fields ready`);
+  return validDraft("Nothing is sent until you create the link.");
 }
 
 export function validateRequestDraft(title: string, instructions: string, fields: readonly RequestDraftField[]): DraftValidation {
   const titleBytes = utf8ByteLength(title);
   const instructionBytes = utf8ByteLength(instructions);
   const encodedFields = fields.length + (instructions.length > 0 ? 1 : 0);
-  if (titleBytes < 1) return invalidDraft("Enter a request title.");
-  if (titleBytes > MAX_LABEL_UTF8_BYTES) return invalidDraft(`The request title must be at most ${MAX_LABEL_UTF8_BYTES} UTF-8 bytes.`);
-  if (instructionBytes > MAX_HELP_UTF8_BYTES) return invalidDraft(`Instructions must be at most ${MAX_HELP_UTF8_BYTES} UTF-8 bytes.`);
-  if (encodedFields < 1 || encodedFields > MAX_FIELDS) return invalidDraft(`The request can encode at most ${MAX_FIELDS} items including instructions.`);
+  if (titleBytes < 1) return invalidDraft("Give the request a title.");
+  if (titleBytes > MAX_LABEL_UTF8_BYTES) return invalidDraft(`The title is too long. The limit is ${MAX_LABEL_UTF8_BYTES} bytes.`);
+  if (instructionBytes > MAX_HELP_UTF8_BYTES) return invalidDraft(`The instructions are too long. The limit is ${MAX_HELP_UTF8_BYTES} bytes.`);
+  if (encodedFields < 1 || encodedFields > MAX_FIELDS) return invalidDraft(`A request can have at most ${MAX_FIELDS} items, including instructions.`);
   for (const field of fields) {
     const labelBytes = utf8ByteLength(field.label);
     const helpBytes = utf8ByteLength(field.help);
-    if (labelBytes < 1) return invalidDraft("Every requested item needs a label.");
-    if (labelBytes > MAX_LABEL_UTF8_BYTES) return invalidDraft(`Item labels must be at most ${MAX_LABEL_UTF8_BYTES} UTF-8 bytes.`);
-    if (helpBytes > MAX_HELP_UTF8_BYTES) return invalidDraft(`Item help must be at most ${MAX_HELP_UTF8_BYTES} UTF-8 bytes.`);
+    if (labelBytes < 1) return invalidDraft("Every item needs a label.");
+    if (labelBytes > MAX_LABEL_UTF8_BYTES) return invalidDraft(`One of the item labels is too long. The limit is ${MAX_LABEL_UTF8_BYTES} bytes.`);
+    if (helpBytes > MAX_HELP_UTF8_BYTES) return invalidDraft(`One of the hints is too long. The limit is ${MAX_HELP_UTF8_BYTES} bytes.`);
   }
-  return validDraft(`${encodedFields} schema items ready`);
+  return validDraft("Nothing is sent until you create the request.");
 }
 
 export function validateRequestAnswers(fields: readonly RequestSchemaField[], answers: Readonly<Record<string, string>>): DraftValidation {
   for (const field of fields) {
     if (field.type === "instruction") continue;
     const value = answers[field.id] ?? "";
-    if (field.required && value.length === 0) return invalidDraft(`Answer “${field.label}” before submitting.`);
-    if (utf8ByteLength(value) > MAX_VALUE_UTF8_BYTES) return invalidDraft(`Answer “${field.label}” must be at most ${MAX_VALUE_UTF8_BYTES} UTF-8 bytes.`);
+    if (field.required && value.length === 0) return invalidDraft(`Fill in “${field.label}” before you send.`);
+    if (utf8ByteLength(value) > MAX_VALUE_UTF8_BYTES) return invalidDraft(`The answer to “${field.label}” is too long. The limit is ${MAX_VALUE_UTF8_BYTES} bytes.`);
   }
-  return validDraft("Answers fit the encrypted response limits.");
+  return validDraft("Nothing is sent until you press the button.");
 }
 
 /**
@@ -90,19 +90,19 @@ export function validateRequestAnswers(fields: readonly RequestSchemaField[], an
 export function validatePassphrase(value: string, confirmation: string): PassphraseValidation {
   const byteLength = utf8ByteLength(value);
   if (byteLength < 8) {
-    return { byteLength, message: "Use at least 8 UTF-8 bytes.", strength: "short", valid: false };
+    return { byteLength, message: "Use at least 8 characters. Accented letters and emoji count as more than one.", strength: "short", valid: false };
   }
   const strength = byteLength < 12 ? "weak" : "fair";
   if (byteLength > 256) {
-    return { byteLength, message: "Use at most 256 UTF-8 bytes.", strength, valid: false };
+    return { byteLength, message: "Too long. Use at most 256 characters (accented letters and emoji count as more than one).", strength, valid: false };
   }
   if (value !== confirmation) {
-    return { byteLength, message: "The confirmation must match exactly.", strength, valid: false };
+    return { byteLength, message: "The two passphrases do not match.", strength, valid: false };
   }
   if (strength === "weak") {
-    return { byteLength, message: "Short passphrases can be guessed by whoever holds the link. Twelve bytes or more is meaningfully harder.", strength, valid: true };
+    return { byteLength, message: "A short passphrase can be guessed by anyone who has the link. 12 characters or more is much harder (accented letters and emoji count as more than one).", strength, valid: true };
   }
-  return { byteLength, message: `${byteLength} UTF-8 bytes · exact match`, strength, valid: true };
+  return { byteLength, message: "The passphrases match.", strength, valid: true };
 }
 
 export function normalizeCrockfordFactor(value: string): string | null {

@@ -169,7 +169,7 @@ export function OwnerPage({ capture }: { readonly capture: FragmentCapture }) {
   if (payload !== null) {
     return <div className="task-page task-page--narrow">
       <PageIntro title={payload.schema.title}>
-        <p>The answer was released once. Copy what you need now — reloading this page will not show it again.</p>
+        <p>The answer is open now and cannot be opened again. Copy what you need. Reloading this page will not show it again.</p>
       </PageIntro>
       {payload.answers.map((answer) => {
         const field = payload.schema.fields.find((candidate) => candidate.id === answer.id);
@@ -178,7 +178,7 @@ export function OwnerPage({ capture }: { readonly capture: FragmentCapture }) {
       <div className="fingerprint">
         <span>Receipt for this answer</span>
         <strong>{fingerprint}</strong>
-        <p>Compare all 64 characters with the sender through a separate channel if it matters. A match only proves both browsers hold the same ciphertext bytes — it does not authenticate the writer, the plaintext, or the service.</p>
+        <p>If it matters, compare all 64 characters with the person who answered, another way than the link (a call, for example). A match proves only that you both have the same encrypted answer. It does not prove who wrote it, what it says, or that the service behaved.</p>
       </div>
     </div>;
   }
@@ -188,19 +188,19 @@ export function OwnerPage({ capture }: { readonly capture: FragmentCapture }) {
     ? null
     : pickupRecovery === "retry"
       ? <AmbiguousNotice>
-        <p>The status still says an answer is waiting. Only an explicit retry may release it.</p>
+        <p>The answer is still waiting, so it was not opened. Press the button to try again.</p>
         <button className="primary-button" onClick={() => { void pickup(); }} type="button">Try opening it again</button>
       </AmbiguousNotice>
       : pickupRecovery === "checking"
         ? <AmbiguousNotice>
-          <p>The answer may already have been released. Check the status before any retry.</p>
+          <p>The answer may have been opened already. Check the status before you try again.</p>
           <button className="primary-button" onClick={() => { void reconcilePickup(); }} type="button">Check the status</button>
         </AmbiguousNotice>
         : <button className="primary-button full-button" disabled={state === "working"} onClick={() => { void pickup(); }} type="button">{state === "working" ? "Opening…" : "Open the answer"}</button>;
 
   return <div className="task-page task-page--narrow">
     <PageIntro title="Your request">
-      <p>This is your pickup link. Checking the status never releases the answer — only the button does, and only once.</p>
+      <p>The answer arrives on this page. Looking at it does not open the answer. Only the button does, and only once.</p>
     </PageIntro>
     <FragmentNotice capture={capture} />
 
@@ -212,9 +212,9 @@ export function OwnerPage({ capture }: { readonly capture: FragmentCapture }) {
           { label: "Expires", value: <><strong>{formatTimeLeft(status.serverExpiresAt, now)}</strong><span className="mono">{formatExactTime(status.serverExpiresAt)}</span></> }
         ]} />
         {status.state === "picked_up" && pickupRecovery === "lost"
-          ? <StatusMessage tone="danger">The answer was released, but this browser could not recover it. The service cannot release it a second time.</StatusMessage>
+          ? <StatusMessage tone="danger">The answer was opened, but this browser could not show it. It cannot be opened a second time.</StatusMessage>
           : <StatusMessage tone={description.tone}>{description.detail}</StatusMessage>}
-        {polling ? <FieldHint>This page rechecks the status every few seconds while it stays open. Checking never releases the answer.</FieldHint> : null}
+        {polling ? <FieldHint>While this page is open, it checks for an answer every 10 seconds. Checking does not open the answer.</FieldHint> : null}
       </>}
 
     {pickupAction}
@@ -226,7 +226,7 @@ export function OwnerPage({ capture }: { readonly capture: FragmentCapture }) {
           <button className="secondary-button" disabled={shortenUnavailable || state === "working"} onClick={() => { void shorten(); }} type="button">Shorten to 15 minutes</button>
           <BurnAction
             confirmLabel="REVOKE"
-            description="The write link stops working and any answer already submitted is destroyed unopened. This cannot be undone."
+            description="The write link stops working. An answer that was already sent is deleted without being opened. This cannot be undone."
             disabled={state === "working"}
             label="Revoke now"
             onConfirm={() => { void revoke(); }}
@@ -234,8 +234,8 @@ export function OwnerPage({ capture }: { readonly capture: FragmentCapture }) {
           />
         </div>
         {shortenUnavailable
-          ? <StatusMessage tone="warning">This request is already too close to deletion to shorten again.</StatusMessage>
-          : <FieldHint>Shortening gives you a replacement pickup link — the current one stops matching.</FieldHint>}
+          ? <StatusMessage tone="warning">This request ends in a moment, so it cannot be shortened.</StatusMessage>
+          : <FieldHint>After shortening you get an updated pickup link with the new end time. Save it in place of the old one.</FieldHint>}
       </section>
       : null}
 
@@ -244,10 +244,10 @@ export function OwnerPage({ capture }: { readonly capture: FragmentCapture }) {
     {replacement === null
       ? null
       : <ShareSlip
-        artifacts={[{ channel: "Replace the copy you had saved. The previous pickup link no longer works.", id: "replacement", required: true, title: "Updated pickup link", value: replacement }]}
+        artifacts={[{ channel: "Save this in place of the pickup link you kept. It knows the new end time.", id: "replacement", required: true, title: "Updated pickup link", value: replacement }]}
         onSaved={(_id, value) => { setReplacementSaved(value); }}
         saved={{ replacement: replacementSaved }}
-        title="Expiry shortened"
+        title="Time shortened"
       />}
   </div>;
 }

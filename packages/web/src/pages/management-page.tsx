@@ -86,7 +86,7 @@ export function ManagementPage({ capture }: { readonly capture: FragmentCapture 
 
   return <div className="task-page task-page--narrow">
     <PageIntro title="Manage this secret">
-      <p>This is your own copy of the transfer. Checking the status never uses up an open.</p>
+      <p>This page is for you, the sender. Looking at it does not use up an open.</p>
     </PageIntro>
     <FragmentNotice capture={capture} />
 
@@ -98,7 +98,7 @@ export function ManagementPage({ capture }: { readonly capture: FragmentCapture 
         {status.failedAccessAttempts > 0
           ? <StatusMessage tone="warning">Someone tried to open this secret with a wrong link or key. If that was not the person you sent it to, revoke it.</StatusMessage>
           : null}
-        <FieldHint>An open is one released copy of the ciphertext. It does not tell you whether a person read it, and Kryptex does not record who opened it.</FieldHint>
+        <FieldHint>An open means the encrypted secret was sent to a browser. It does not mean someone read it. Kryptex does not record who opened it.</FieldHint>
       </>}
 
     {status?.state === "active"
@@ -108,7 +108,7 @@ export function ManagementPage({ capture }: { readonly capture: FragmentCapture 
           <button className="secondary-button" disabled={shortenUnavailable || state === "working"} onClick={() => { void shorten(); }} type="button">Shorten to 15 minutes</button>
           <BurnAction
             confirmLabel="REVOKE"
-            description="The recipient will no longer be able to open this secret. Anything already released stays with whoever opened it. This cannot be undone."
+            description="The link stops working right away. Anyone who already opened it keeps what they saw. This cannot be undone."
             disabled={state === "working"}
             label="Revoke now"
             onConfirm={() => { void revoke(); }}
@@ -116,22 +116,22 @@ export function ManagementPage({ capture }: { readonly capture: FragmentCapture 
           />
         </div>
         {shortenUnavailable
-          ? <StatusMessage tone="warning">This secret is already too close to deletion to shorten again.</StatusMessage>
-          : <FieldHint>Shortening gives you a replacement management link — the current one stops matching.</FieldHint>}
+          ? <StatusMessage tone="warning">This secret ends in a moment, so it cannot be shortened.</StatusMessage>
+          : <FieldHint>After shortening you get an updated management link with the new end time. Save it in place of the old one.</FieldHint>}
       </section>
       : null}
 
     {localExpiryUnconfirmed
-      ? <StatusMessage tone="warning">By this link&apos;s own clock the secret has expired, but the service did not answer, so that could not be confirmed.</StatusMessage>
+      ? <StatusMessage tone="warning">This link says it has expired. The server record is unavailable, so the service could not confirm that state.</StatusMessage>
       : <OperationNotice retry={() => { void refresh(); }} state={state} />}
 
     {replacement === null
       ? null
       : <ShareSlip
-        artifacts={[{ channel: "Replace the copy you had saved. The previous management link no longer works.", id: "replacement", required: true, title: "Updated management link", value: replacement }]}
+        artifacts={[{ channel: "Save this in place of the management link you kept. It knows the new end time.", id: "replacement", required: true, title: "Updated management link", value: replacement }]}
         onSaved={(_id, value) => { setReplacementSaved(value); }}
         saved={{ replacement: replacementSaved }}
-        title="Expiry shortened"
+        title="Time shortened"
       />}
   </div>;
 }

@@ -58,7 +58,7 @@ export function HomePage() {
       <span className="home-tagline">Simple, yet secure secret sharing</span>
     </div>
     <h1>Hand over a password without leaving it in someone&apos;s inbox.</h1>
-    <p>Write the secret, share the link, watch access close. Kryptex encrypts in your browser and never receives the readable secret — no account, nothing to install.</p>
+    <p>Write the secret and send the link. Your browser encrypts it, so Kryptex never sees what you wrote. No account, nothing to install.</p>
     <div className="home-actions">
       <Link className="primary-button" reloadDocument to={gatePath("send")}>Send a secret</Link>
       <Link className="secondary-button" reloadDocument to={gatePath("request")}>Ask someone for a secret</Link>
@@ -66,19 +66,19 @@ export function HomePage() {
     <ol className="home-steps">
       <li>
         <strong>Write it here</strong>
-        <p>Your browser encrypts the text. The service stores a sealed envelope and no key that opens it.</p>
+        <p>Your browser encrypts it. Kryptex stores only the encrypted copy, never the key that opens it.</p>
       </li>
       <li>
         <strong>Share the link</strong>
-        <p>Send the second key through a different channel, so one leaked message is not enough to open the secret.</p>
+        <p>Send the link, and the second key a different way. Then one leaked message is not enough to open it.</p>
       </li>
       <li>
-        <strong>Access closes</strong>
-        <p>Once the allowed opens are used or the clock runs out, the service releases nothing else and starts deleting the stored ciphertext.</p>
+        <strong>The link closes</strong>
+        <p>Once the allowed opens are used or the time runs out, the link stops working and Kryptex starts deleting the encrypted copy.</p>
       </li>
     </ol>
     <div className="home-footer">
-      <Link className="quiet-link" to="/security">What Kryptex protects — and where it stops</Link>
+      <Link className="quiet-link" to="/security">What Kryptex protects, and where it stops</Link>
     </div>
   </div>;
 }
@@ -129,20 +129,20 @@ export function GatePage() {
 
   return <div className="task-page task-page--narrow">
     <PageIntro title="One quick check">
-      <p>This page only confirms that a person, not a script, is creating the transfer. It is deliberately kept apart: no secret, key, or draft ever reaches it.</p>
+      <p>This confirms that you are a person, not a bot. The form opens after the check, so nothing you write ever reaches this page.</p>
     </PageIntro>
     <div ref={container} />
-    {state === "checking" ? <StatusMessage>Looking for a check you already passed…</StatusMessage> : null}
+    {state === "checking" ? <StatusMessage>Checking whether you already passed…</StatusMessage> : null}
     {state === "loading" || state === "working" ? <StatusMessage>Waiting for the check…</StatusMessage> : null}
     {state === "retry" && token !== null
       ? <>
-        <StatusMessage tone="warning">The result could not be confirmed.</StatusMessage>
-        <button className="primary-button full-button" onClick={() => { setState("working"); setVerificationAttempt((attempt) => attempt + 1); }} type="button">Try the same check again</button>
+        <StatusMessage tone="warning">The check could not be confirmed.</StatusMessage>
+        <button className="primary-button full-button" onClick={() => { setState("working"); setVerificationAttempt((attempt) => attempt + 1); }} type="button">Try again</button>
       </>
       : null}
     {state === "failed"
       ? <>
-        <StatusMessage tone="danger">The check is unavailable right now, so no form was opened. Nothing was created.</StatusMessage>
+        <StatusMessage tone="danger">The check is not working right now. Nothing was created. Try again later.</StatusMessage>
         <Link className="quiet-link" reloadDocument to="/">Back to the start</Link>
       </>
       : null}
@@ -194,7 +194,7 @@ export function PairPage({ capture }: { readonly capture: FragmentCapture }) {
 
   return <div className="task-page task-page--narrow">
     <PageIntro title="Approve a terminal">
-      <p>A command-line client asked for permission to create one transfer. Approve only a code that your own terminal shows. Approving gives that terminal one permission to create a transfer.</p>
+      <p>A command-line tool is asking for permission to create one transfer. Approve only a code that your own terminal shows. Approving gives that terminal one permission to create a transfer.</p>
     </PageIntro>
     <div className="field-block">
       <label><span>Code shown in your terminal</span><input autoComplete="off" className="mono" onChange={(event) => { setCode(event.currentTarget.value); }} placeholder="XXXX-XXXX" spellCheck={false} type="text" value={code} /></label>
@@ -259,7 +259,7 @@ export function DevicePairPage({ capture }: { readonly capture: FragmentCapture 
 
   return <div className="task-page task-page--narrow">
     <PageIntro title="Approve a terminal">
-      <p>A command-line client asked for permission to create transfers. Type the code that your own terminal shows. Approving can give that terminal standing permission to create transfers.</p>
+      <p>A command-line tool is asking for permission to create transfers. Type the code that your own terminal shows. Approving can give that terminal standing permission to create transfers.</p>
     </PageIntro>
     <div className="field-block">
       <label><span>Code shown in your terminal</span><input autoComplete="off" className="mono" onChange={(event) => { setCode(event.currentTarget.value); }} placeholder="XXXX-XXXX" spellCheck={false} type="text" value={code} /></label>
@@ -289,16 +289,16 @@ export function SecurityPage() {
       <p>Plain answers to the questions worth asking before you trust a tool with a credential.</p>
     </PageIntro>
     <InfoSection title="What stays in your browser">
-      <p>The readable secret, your passphrase, the second key, and the encryption keys. The service receives an encrypted envelope and the derived permissions needed to store and release it.</p>
+      <p>The secret itself, your passphrase, the second key and the encryption keys. Kryptex receives the encrypted secret, the limits you set (time and number of opens) and access codes made from the link. None of these can decrypt the secret.</p>
     </InfoSection>
     <InfoSection title="Why a second channel matters">
-      <p>A link on its own is a bearer credential: whoever holds it can try to open the content. Sending the second key another way — a call, a different device, in person — means one intercepted message is not enough.</p>
+      <p>A link on its own works like a key (a bearer credential): whoever has it can try to open the secret. If you send the second key another way, such as a call, a different device or in person, one intercepted message is not enough.</p>
     </InfoSection>
     <InfoSection title="What expiry can and cannot do">
-      <p>Expiry and revocation stop further releases and start deleting the active stored copy. Failed deletion is retried, and provider backups may persist. Neither can take back a secret that was already opened.</p>
+      <p>Expiry and revoking stop any further opens and start deleting the stored copy. Failed deletion is retried. Copies in the hosting provider&apos;s backups may last longer. Neither can take back a secret that was already opened.</p>
     </InfoSection>
     <InfoSection title="Where it stops">
-      <p>Kryptex serves the code that does the encrypting. If that code were compromised, secrets used after that point could be exposed. The service can also see when transfers are created and released, just not what is in them.</p>
+      <p>Kryptex serves the code that does the encrypting. If that code were tampered with, secrets handled after that could be exposed. Kryptex can also see when links are created and opened, their rough size, and network details such as IP addresses. It cannot see what is in them.</p>
     </InfoSection>
     <TechnicalDescription />
     <Link className="quiet-link" to="/">Back to the start</Link>
@@ -318,15 +318,15 @@ function TechnicalDescription() {
         <li>The sender&apos;s browser draws a 32-byte <strong>send seed</strong> <code>S</code> and a 32-byte <strong>management seed</strong> <code>M</code> from <code>crypto.getRandomValues</code>.</li>
         <li>A 32-byte <strong>factor</strong> <code>F</code> depends on the chosen protection:
           <ul>
-            <li><em>Link only</em> — 32 zero bytes.</li>
-            <li><em>Second key</em> — 16 random bytes, expanded to 32 bytes with HKDF-SHA-256. They are shown to the sender as 26 Crockford Base32 characters and never enter the link.</li>
-            <li><em>Passphrase</em> — Argon2id (version 0x13, 64&nbsp;MiB memory, 3 passes, 1 lane) over the UTF-8 passphrase with a fresh 16-byte random salt, 32-byte output.</li>
+            <li><em>Link only</em>: 32 zero bytes.</li>
+            <li><em>Second key</em>: 16 random bytes, expanded to 32 bytes with HKDF-SHA-256. They are shown to the sender as 26 Crockford Base32 characters and never enter the link.</li>
+            <li><em>Passphrase</em>: Argon2id (version 0x13, 64&nbsp;MiB memory, 3 passes, 1 lane) over the UTF-8 passphrase with a fresh 16-byte random salt, 32-byte output.</li>
           </ul>
         </li>
         <li>HKDF-SHA-256 with domain-separated labels (<code>kryptex/v1/send/…</code>) derives everything else:
           <ul>
-            <li><code>locator</code> (16 bytes) from <code>S</code> alone — the server-side name of the transfer.</li>
-            <li><code>contentKey</code> (32 bytes) and <code>retrieveToken</code> (32 bytes) from <code>S&nbsp;||&nbsp;F</code> — so the wrong factor yields a wrong key and a wrong token.</li>
+            <li><code>locator</code> (16 bytes) from <code>S</code> alone: the server-side name of the transfer.</li>
+            <li><code>contentKey</code> (32 bytes) and <code>retrieveToken</code> (32 bytes) from <code>S&nbsp;||&nbsp;F</code>, so the wrong factor yields a wrong key and a wrong token.</li>
             <li><code>manageToken</code> (32 bytes) from <code>M</code>.</li>
           </ul>
         </li>
@@ -339,7 +339,7 @@ function TechnicalDescription() {
         <li>The secret is serialized as canonical JSON (RFC 8785): <code>{"{"}&quot;kind&quot;:&quot;text&quot;,&quot;text&quot;:…{"}"}</code> or a <code>fields</code> list.</li>
         <li>A 4-byte length prefix, the payload, and cryptographically random padding are packed into the smallest fitting bucket of 4&nbsp;KiB, 16&nbsp;KiB, 64&nbsp;KiB, 256&nbsp;KiB, or 1&nbsp;MiB. The service and the network see only the bucket size, not the exact length.</li>
         <li>The bucket is encrypted with <strong>AES-256-GCM</strong> under <code>contentKey</code>, a fresh random 12-byte nonce, and a 16-byte authentication tag.</li>
-        <li>A 62-byte clear header — magic <code>KXE1</code>, suite, mode, factor mode, client expiry, allowed opens, and the nonce — is bound to the ciphertext as additional authenticated data. Changing any header byte makes decryption fail.</li>
+        <li>A 62-byte clear header (magic <code>KXE1</code>, suite, mode, factor mode, client expiry, allowed opens, and the nonce) is bound to the ciphertext as additional authenticated data. Changing any header byte makes decryption fail.</li>
       </ul>
       <p>The result is one <strong>sealed envelope</strong>: header plus ciphertext plus tag.</p>
     </InfoSection>
@@ -357,8 +357,8 @@ function TechnicalDescription() {
 
     <InfoSection title="4. What the service stores">
       <ul>
-        <li><strong>Private R2 bucket</strong> — the exact envelope bytes under a random object key that is not derived from the locator. The bucket is reachable only through the Worker.</li>
-        <li><strong>One Durable Object per transfer</strong> (SQLite, keyed by locator) — the R2 object key, the envelope&apos;s SHA-256 digest and length, the remaining number of opens, expiry, state, and <em>HMAC-SHA-256 tags</em> of the retrieve and manage tokens.</li>
+        <li><strong>Private R2 bucket</strong>: the exact envelope bytes under a random object key that is not derived from the locator. The bucket is reachable only through the Worker.</li>
+        <li><strong>One Durable Object per transfer</strong> (SQLite, keyed by locator): the R2 object key, the envelope&apos;s SHA-256 digest and length, the remaining number of opens, expiry, state, and <em>HMAC-SHA-256 tags</em> of the retrieve and manage tokens.</li>
         <li>The tags are computed with a versioned 32-byte HMAC key that lives only as a Worker secret, outside the stored state. Raw tokens are never stored.</li>
       </ul>
       <p>A copy of both stores yields ciphertext, sizes, timestamps, and policy metadata. It contains no content key, seed, passphrase, second key, or usable capability.</p>
@@ -389,7 +389,7 @@ function TechnicalDescription() {
         <li>The owner&apos;s browser draws a 16-byte request locator and two 32-byte seeds. The owner seed derives the owner token and an <strong>X25519 key pair</strong>; the private key exists only in the owner&apos;s browser and is re-derived from the pickup link <code>/i#…</code>.</li>
         <li>The form definition is encrypted as a <code>KXE1</code> envelope with AES-256-GCM under a key from the write seed and the factor. The write link <code>/r#…</code> carries the write seed, the factor mode, the salt, and the owner&apos;s public key.</li>
         <li>The writer&apos;s browser decrypts the form, verifies its digest and public key, and encrypts the answers with <strong>HPKE</strong> (RFC 9180 base mode: DHKEM X25519, HKDF-SHA-256, AES-256-GCM) into a <code>KXR1</code> envelope bound to the request locator and form digest. The same bucket padding applies.</li>
-        <li>Submission is write-once and pickup is read-once; both are enforced by the same Durable Object transaction pattern. A receipt — SHA-256 over the stored response bytes — lets both sides compare what was submitted and what was picked up.</li>
+        <li>Submission is write-once and pickup is read-once; both are enforced by the same Durable Object transaction pattern. A receipt (SHA-256 over the stored response bytes) lets both sides compare what was submitted and what was picked up.</li>
       </ul>
     </InfoSection>
   </div>;

@@ -77,8 +77,8 @@ function CreationPermitGuard({ children, intent }: { readonly children: ReactNod
 
   if (state === "ready") return children;
   return <div className="task-page task-page--narrow">
-    <PageIntro step="Quick check" title={state === "checking" ? "Opening the form…" : "The check is unavailable"}>
-      <p>{state === "checking" ? "The form opens as soon as the check is confirmed." : "Reload the page to try again. No form was opened and nothing was created."}</p>
+    <PageIntro step="Quick check" title={state === "checking" ? "Opening the form…" : "The form could not open"}>
+      <p>{state === "checking" ? "One moment. The form opens as soon as the check is confirmed." : "Reload the page to try again. Nothing was created."}</p>
     </PageIntro>
   </div>;
 }
@@ -101,8 +101,8 @@ function RootLayout() {
 
 function RouteError() {
   return <div className="task-page task-page--narrow">
-    <PageIntro step="Nothing here" title="This address is not part of Kryptex">
-      <p>Check that you copied the whole link. Messengers often cut off everything after the <span className="mono">#</span>, which is the part that opens a secret.</p>
+    <PageIntro step="Nothing here" title="This page does not exist">
+      <p>Check that you copied the whole link. Some apps cut off the part after the <span className="mono">#</span>, and that part is needed.</p>
     </PageIntro>
     <Link className="primary-button" to="/">Back to the start</Link>
   </div>;

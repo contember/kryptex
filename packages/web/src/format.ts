@@ -5,9 +5,9 @@ import { FAILED_ACCESS_SATURATION, type TtlSeconds } from "@kryptex/contracts/pr
 export type StateTone = "quiet" | "success" | "warning" | "danger";
 
 const FIELD_TYPE_LABELS: Readonly<Record<RequestFieldType, string>> = {
-  "instruction": "Instruction — label only",
-  "long-secret": "Long secret — multi-line",
-  "long-text": "Long text — multi-line",
+  "instruction": "Note only (no answer)",
+  "long-secret": "Long secret (several lines)",
+  "long-text": "Long text (several lines)",
   "secret": "Secret",
   "text": "Plain text"
 };
@@ -115,26 +115,26 @@ export function describeSendState(state: SendState): StateDescription {
     return { detail: "The recipient can still open this secret.", label: "Active", tone: "success" };
   }
   if (state === "exhausted") {
-    return { detail: "Every allowed open has been used. Nothing can be released again.", label: "All opens used", tone: "warning" };
+    return { detail: "Every allowed open was used. It cannot be opened again.", label: "All opens used", tone: "warning" };
   }
   if (state === "revoked") {
     return { detail: "This secret was revoked and can no longer be opened.", label: "Revoked", tone: "danger" };
   }
-  return { detail: "The expiry time passed. Nothing can be released, and stored-ciphertext deletion may still be retrying.", label: "Expired", tone: "warning" };
+  return { detail: "The time ran out. It cannot be opened anymore. Kryptex deletes the encrypted copy and retries if a deletion fails.", label: "Expired", tone: "warning" };
 }
 
 export function describeRequestState(state: RequestState): StateDescription {
   if (state === "waiting") {
-    return { detail: "Nobody has answered yet. Check back after you share the write link.", label: "Waiting for an answer", tone: "quiet" };
+    return { detail: "Nobody has answered yet. Send the write link if you have not done so.", label: "Waiting for an answer", tone: "quiet" };
   }
   if (state === "submitted") {
-    return { detail: "An answer is waiting for you. Opening it releases it once.", label: "Answer ready", tone: "success" };
+    return { detail: "An answer is waiting for you. It can be opened only once.", label: "Answer ready", tone: "success" };
   }
   if (state === "picked_up") {
-    return { detail: "The answer was already released. It cannot be released again.", label: "Answer opened", tone: "warning" };
+    return { detail: "The answer was already opened. It cannot be opened again.", label: "Answer opened", tone: "warning" };
   }
   if (state === "revoked") {
     return { detail: "This request was revoked and can no longer be answered.", label: "Revoked", tone: "danger" };
   }
-  return { detail: "The expiry time passed. Nothing can be released, and stored-ciphertext deletion may still be retrying.", label: "Expired", tone: "warning" };
+  return { detail: "The time ran out. The answer cannot be opened anymore. Kryptex deletes the encrypted copy and retries if a deletion fails.", label: "Expired", tone: "warning" };
 }
