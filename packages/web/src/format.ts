@@ -138,4 +138,3 @@ export function describeRequestState(state: RequestState): StateDescription {
   }
   return { detail: "The time ran out. The answer cannot be opened anymore. Kryptex deletes the encrypted copy and retries if a deletion fails.", label: "Expired", tone: "warning" };
 }
-

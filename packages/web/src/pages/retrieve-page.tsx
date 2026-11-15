@@ -55,7 +55,6 @@ export function RetrievePage({ capture }: { readonly capture: FragmentCapture })
         ? capture.fragmentBytes === null
           ? null
           : <StatusMessage tone="danger">This link does not work. Ask the sender for the whole link again. Some apps cut off the part after the <span className="mono">#</span>.</StatusMessage>
-
         : state === "unknown"
           ? <AmbiguousNotice>
             <p>An open may already have been counted. Trying again can use up another one.</p>

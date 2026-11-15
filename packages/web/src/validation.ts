@@ -90,7 +90,7 @@ export function validateRequestAnswers(fields: readonly RequestSchemaField[], an
 export function validatePassphrase(value: string, confirmation: string): PassphraseValidation {
   const byteLength = utf8ByteLength(value);
   if (byteLength < 8) {
-    return { byteLength, message: "Use at least 8 characters.", strength: "short", valid: false };
+    return { byteLength, message: "Use at least 8 characters. Accented letters and emoji count as more than one.", strength: "short", valid: false };
   }
   const strength = byteLength < 12 ? "weak" : "fair";
   if (byteLength > 256) {
@@ -100,10 +100,9 @@ export function validatePassphrase(value: string, confirmation: string): Passphr
     return { byteLength, message: "The two passphrases do not match.", strength, valid: false };
   }
   if (strength === "weak") {
-    return { byteLength, message: "A short passphrase can be guessed by anyone who has the link. 12 characters or more is much harder.", strength, valid: true };
+    return { byteLength, message: "A short passphrase can be guessed by anyone who has the link. 12 characters or more is much harder (accented letters and emoji count as more than one).", strength, valid: true };
   }
   return { byteLength, message: "The passphrases match.", strength, valid: true };
-
 }
 
 export function normalizeCrockfordFactor(value: string): string | null {

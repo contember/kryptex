@@ -219,6 +219,5 @@ export function RequestPage() {
         </div>
         : <OperationNotice creating state={state} />}
     <NavigationGuard description="If you leave now, the request cannot be recovered." title="Stay until the request is confirmed?" when={pending !== null} />
-
   </div>;
 }

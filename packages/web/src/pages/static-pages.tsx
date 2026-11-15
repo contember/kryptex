@@ -289,8 +289,7 @@ export function SecurityPage() {
       <p>Plain answers to the questions worth asking before you trust a tool with a credential.</p>
     </PageIntro>
     <InfoSection title="What stays in your browser">
-      <p>The secret itself, your passphrase, the second key and the encryption keys. Kryptex receives the encrypted secret, the limits
- you set (time and number of opens) and access codes made from the link. None of these can decrypt the secret.</p>
+      <p>The secret itself, your passphrase, the second key and the encryption keys. Kryptex receives the encrypted secret, the limits you set (time and number of opens) and access codes made from the link. None of these can decrypt the secret.</p>
     </InfoSection>
     <InfoSection title="Why a second channel matters">
       <p>A link on its own works like a key (a bearer credential): whoever has it can try to open the secret. If you send the second key another way, such as a call, a different device or in person, one intercepted message is not enough.</p>
@@ -390,8 +389,7 @@ function TechnicalDescription() {
         <li>The owner&apos;s browser draws a 16-byte request locator and two 32-byte seeds. The owner seed derives the owner token and an <strong>X25519 key pair</strong>; the private key exists only in the owner&apos;s browser and is re-derived from the pickup link <code>/i#…</code>.</li>
         <li>The form definition is encrypted as a <code>KXE1</code> envelope with AES-256-GCM under a key from the write seed and the factor. The write link <code>/r#…</code> carries the write seed, the factor mode, the salt, and the owner&apos;s public key.</li>
         <li>The writer&apos;s browser decrypts the form, verifies its digest and public key, and encrypts the answers with <strong>HPKE</strong> (RFC 9180 base mode: DHKEM X25519, HKDF-SHA-256, AES-256-GCM) into a <code>KXR1</code> envelope bound to the request locator and form digest. The same bucket padding applies.</li>
-        <li>Submission is write-once and pickup is read-once; both are enforced by the same Durable Object transaction pattern. A receipt (SHA-256 over the stored response bytes) lets both sides
- compare what was submitted and what was picked up.</li>
+        <li>Submission is write-once and pickup is read-once; both are enforced by the same Durable Object transaction pattern. A receipt (SHA-256 over the stored response bytes) lets both sides compare what was submitted and what was picked up.</li>
       </ul>
     </InfoSection>
   </div>;

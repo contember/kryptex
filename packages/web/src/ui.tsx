@@ -84,8 +84,7 @@ export function ExpiryNote({ expiresAt, label = "Expires" }: { readonly expiresA
 
 export function PolicySummary({ items, action }: { readonly items: readonly string[]; readonly action?: ReactNode }) {
   return <div className="policy-summary">
-    <div><p className="eyebrow">Summary</p>
-<ul>{items.map((item) => <li key={item}>{item}</li>)}</ul></div>
+    <div><p className="eyebrow">Summary</p><ul>{items.map((item) => <li key={item}>{item}</li>)}</ul></div>
     {action}
   </div>;
 }
@@ -295,7 +294,7 @@ export function OperationNotice({ state, retry, creating = false }: { readonly s
   if (state === "rate_limited") {
     return <div className="operation-notice">
       <strong>Too many tries.</strong>
-      <p>After each wrong passphrase or second key, the wait before the next try gets longer, up to an hour. Wait a while, then try again.</p>
+      <p>After each wrong passphrase or second key, the wait before the next try gets longer, up to an hour for a passphrase. Wait a while, then try again.</p>
     </div>;
   }
   return null;
@@ -351,7 +350,6 @@ export function NavigationGuard({ when, requiredWording = "the required parts", 
   return <dialog className="confirm-dialog" onCancel={(event) => { event.preventDefault(); stay(); }} ref={dialogRef}>
     <h2>{title ?? `Save ${requiredWording} first?`}</h2>
     <p>{description ?? "Kryptex keeps no copy. Once you leave this page, they cannot be shown again."}</p>
-
     <div>
       <button autoFocus className="primary-button" onClick={stay} type="button">Stay on this page</button>
       <button className="danger-button" onClick={() => { blocker.proceed(); }} type="button">Leave anyway</button>

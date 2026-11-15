@@ -112,10 +112,9 @@ export function WriterPage({ capture }: { readonly capture: FragmentCapture }) {
             <div className="fingerprint">
               <span>Receipt for your answer</span>
               <strong>{receipt}</strong>
-              <p>{receiptMatch === true ? "Kryptex returned the same receipt, so it stored exactly the encrypted answer you sent." : receiptMatch === false ? "Kryptex returned a different receipt. Treat the answer as not confirmed and keep this code." : "The answer is not confirmed yet. Keep this code."} If it matters, compare all 64 characters with the person who asked, another way than the link (a call, for example). A match proves only that you both have the same encrypted answer. It does not prove who wrote it, what it says, or that the service behaved.</p>
+              <p>{receiptMatch === true ? "Kryptex returned the same receipt as this page computed." : receiptMatch === false ? "Kryptex returned a different receipt. Treat the answer as not confirmed and keep this code." : "The answer is not confirmed yet. Keep this code."} If it matters, compare all 64 characters with the person who asked, another way than the link (a call, for example). A match proves only that you both have the same encrypted answer. It does not prove who wrote it, what it says, or that the service behaved.</p>
             </div>
             {state === "unknown" ? <button className="secondary-button" onClick={() => { void submit(); }} type="button">Send the same answer again</button> : null}
-
           </>}
       </>}
     <OperationNotice state={state} />

@@ -122,8 +122,7 @@ export function ManagementPage({ capture }: { readonly capture: FragmentCapture 
       : null}
 
     {localExpiryUnconfirmed
-      ? <StatusMessage tone="warning">This link says the secret has expired. Kryptex did not return its record, so this could not be confirmed.
-</StatusMessage>
+      ? <StatusMessage tone="warning">This link says it has expired. The server record is unavailable, so the service could not confirm that state.</StatusMessage>
       : <OperationNotice retry={() => { void refresh(); }} state={state} />}
 
     {replacement === null
@@ -133,7 +132,6 @@ export function ManagementPage({ capture }: { readonly capture: FragmentCapture 
         onSaved={(_id, value) => { setReplacementSaved(value); }}
         saved={{ replacement: replacementSaved }}
         title="Time shortened"
-
       />}
   </div>;
 }

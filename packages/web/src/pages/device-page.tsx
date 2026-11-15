@@ -99,7 +99,6 @@ export function DevicePage({ capture }: { readonly capture: FragmentCapture }) {
   return <div className="task-page task-page--narrow">
     <PageIntro title="Manage this machine">
       <p>This link controls one machine&apos;s ongoing permission to create transfers. Looking at this page changes nothing.</p>
-
     </PageIntro>
     <FragmentNotice capture={capture} />
 

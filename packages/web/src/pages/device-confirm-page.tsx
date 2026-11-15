@@ -99,8 +99,7 @@ export function DeviceConfirmPage() {
 
   const pendingDeviceClaim = (view.kind === "claiming" || view.kind === "retry") && view.request.scope === "device";
   const guard = <NavigationGuard
-    description={pendingDeviceClaim ? "If you leave now, the management link this page is waiting for is lost for good."
- : "Kryptex keeps no copy of the management link. Once this page closes, nothing can bring it back."}
+    description={pendingDeviceClaim ? "If you leave now, the management link this page is waiting for is lost for good." : "Kryptex keeps no copy of the management link. Once this page closes, nothing can bring it back."}
     title={pendingDeviceClaim ? "Keep confirming this approval?" : "Save the management link first?"}
     when={pendingDeviceClaim || (view.kind === "device" && !saved)}
   />;

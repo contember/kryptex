@@ -248,7 +248,6 @@ export function OwnerPage({ capture }: { readonly capture: FragmentCapture }) {
         onSaved={(_id, value) => { setReplacementSaved(value); }}
         saved={{ replacement: replacementSaved }}
         title="Time shortened"
-
       />}
   </div>;
 }

@@ -103,7 +103,6 @@ function RouteError() {
   return <div className="task-page task-page--narrow">
     <PageIntro step="Nothing here" title="This page does not exist">
       <p>Check that you copied the whole link. Some apps cut off the part after the <span className="mono">#</span>, and that part is needed.</p>
-
     </PageIntro>
     <Link className="primary-button" to="/">Back to the start</Link>
   </div>;

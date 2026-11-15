@@ -228,6 +228,5 @@ export function SendPage() {
         </div>
         : <OperationNotice creating state={state} />}
     <NavigationGuard description="If you leave now, the link cannot be recovered." title="Stay until the link is confirmed?" when={pending !== null} />
-
   </div>;
 }
