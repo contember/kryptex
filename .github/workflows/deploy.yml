@@ -96,3 +96,32 @@ jobs:
 
       - name: Run non-consuming smoke checks
         run: bun run deploy:smoke
+
+  # Records the deploy in our project-health service: the source SBOM of this checkout and the
+  # Worker's compatibility_date. Its own job, so the action never sees the deploy's credentials.
+  record:
+    needs: deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Read the compatibility date
+        id: runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          date="$(grep -oP '"compatibility_date":\s*"\K[0-9-]+' packages/worker/wrangler.jsonc || true)"
+          [[ -n "${date}" ]] || { echo "no compatibility_date in packages/worker/wrangler.jsonc" >&2; exit 1; }
+          echo "date=${date}" >> "${GITHUB_OUTPUT}"
+
+      - name: Record the deploy
+        uses: contember/hajnej-record-deploy@cddb64d29841fa5d6be3061516dd8594f5224782
+        with:
+          url: ${{ secrets.HAJNEJ_DEPLOY_URL }}
+          key: ${{ secrets.HAJNEJ_DEPLOY_KEY }}
+          system: kryptex/prod@cloudflare
+          runtime: compatibility_date=${{ steps.runtime.outputs.date }}
