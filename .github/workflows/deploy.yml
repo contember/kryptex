@@ -119,7 +119,7 @@ jobs:
           echo "date=${date}" >> "${GITHUB_OUTPUT}"
 
       - name: Record the deploy
-        uses: contember/hajnej-record-deploy@cddb64d29841fa5d6be3061516dd8594f5224782
+        uses: contember/hajnej-record-deploy@9e0419ceb9501d5bb7b25285f6acf0e962593688
         with:
           url: ${{ secrets.HAJNEJ_DEPLOY_URL }}
           key: ${{ secrets.HAJNEJ_DEPLOY_KEY }}
